@@ -2,8 +2,6 @@
 #       Custom
 # -------------------
 
-bin/
-build/
 *.csv
 imgui.ini
 
