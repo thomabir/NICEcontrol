@@ -14,8 +14,6 @@
 #CXX = g++
 #CXX = clang++
 
-.PHONY: print_objs
-
 EXE = bin/NICEcontrol
 IMGUI_DIR = lib/imgui
 IMPLOT_DIR = lib/implot
@@ -33,20 +31,18 @@ SOURCES += $(IMGUI_DIR)/backends/imgui_impl_glfw.cpp $(IMGUI_DIR)/backends/imgui
 
 # add implot sources
 SOURCES += $(IMPLOT_DIR)/implot.cpp $(IMPLOT_DIR)/implot_demo.cpp $(IMPLOT_DIR)/implot_items.cpp 
-#$(IMPLOT_DIR)/implot.h
-# , implot_internal.h
 
-# OBJS = $(addsuffix .o, $(basename $(notdir $(SOURCES))))
-# OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
+# all .o files are placed in the build directory
 OBJS = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(notdir $(SOURCES)))
 OBJS += $(BUILD_DIR)/imgui_impl_glfw.o $(BUILD_DIR)/imgui_impl_opengl3.o
+
+
 UNAME_S := $(shell uname -s)
 LINUX_GL_LIBS = -lGL
 
+# compiler flags
 CXXFLAGS = -std=c++20 -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends
 CXXFLAGS += -g -Wall -Wformat
-
-# optimise
 # CXXFLAGS += -Os
 
 
