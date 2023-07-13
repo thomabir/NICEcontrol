@@ -92,6 +92,7 @@ namespace MyApp
             // Perform the compute-intensive task here
             // In this example, we generate a random noise component
             float noise = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            noise = noise - 0.5f; // noise in [-0.5, 0.5]
             noise *= 0.01f; // Scale the noise component
             measurement = opd_setpoint + noise;
 
