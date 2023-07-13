@@ -12,15 +12,15 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
      ```bash
      brew install glfw
      ```
-   * Linux (untested)
+   * Linux
      ```bash
-     apt-get install libglfw-dev
+     apt-get install libglfw3-dev
      ```
-3. Clone the `NICEcontrol` repository and its submodules
+2. Clone the `NICEcontrol` repository and its submodules
    ```bash
    git clone --recurse-submodules https://github.com/thomabir/NICEcontrol
    ```
-4. Compile
+3. Compile
    ```bash
    cd NICEcontrol
    make
