@@ -16,10 +16,10 @@
 #include <chrono>
 
 // Font
-#include "lib/fonts/SourceSans3Regular.cpp"
+#include "../lib/fonts/SourceSans3Regular.cpp"
 
 // Implot
-#include "lib/implot/implot.h"
+#include "../lib/implot/implot.h"
 #include <math.h>
 
 // Windows
