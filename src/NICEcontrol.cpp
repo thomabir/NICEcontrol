@@ -219,7 +219,7 @@ namespace MyApp
             {
                 while (!measurementQueue.isempty())
                 {
-                    opd_buffer.AddPoint(t, measurementQueue.pop());
+                    opd_buffer.AddPoint(timeQueue.pop(), measurementQueue.pop());
                 }
             }
 
