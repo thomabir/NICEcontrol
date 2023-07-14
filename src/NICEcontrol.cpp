@@ -39,47 +39,48 @@ float getTime() {
   return t_since_start;
 }
 
+struct Measurement {
+  float time;
+  float value;
+};
+
+// thread-safe queue
 template <typename T>
 class TSQueue {
-  // Thread-safe queue
-  // from https://www.geeksforgeeks.org/implement-thread-safe-queue-in-c/
-
  private:
-  // Underlying queue
   std::queue<T> m_queue;
-
-  // mutex for thread synchronization
   std::mutex m_mutex;
 
  public:
-  // Pushes an element to the queue
-  void push(T item) {
-    // Acquire lock
+  uint size() {
     std::unique_lock<std::mutex> lock(m_mutex);
+    return m_queue.size();
+  }
 
-    // Add item
+  void push(T item) {
+    std::unique_lock<std::mutex> lock(m_mutex);
     m_queue.push(item);
   }
 
-  // Pops an element off the queue
-  T pop() {
-    // acquire lock
+  T front() {
     std::unique_lock<std::mutex> lock(m_mutex);
+    return m_queue.front();
+  }
 
-    // retrieve item
+  T back() {
+    std::unique_lock<std::mutex> lock(m_mutex);
+    return m_queue.back();
+  }
+
+  T pop() {
+    std::unique_lock<std::mutex> lock(m_mutex);
     T item = m_queue.front();
     m_queue.pop();
-
-    // return item
     return item;
   }
 
-  // isempty
   bool isempty() {
-    // acquire lock
     std::unique_lock<std::mutex> lock(m_mutex);
-
-    // check if empty
     return m_queue.empty();
   }
 };
@@ -113,21 +114,17 @@ namespace MyApp {
 // Model
 float opd_setpoint_gui = 0.001f;  // setpoint entered in GUI, may be out of range
 float opd_setpoint = 0.001f;      // setpoint used in calculation, clipped to valid range
-std::atomic<float> measurement(0.0f);
 std::atomic<bool> stopCalculation(false);
 std::mutex calculationMutex;
 std::condition_variable calculationCV;
 std::ofstream outputFile;
 
-// a queue to store measurement data in
-// the run_calculation can enquque data
-// the GUI can dequeue data
-// it must be thread safe
-TSQueue<float> measurementQueue;
-TSQueue<float> timeQueue;
+TSQueue<Measurement> measurementQueue;
 
 // Function: run_calculation()
 void run_calculation() {
+  static float measurement = 0.0f;
+
   // outputFile.open("data.csv");
   // outputFile << "Time (ms),Measurement\n";
 
@@ -147,8 +144,7 @@ void run_calculation() {
     auto t = getTime();
 
     // enqueue measurement and time
-    measurementQueue.push(measurement);
-    timeQueue.push(t);
+    measurementQueue.push({t, measurement});
 
     // Write measurement and time to the CSV file
     // outputFile << currentTime << "," << measurement.load() << "\n";
@@ -169,6 +165,11 @@ void RenderUI() {
 
   ImGuiIO &io = ImGui::GetIO();
 
+  static auto current_measurement = 0.f;
+  if (!measurementQueue.isempty()) {
+    current_measurement = measurementQueue.back().value;
+  }
+
   if (ImGui::CollapsingHeader("OPD")) {
     // control mode selector
     static int loop_select = 0;
@@ -182,19 +183,20 @@ void RenderUI() {
 
     // real time plot
     static ScrollingBuffer opd_buffer, setpoint_buffer;
-    float t = getTime();
+    float t_gui = getTime();
 
     // add the entire MeasurementQueue to the buffer
     // if there's nothing in it, just add a NaN
     if (measurementQueue.isempty()) {
-      opd_buffer.AddPoint(t, NAN);
+      opd_buffer.AddPoint(t_gui, NAN);
     } else {
       while (!measurementQueue.isempty()) {
-        opd_buffer.AddPoint(timeQueue.pop(), measurementQueue.pop());
+        auto m = measurementQueue.pop();
+        opd_buffer.AddPoint(m.time, m.value);
       }
     }
 
-    setpoint_buffer.AddPoint(t, opd_setpoint);
+    setpoint_buffer.AddPoint(t_gui, opd_setpoint);
 
     static float history_length = 10.0f;
     ImGui::SliderFloat("History", &history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
@@ -207,7 +209,7 @@ void RenderUI() {
 
     if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 150 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, t - history_length, t, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       ImPlot::PlotLine("Measurement", &opd_buffer.Data[0].x, &opd_buffer.Data[0].y, opd_buffer.Data.size(), 0,
@@ -219,7 +221,7 @@ void RenderUI() {
 
     if (ImGui::TreeNode("OPD metrology")) {
       // Display measurement
-      ImGui::Text("Current measurement: %.4f", measurement.load());
+      ImGui::Text("Current measurement: %.4f", current_measurement);
 
       ImGui::TreePop();
     }
