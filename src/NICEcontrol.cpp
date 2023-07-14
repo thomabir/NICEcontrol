@@ -127,7 +127,8 @@ struct ScrollingBuffer
 namespace MyApp
 {
     // Model
-    float opd_setpoint = 0.001f;
+    float opd_setpoint_gui = 0.001f; // setpoint entered in GUI, may be out of range
+    float opd_setpoint = 0.001f; // setpoint used in calculation, clipped to valid range
     std::atomic<float> measurement(0.0f);
     std::atomic<bool> stopCalculation(false);
     std::mutex calculationMutex;
@@ -287,7 +288,7 @@ namespace MyApp
                 // opd input: drag
                 ImGui::AlignTextToFramePadding();
                 ImGui::PushItemWidth(100);
-                ImGui::DragFloat("(Drag or double-click to adjust)", &opd_setpoint, 0.001f, opd_setpoint_min, opd_setpoint_max, "%.4f µm", ImGuiSliderFlags_AlwaysClamp);
+                ImGui::DragFloat("(Drag or double-click to adjust)", &opd_setpoint_gui, 0.001f, opd_setpoint_min, opd_setpoint_max, "%.4f µm", ImGuiSliderFlags_AlwaysClamp);
                 ImGui::PopItemWidth();
 
                 // opd input: buttons
@@ -299,27 +300,27 @@ namespace MyApp
                     ImGui::TableNextColumn();
                     if (ImGui::Button("+0.1 nm"))
                     {
-                        opd_setpoint += 0.0001;
+                        opd_setpoint_gui += 0.0001;
                     }
                     ImGui::TableNextColumn();
                     if (ImGui::Button("+1 nm"))
                     {
-                        opd_setpoint += 0.001;
+                        opd_setpoint_gui += 0.001;
                     }
                     ImGui::TableNextColumn();
                     if (ImGui::Button("+10 nm"))
                     {
-                        opd_setpoint += 0.01;
+                        opd_setpoint_gui += 0.01;
                     }
                     ImGui::TableNextColumn();
                     if (ImGui::Button("+100 nm"))
                     {
-                        opd_setpoint += 0.1;
+                        opd_setpoint_gui += 0.1;
                     }
                     ImGui::TableNextColumn();
                     if (ImGui::Button("+1 µm"))
                     {
-                        opd_setpoint += 1.;
+                        opd_setpoint_gui += 1.;
                     }
 
                     ImGui::TableNextRow();
@@ -328,41 +329,40 @@ namespace MyApp
                     ImGui::TableNextColumn();
                     if (ImGui::Button("-0.1 nm"))
                     {
-                        opd_setpoint -= 0.0001;
+                        opd_setpoint_gui -= 0.0001;
                     }
                     ImGui::TableNextColumn();
                     if (ImGui::Button("-1 nm"))
                     {
-                        opd_setpoint -= 0.001;
+                        opd_setpoint_gui -= 0.001;
                     }
                     ImGui::TableNextColumn();
                     if (ImGui::Button("-10 nm"))
                     {
-                        opd_setpoint -= 0.01;
+                        opd_setpoint_gui -= 0.01;
                     }
                     ImGui::TableNextColumn();
                     if (ImGui::Button("-100 nm"))
                     {
-                        opd_setpoint -= 0.1;
+                        opd_setpoint_gui -= 0.1;
                     }
                     ImGui::TableNextColumn();
                     if (ImGui::Button("-1 µm"))
                     {
-                        opd_setpoint -= 1.;
+                        opd_setpoint_gui -= 1.;
                     }
 
                     ImGui::EndTable();
                 }
 
-                // clamp opd to min/max
-                if (opd_setpoint < opd_setpoint_min)
-                {
-                    opd_setpoint = opd_setpoint_min;
-                }
-                if (opd_setpoint > opd_setpoint_max)
-                {
-                    opd_setpoint = opd_setpoint_max;
-                }
+                // clamp opd_setpoint_gui to min/max
+                if (opd_setpoint_gui < opd_setpoint_min)
+                    opd_setpoint_gui = opd_setpoint_min;
+                if (opd_setpoint_gui > opd_setpoint_max)
+                    opd_setpoint_gui = opd_setpoint_max;
+                
+                // set opd_setpoint
+                opd_setpoint = opd_setpoint_gui;
 
                 ImGui::TreePop();
             }
