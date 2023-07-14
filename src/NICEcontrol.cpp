@@ -187,7 +187,6 @@ namespace MyApp
         calculationCV.notify_one();
     }
 
-    // Function: RenderUI()
     void RenderUI()
     {
         ImGui::Begin("NICE Control");
@@ -195,6 +194,7 @@ namespace MyApp
         if (ImGui::CollapsingHeader("OPD"))
         {
 
+            // control mode selector
             static int loop_select = 0;
             ImGui::Text("Control mode:");
             ImGui::SameLine();
@@ -203,6 +203,46 @@ namespace MyApp
             ImGui::RadioButton("Open loop", &loop_select, 1);
             ImGui::SameLine();
             ImGui::RadioButton("Closed loop", &loop_select, 2);
+
+            // real time plot
+            static ScrollingBuffer opd_buffer, setpoint_buffer;
+            float t = getTime();
+
+            // add the entire MeasurementQueue to the buffer
+            // if there's nothing in it, just add a NaN
+            if (measurementQueue.isempty())
+            {
+                opd_buffer.AddPoint(t, NAN);
+            }
+            else
+            {
+                while (!measurementQueue.isempty())
+                {
+                    opd_buffer.AddPoint(t, measurementQueue.pop());
+                }
+            }
+
+            setpoint_buffer.AddPoint(t, opd_setpoint);
+
+            static float history_length = 10.0f;
+            ImGui::SliderFloat("History", &history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
+
+            // x axis: no ticks
+            static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+
+            // y axis: auto fit
+            static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+
+            if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 150)))
+            {
+                ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+                ImPlot::SetupAxisLimits(ImAxis_X1, t - history_length, t, ImGuiCond_Always);
+                ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+                ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+                ImPlot::PlotLine("Measurement", &opd_buffer.Data[0].x, &opd_buffer.Data[0].y, opd_buffer.Data.size(), 0, opd_buffer.Offset, 2 * sizeof(float));
+                ImPlot::PlotLine("Setpoint", &setpoint_buffer.Data[0].x, &setpoint_buffer.Data[0].y, setpoint_buffer.Data.size(), 0, setpoint_buffer.Offset, 2 * sizeof(float));
+                ImPlot::EndPlot();
+            }
 
             if (ImGui::TreeNode("OPD metrology"))
             {
@@ -227,14 +267,7 @@ namespace MyApp
                 ImGui::TreePop();
             }
 
-            // disable control loop section if loop_select is off or open loop
-            // if (loop_select != 2)
-            // {ImGui::BeginDisabled();}
-
-            // string that is either "(OFF) Control loop" or "(ON) Control loop
-            std::string control_loop_status = (loop_select != 2) ? "(OFF) Control loop" : "(ON) Control loop";
-
-            if (ImGui::TreeNode(control_loop_status.c_str()))
+            if (ImGui::TreeNode("Control loop"))
             {
                 ImGui::Text("Control loop parameters:");
 
@@ -336,54 +369,6 @@ namespace MyApp
 
             // TODO next: add seperate buttons for start/stop of
             // measurements (piezo pos, opd), and seperate logging of all at their own speeds, in seperate threads
-            // make plot show all samples, not just one per frame update
-
-            if (ImGui::TreeNode("OPD Plot"))
-            {
-                // Scrolling plot of OPD
-                static ScrollingBuffer opd_buffer, setpoint_buffer;
-
-                float t = getTime();
-
-                // add the entire MeasurementQueue to the buffer
-                // if there's nothing in it, just add a NaN
-                if (measurementQueue.isempty())
-                {
-                    opd_buffer.AddPoint(t, NAN);
-                }
-                else
-                {
-                    while (!measurementQueue.isempty())
-                    {
-                        opd_buffer.AddPoint(t, measurementQueue.pop());
-                    }
-                }
-
-                // opd_buffer.AddPoint(t, measurement.load());
-                setpoint_buffer.AddPoint(t, opd_setpoint);
-
-                static float history_length = 10.0f;
-                ImGui::SliderFloat("History", &history_length, 0.001, 10, "%.1f s", ImGuiSliderFlags_Logarithmic);
-
-                // x axis: no ticks
-                static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
-
-                // y axis: auto fit
-                static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-
-                if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 150)))
-                {
-                    ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-                    ImPlot::SetupAxisLimits(ImAxis_X1, t - history_length, t, ImGuiCond_Always);
-                    ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-                    ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-                    ImPlot::PlotLine("Measurement", &opd_buffer.Data[0].x, &opd_buffer.Data[0].y, opd_buffer.Data.size(), 0, opd_buffer.Offset, 2 * sizeof(float));
-                    ImPlot::PlotLine("Setpoint", &setpoint_buffer.Data[0].x, &setpoint_buffer.Data[0].y, setpoint_buffer.Data.size(), 0, setpoint_buffer.Offset, 2 * sizeof(float));
-                    ImPlot::EndPlot();
-                }
-
-                ImGui::TreePop();
-            }
         }
 
         ImGui::End();
