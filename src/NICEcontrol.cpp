@@ -16,6 +16,7 @@
 #include <fstream>
 #include <chrono>
 #include <queue>
+#include <random>
 
 // Font
 #include "../lib/fonts/SourceSans3Regular.cpp"
@@ -157,20 +158,17 @@ namespace MyApp
                                    { return stopCalculation.load(); });
             }
 
-            // Perform the compute-intensive task here
-            // In this example, we generate a random noise component
-            float noise = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-            noise = noise - 0.5f; // noise in [-0.5, 0.5]
-            noise *= 0.01f;       // Scale the noise component
+            // generate mock measurement with gaussian noise
+            static double mean = 0.0;
+            static double stddev = 0.1;
+            static std::default_random_engine generator;
+            static std::normal_distribution<double> dist(mean, stddev);
+            auto noise = dist(generator);
             measurement = opd_setpoint + noise;
-
-            // Enqueue the measurement
-            measurementQueue.push(measurement);
-
-            // Get current time in microseconds
             auto t = getTime();
 
-            // Enqueue the time
+            // enqueue measurement and time
+            measurementQueue.push(measurement);
             timeQueue.push(t);
 
             // Write measurement and time to the CSV file
