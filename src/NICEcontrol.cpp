@@ -7,6 +7,7 @@
 #include <GLES2/gl2.h>
 #endif
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
+#include <iostream>
 
 #include <thread>
 #include <mutex>
@@ -14,6 +15,7 @@
 #include <atomic>
 #include <fstream>
 #include <chrono>
+#include <queue>
 
 // Font
 #include "../lib/fonts/SourceSans3Regular.cpp"
@@ -32,13 +34,71 @@ static void glfw_error_callback(int error, const char *description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-// utility structure for realtime plot
+float getTime()
+{
+    // returns time in seconds since the start of the program
+    static auto t0 = std::chrono::system_clock::now();
+    auto tnow = std::chrono::system_clock::now();
+    float t_since_start = std::chrono::duration_cast<std::chrono::microseconds>(tnow - t0).count() / 1.0e6;
+    return t_since_start;
+}
+
+template <typename T>
+class TSQueue
+{
+    // Thread-safe queue
+    // from https://www.geeksforgeeks.org/implement-thread-safe-queue-in-c/
+
+private:
+    // Underlying queue
+    std::queue<T> m_queue;
+
+    // mutex for thread synchronization
+    std::mutex m_mutex;
+
+public:
+    // Pushes an element to the queue
+    void push(T item)
+    {
+
+        // Acquire lock
+        std::unique_lock<std::mutex> lock(m_mutex);
+
+        // Add item
+        m_queue.push(item);
+    }
+
+    // Pops an element off the queue
+    T pop()
+    {
+        // acquire lock
+        std::unique_lock<std::mutex> lock(m_mutex);
+
+        // retrieve item
+        T item = m_queue.front();
+        m_queue.pop();
+
+        // return item
+        return item;
+    }
+
+    // isempty
+    bool isempty()
+    {
+        // acquire lock
+        std::unique_lock<std::mutex> lock(m_mutex);
+
+        // check if empty
+        return m_queue.empty();
+    }
+};
+
 struct ScrollingBuffer
 {
     int MaxSize;
     int Offset;
     ImVector<ImVec2> Data;
-    ScrollingBuffer(int max_size = 2000)
+    ScrollingBuffer(int max_size = 10000)
     {
         MaxSize = max_size;
         Offset = 0;
@@ -74,6 +134,13 @@ namespace MyApp
     std::condition_variable calculationCV;
     std::ofstream outputFile;
 
+    // a queue to store measurement data in
+    // the run_calculation can enquque data
+    // the GUI can dequeue data
+    // it must be thread safe
+    TSQueue<float> measurementQueue;
+    TSQueue<float> timeQueue;
+
     // Function: run_calculation()
     void run_calculation()
     {
@@ -93,19 +160,23 @@ namespace MyApp
             // In this example, we generate a random noise component
             float noise = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             noise = noise - 0.5f; // noise in [-0.5, 0.5]
-            noise *= 0.01f; // Scale the noise component
+            noise *= 0.01f;       // Scale the noise component
             measurement = opd_setpoint + noise;
 
-            // wait 100 µs
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            // Enqueue the measurement
+            measurementQueue.push(measurement);
 
             // Get current time in microseconds
-            auto currentTime = std::chrono::duration_cast<std::chrono::microseconds>(
-                                   std::chrono::system_clock::now().time_since_epoch())
-                                   .count();
+            auto t = getTime();
+
+            // Enqueue the time
+            timeQueue.push(t);
 
             // Write measurement and time to the CSV file
             // outputFile << currentTime << "," << measurement.load() << "\n";
+
+            // wait 100 µs
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
     }
 
@@ -272,17 +343,30 @@ namespace MyApp
                 // Scrolling plot of OPD
                 static ScrollingBuffer opd_buffer, setpoint_buffer;
 
-                static float t = 0;
-                t += ImGui::GetIO().DeltaTime;
+                float t = getTime();
 
-                opd_buffer.AddPoint(t, measurement.load());
+                // add the entire MeasurementQueue to the buffer
+                // if there's nothing in it, just add a NaN
+                if (measurementQueue.isempty())
+                {
+                    opd_buffer.AddPoint(t, NAN);
+                }
+                else
+                {
+                    while (!measurementQueue.isempty())
+                    {
+                        opd_buffer.AddPoint(t, measurementQueue.pop());
+                    }
+                }
+
+                // opd_buffer.AddPoint(t, measurement.load());
                 setpoint_buffer.AddPoint(t, opd_setpoint);
 
                 static float history_length = 10.0f;
-                ImGui::SliderFloat("History", &history_length, 1, 30, "%.1f s");
+                ImGui::SliderFloat("History", &history_length, 0.001, 10, "%.1f s", ImGuiSliderFlags_Logarithmic);
 
                 // x axis: no ticks
-                static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_NoTickMarks;
+                static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
 
                 // y axis: auto fit
                 static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
