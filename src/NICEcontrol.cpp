@@ -192,6 +192,8 @@ namespace MyApp
     {
         ImGui::Begin("NICE Control");
 
+        ImGuiIO& io = ImGui::GetIO();
+
         if (ImGui::CollapsingHeader("OPD"))
         {
 
@@ -234,7 +236,7 @@ namespace MyApp
             // y axis: auto fit
             static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
-            if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 150)))
+            if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 150 * io.FontGlobalScale)))
             {
                 ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
                 ImPlot::SetupAxisLimits(ImAxis_X1, t - history_length, t, ImGuiCond_Always);
@@ -371,6 +373,10 @@ namespace MyApp
             // measurements (piezo pos, opd), and seperate logging of all at their own speeds, in seperate threads
         }
 
+        if (ImGui::CollapsingHeader("Program settings"))
+        {
+            ImGui::DragFloat("GUI scale", &io.FontGlobalScale, 0.005f, 0.5, 3.0, "%.2f", ImGuiSliderFlags_AlwaysClamp); // Scale everything
+        }
         ImGui::End();
 
         // demo window
