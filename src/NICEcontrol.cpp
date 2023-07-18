@@ -19,6 +19,13 @@
 #include <random>
 #include <thread>
 
+// ethernet
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+
+#include <cstring>
+
 #include "../lib/fonts/SourceSans3Regular.cpp"
 #include "../lib/implot/implot.h"
 
@@ -121,8 +128,70 @@ std::ofstream outputFile;
 
 TSQueue<Measurement> measurementQueue;
 
-// Function: run_calculation()
+// void run_calculation() {
+//   static float measurement = 0.0f;
+
+//   // outputFile.open("data.csv");
+//   // outputFile << "Time (ms),Measurement\n";
+
+//   while (true) {
+//     {
+//       std::unique_lock<std::mutex> lock(calculationMutex);
+//       calculationCV.wait(lock, [] { return stopCalculation.load(); });
+//     }
+
+//     // generate mock measurement with gaussian noise
+//     static double mean = 0.0;
+//     static double stddev = 0.1;
+//     static std::default_random_engine generator;
+//     static std::normal_distribution<double> dist(mean, stddev);
+//     auto noise = dist(generator);
+//     measurement = opd_setpoint + noise;
+//     auto t = getTime();
+
+//     // enqueue measurement and time
+//     measurementQueue.push({t, measurement});
+
+//     // Write measurement and time to the CSV file
+//     // outputFile << currentTime << "," << measurement.load() << "\n";
+
+//     // wait 100 µs
+//     std::this_thread::sleep_for(std::chrono::microseconds(100));
+//   }
+// }
+
 void run_calculation() {
+  // setup ethernet connection
+  // Create a UDP socket
+  int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sockfd < 0) {
+    std::cerr << "Failed to create socket." << std::endl;
+  }
+
+  // Set up the server address
+  struct sockaddr_in serverAddr;
+  std::memset(&serverAddr, 0, sizeof(serverAddr));
+  serverAddr.sin_family = AF_INET;
+  int PortNumber = 12345;
+  serverAddr.sin_port = htons(PortNumber);         // Replace with the desired port number
+  serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);  // Listen on all network interfaces
+
+  // Bind the socket to the server address
+  if (bind(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
+    std::cerr << "Failed to bind socket." << std::endl;
+  }
+
+  // Open the output file
+  std::ofstream outputFile("output.csv");
+  if (!outputFile) {
+    std::cerr << "Failed to open output file." << std::endl;
+  }
+
+  int count = 0;
+  int prev = 0;
+  int buffer_size = 1024;
+  char buffer[buffer_size];
+
   static float measurement = 0.0f;
 
   // outputFile.open("data.csv");
@@ -134,23 +203,48 @@ void run_calculation() {
       calculationCV.wait(lock, [] { return stopCalculation.load(); });
     }
 
-    // generate mock measurement with gaussian noise
-    static double mean = 0.0;
-    static double stddev = 0.1;
-    static std::default_random_engine generator;
-    static std::normal_distribution<double> dist(mean, stddev);
-    auto noise = dist(generator);
-    measurement = opd_setpoint + noise;
+    // read the measurement from the ethernet connection
+    count++;
+
+    // Receive data
+    struct sockaddr_in clientAddr;
+    socklen_t clientAddrLen = sizeof(clientAddr);
+    int numBytes = recvfrom(sockfd, buffer, buffer_size, 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
+
+    // Check for errors
+    if (numBytes < 0) {
+      std::cerr << "Error receiving data." << std::endl;
+      break;
+    }
+
+    // Convert received data to vector of 10 ints
+    int receivedData[10];
+    std::memcpy(receivedData, buffer, sizeof(int) * 10);
+
+    // Calculate average of received data
+    float sum = 0;
+    for (int i = 0; i < 10; i++) {
+      sum += receivedData[i];
+    }
+    float avg = sum / 10.;
+
+    // convert from millidegree to rad
+    avg *= 1e-3 * M_PI / 180.;
+
+    // from rad to nm, assuming 633 nm  = 2 pi rad
+    avg *= 633. / (2. * M_PI);
+
+    
     auto t = getTime();
 
     // enqueue measurement and time
-    measurementQueue.push({t, measurement});
+    measurementQueue.push({t, avg});
 
     // Write measurement and time to the CSV file
     // outputFile << currentTime << "," << measurement.load() << "\n";
 
     // wait 100 µs
-    std::this_thread::sleep_for(std::chrono::microseconds(100));
+    // std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
 }
 
