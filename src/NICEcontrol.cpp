@@ -444,7 +444,7 @@ void RenderUI() {
         stopOpdMeasurement();
       }
 
-      static bool control_opd = true;
+      static bool control_opd = false;
       ImGui::Checkbox("Run control", &control_opd);
       if (control_opd) {
         RunOpdControl.store(true);
@@ -453,11 +453,8 @@ void RenderUI() {
       }
 
       // opd input: drag
-      ImGui::AlignTextToFramePadding();
-      ImGui::PushItemWidth(100);
-      ImGui::DragFloat("(Drag or double-click to adjust)", &opd_setpoint_gui, 0.1f, opd_setpoint_min,
-                       opd_setpoint_max, "%.4f µm", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::PopItemWidth();
+      ImGui::SliderFloat("(Drag or double-click to adjust)", &opd_setpoint_gui, opd_setpoint_min,
+                       opd_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
 
       // opd input: buttons
       if (ImGui::BeginTable("table1", 6, ImGuiTableFlags_SizingFixedFit)) {
