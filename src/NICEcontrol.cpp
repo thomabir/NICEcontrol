@@ -24,6 +24,9 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
+// MCL piezo stage
+#include "../lib/madlib/madlib.h"
+
 #include <cstring>
 
 #include "../lib/fonts/SourceSans3Regular.cpp"
@@ -134,6 +137,16 @@ std::mutex OpdMeasurementMutex;
 std::condition_variable OpdMeasurementCV;
 std::ofstream outputFile;
 
+// OPD actuator
+int initialise_opd_stage(){
+  int handle = MCL_InitHandle();
+  // move to a safe central position
+  MCL_SingleWriteN(25., 3, handle);
+  return handle;
+}
+int handle = initialise_opd_stage();
+std::atomic<float> piezo_setpoint = 0.0f;
+
 TSQueue<Measurement> measurementQueue;
 
 // void run_calculation() {
@@ -167,6 +180,12 @@ TSQueue<Measurement> measurementQueue;
 //     std::this_thread::sleep_for(std::chrono::microseconds(100));
 //   }
 // }
+
+
+
+void opd_move_to(float setpoint) {
+  MCL_SingleWriteN(setpoint, 3, handle);
+}
 
 void run_calculation() {
   // setup ethernet connection
@@ -267,6 +286,8 @@ void run_calculation() {
       // calculate control signal
       opd_control_signal = p.load() * opd_error +  opd_error_integral;
 
+      // actuate piezo (takes input in µm)
+      opd_move_to(opd_control_signal/1000.);
     }
 
 
@@ -354,6 +375,33 @@ void RenderUI() {
       // Display measurement
       ImGui::Text("Current measurement: %.4f", current_measurement);
 
+      // calculate mean and std of OPD buffer
+      static float mean = 0.0f;
+      static float stddev = 0.0f;
+
+      if (opd_buffer.Data.size() > 0) {
+        // calculate mean
+        float sum = 0.0f;
+        for (auto &p : opd_buffer.Data) {
+          sum += p.y;
+        }
+        mean = sum / opd_buffer.Data.size();
+
+        // calculate std
+        float sum_sq = 0.0f;
+        for (auto &p : opd_buffer.Data) {
+          sum_sq += (p.y - mean) * (p.y - mean);
+        }
+        stddev = sqrt(sum_sq / opd_buffer.Data.size());
+      }
+
+      // Display mean and std
+      ImGui::Text("Mean: %.4f", mean);
+      ImGui::Text("Std: %.4f", stddev);
+
+
+
+
       ImGui::TreePop();
     }
 
@@ -378,13 +426,13 @@ void RenderUI() {
       static float i_gui = 0.0f;
       
       ImGui::SliderFloat("P", &p_gui, 0.0f, 1.0f);
-      ImGui::SliderFloat("I", &i_gui, 0.0f, 1.0f);
+      ImGui::SliderFloat("I", &i_gui, 0.0f, 5e-2f);
 
       // store p, i
       p.store(p_gui);
       i.store(i_gui);
 
-      const float opd_setpoint_min = 0.0f, opd_setpoint_max = 1.0f;
+      const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
 
       // if (ImGui::Button("Start Calculation")) startOpdMeasurement();
       // if (ImGui::Button("Stop Calculation")) stopOpdMeasurement();
@@ -396,10 +444,18 @@ void RenderUI() {
         stopOpdMeasurement();
       }
 
+      static bool control_opd = true;
+      ImGui::Checkbox("Run control", &control_opd);
+      if (control_opd) {
+        RunOpdControl.store(true);
+      } else {
+        RunOpdControl.store(false);
+      }
+
       // opd input: drag
       ImGui::AlignTextToFramePadding();
       ImGui::PushItemWidth(100);
-      ImGui::DragFloat("(Drag or double-click to adjust)", &opd_setpoint_gui, 0.001f, opd_setpoint_min,
+      ImGui::DragFloat("(Drag or double-click to adjust)", &opd_setpoint_gui, 0.1f, opd_setpoint_min,
                        opd_setpoint_max, "%.4f µm", ImGuiSliderFlags_AlwaysClamp);
       ImGui::PopItemWidth();
 
