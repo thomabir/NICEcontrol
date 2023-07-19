@@ -118,12 +118,20 @@ struct ScrollingBuffer {
 };
 
 namespace MyApp {
-// Model
+
+// OPD control
 float opd_setpoint_gui = 0.001f;  // setpoint entered in GUI, may be out of range
-float opd_setpoint = 0.001f;      // setpoint used in calculation, clipped to valid range
-std::atomic<bool> stopCalculation(false);
-std::mutex calculationMutex;
-std::condition_variable calculationCV;
+std::atomic<float> opd_setpoint = 0.001f;      // setpoint used in calculation, clipped to valid range
+std::atomic<bool> RunOpdControl(false);
+std::mutex OpdControlMutex;
+std::condition_variable OpdControlCV;
+std::atomic<float> p = 0.0f;
+std::atomic<float> i = 0.0f;
+
+// OPD measurement
+std::atomic<bool> RunOpdMeasurement(false);
+std::mutex OpdMeasurementMutex;
+std::condition_variable OpdMeasurementCV;
 std::ofstream outputFile;
 
 TSQueue<Measurement> measurementQueue;
@@ -136,8 +144,8 @@ TSQueue<Measurement> measurementQueue;
 
 //   while (true) {
 //     {
-//       std::unique_lock<std::mutex> lock(calculationMutex);
-//       calculationCV.wait(lock, [] { return stopCalculation.load(); });
+//       std::unique_lock<std::mutex> lock(OpdMeasurementMutex);
+//       OpdMeasurementCV.wait(lock, [] { return RunOpdMeasurement.load(); });
 //     }
 
 //     // generate mock measurement with gaussian noise
@@ -199,8 +207,9 @@ void run_calculation() {
 
   while (true) {
     {
-      std::unique_lock<std::mutex> lock(calculationMutex);
-      calculationCV.wait(lock, [] { return stopCalculation.load(); });
+      std::unique_lock<std::mutex> lock(
+          OpdMeasurementMutex);  // the only purpose of that lock is to run/stop measurement?
+      OpdMeasurementCV.wait(lock, [] { return RunOpdMeasurement.load(); });
     }
 
     // read the measurement from the ethernet connection
@@ -234,11 +243,32 @@ void run_calculation() {
     // from rad to nm, assuming 633 nm  = 2 pi rad
     avg *= 633. / (2. * M_PI);
 
-    
     auto t = getTime();
 
     // enqueue measurement and time
     measurementQueue.push({t, avg});
+
+    // variables for control
+    static float opd_error = 0.0f;
+    static float opd_error_integral = 0.0f;
+    static float opd_control_signal = 0.0f;
+
+    // if RunOpdControl is true, calculate the control signal
+    if (RunOpdControl.load()) {
+      // calculate error
+      opd_error = opd_setpoint.load() - avg;
+
+      // calculate integral
+      opd_error_integral += i.load() * opd_error;
+
+      // calculate derivative
+      // opd_error_derivative = opd_error - opd_error_prev;
+
+      // calculate control signal
+      opd_control_signal = p.load() * opd_error +  opd_error_integral;
+
+    }
+
 
     // Write measurement and time to the CSV file
     // outputFile << currentTime << "," << measurement.load() << "\n";
@@ -249,10 +279,12 @@ void run_calculation() {
 }
 
 // Presenter
-void setStopCalculation(bool value) {
-  stopCalculation.store(value);
-  calculationCV.notify_one();
+void startOpdMeasurement() {
+  RunOpdMeasurement.store(true);
+  OpdMeasurementCV.notify_one();
 }
+
+void stopOpdMeasurement() { RunOpdMeasurement.store(false); }
 
 void RenderUI() {
   ImGui::Begin("NICE Control");
@@ -290,7 +322,10 @@ void RenderUI() {
       }
     }
 
-    setpoint_buffer.AddPoint(t_gui, opd_setpoint);
+    setpoint_buffer.AddPoint(t_gui, opd_setpoint.load());
+
+    static bool plot_setpoint = false;
+    ImGui::Checkbox("Plot setpoint", &plot_setpoint);
 
     static float history_length = 10.0f;
     ImGui::SliderFloat("History", &history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
@@ -308,8 +343,10 @@ void RenderUI() {
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       ImPlot::PlotLine("Measurement", &opd_buffer.Data[0].x, &opd_buffer.Data[0].y, opd_buffer.Data.size(), 0,
                        opd_buffer.Offset, 2 * sizeof(float));
+      if (plot_setpoint){
       ImPlot::PlotLine("Setpoint", &setpoint_buffer.Data[0].x, &setpoint_buffer.Data[0].y, setpoint_buffer.Data.size(),
                        0, setpoint_buffer.Offset, 2 * sizeof(float));
+      }
       ImPlot::EndPlot();
     }
 
@@ -337,15 +374,27 @@ void RenderUI() {
       ImGui::Text("Control loop parameters:");
 
       // sliders for p , i
-      static float p = 0.0f, i = 0.0f;
-      ImGui::SliderFloat("P", &p, 0.0f, 1.0f);
-      ImGui::SliderFloat("I", &i, 0.0f, 1.0f);
+      static float p_gui = 0.0f;
+      static float i_gui = 0.0f;
+      
+      ImGui::SliderFloat("P", &p_gui, 0.0f, 1.0f);
+      ImGui::SliderFloat("I", &i_gui, 0.0f, 1.0f);
+
+      // store p, i
+      p.store(p_gui);
+      i.store(i_gui);
 
       const float opd_setpoint_min = 0.0f, opd_setpoint_max = 1.0f;
 
-      if (ImGui::Button("Start Calculation")) setStopCalculation(true);
-
-      if (ImGui::Button("Stop Calculation")) setStopCalculation(false);
+      // if (ImGui::Button("Start Calculation")) startOpdMeasurement();
+      // if (ImGui::Button("Stop Calculation")) stopOpdMeasurement();
+      static bool measure_opd = true;
+      ImGui::Checkbox("Run measurement", &measure_opd);
+      if (measure_opd) {
+        startOpdMeasurement();
+      } else {
+        stopOpdMeasurement();
+      }
 
       // opd input: drag
       ImGui::AlignTextToFramePadding();
@@ -412,7 +461,7 @@ void RenderUI() {
       if (opd_setpoint_gui > opd_setpoint_max) opd_setpoint_gui = opd_setpoint_max;
 
       // set opd_setpoint
-      opd_setpoint = opd_setpoint_gui;
+      opd_setpoint.store(opd_setpoint_gui);
 
       ImGui::TreePop();
     }
@@ -608,8 +657,8 @@ int main(int, char **) {
 
   // Stop the compute thread
   {
-    std::lock_guard<std::mutex> lock(MyApp::calculationMutex);
-    MyApp::setStopCalculation(false);
+    std::lock_guard<std::mutex> lock(MyApp::OpdMeasurementMutex);
+    MyApp::RunOpdMeasurement.store(false);
   }
   computeThread.join();
 
