@@ -141,7 +141,7 @@ std::ofstream outputFile;
 int initialise_opd_stage(){
   int handle = MCL_InitHandle();
   // move to a safe central position
-  MCL_SingleWriteN(25., 3, handle);
+  MCL_SingleWriteN(20., 3, handle);
   return handle;
 }
 int handle = initialise_opd_stage();
@@ -184,7 +184,12 @@ TSQueue<Measurement> measurementQueue;
 
 
 void opd_move_to(float setpoint) {
-  MCL_SingleWriteN(setpoint, 3, handle);
+  // move to setpoint in µm + 20 µm, to give some headroom in both directions
+  MCL_SingleWriteN(setpoint + 20., 3, handle);
+}
+
+double opd_read() {
+  return MCL_SingleReadN(3, handle);
 }
 
 void run_calculation() {
@@ -209,7 +214,7 @@ void run_calculation() {
   }
 
   // Open the output file
-  std::ofstream outputFile("output.csv");
+  std::ofstream outputFile("opd-data.csv");
   if (!outputFile) {
     std::cerr << "Failed to open output file." << std::endl;
   }
@@ -221,8 +226,7 @@ void run_calculation() {
 
   static float measurement = 0.0f;
 
-  // outputFile.open("data.csv");
-  // outputFile << "Time (ms),Measurement\n";
+  outputFile << "Time (s), Counter, OPD measurement (m)\n";
 
   while (true) {
     {
@@ -239,6 +243,8 @@ void run_calculation() {
     socklen_t clientAddrLen = sizeof(clientAddr);
     int numBytes = recvfrom(sockfd, buffer, buffer_size, 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
 
+    auto t = getTime();
+
     // Check for errors
     if (numBytes < 0) {
       std::cerr << "Error receiving data." << std::endl;
@@ -246,8 +252,30 @@ void run_calculation() {
     }
 
     // Convert received data to vector of 10 ints
-    int receivedData[10];
-    std::memcpy(receivedData, buffer, sizeof(int) * 10);
+    int receivedDataInt[20];
+    std::memcpy(receivedDataInt, buffer, sizeof(int) * 20);
+
+    // data comes in like this: 20 x (counter, phase)
+
+    // convert to nm
+    float receivedData[10];
+    int counter[10];
+    for (int i = 0; i < 10; i++) {
+
+      // get counter
+      counter[i] = receivedDataInt[2*i];
+
+      // convert from millidegree to rad
+      receivedData[i] = receivedDataInt[2*i+1] * 1e-3 * M_PI / 180.;
+
+      // from rad to nm, assuming 633 nm  = 2 pi rad
+      receivedData[i] *= 633. / (2. * M_PI);
+
+      // save to file: current time, counter, phase
+      outputFile << t << "," << counter[i] << "," << receivedData[i] << "\n";
+      
+    }
+
 
     // Calculate average of received data
     float sum = 0;
@@ -256,13 +284,6 @@ void run_calculation() {
     }
     float avg = sum / 10.;
 
-    // convert from millidegree to rad
-    avg *= 1e-3 * M_PI / 180.;
-
-    // from rad to nm, assuming 633 nm  = 2 pi rad
-    avg *= 633. / (2. * M_PI);
-
-    auto t = getTime();
 
     // enqueue measurement and time
     measurementQueue.push({t, avg});
@@ -291,8 +312,7 @@ void run_calculation() {
     }
 
 
-    // Write measurement and time to the CSV file
-    // outputFile << currentTime << "," << measurement.load() << "\n";
+    
 
     // wait 100 µs
     // std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -368,6 +388,23 @@ void RenderUI() {
       ImPlot::PlotLine("Setpoint", &setpoint_buffer.Data[0].x, &setpoint_buffer.Data[0].y, setpoint_buffer.Data.size(),
                        0, setpoint_buffer.Offset, 2 * sizeof(float));
       }
+      ImPlot::EndPlot();
+    }
+
+    // plot for current piezo position
+    static ImVec4 color     = ImVec4(1,1,0,1);
+    static float  thickness = 3;
+    static ScrollingBuffer piezo_buffer;
+    piezo_buffer.AddPoint(t_gui, opd_read());
+
+    if (ImPlot::BeginPlot("##Piezo", ImVec2(-1, 150 * io.FontGlobalScale))) {
+      ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(color, thickness);
+      ImPlot::PlotLine("Piezo position", &piezo_buffer.Data[0].x, &piezo_buffer.Data[0].y, piezo_buffer.Data.size(), 0,
+                       piezo_buffer.Offset, 2 * sizeof(float));
       ImPlot::EndPlot();
     }
 
