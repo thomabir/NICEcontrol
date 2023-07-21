@@ -4,6 +4,8 @@ NICEcontrol is a program to monitor and control the [Nulling Interferometry Cryo
 
 This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability group](https://quanz-group.ethz.ch/), will demonstrate the feasibility of the [LIFE space mission](https://life-space-mission.com/).
 
+![User interface of NICEcontrol](./img/ui.png)
+
 
 ## Install
 
