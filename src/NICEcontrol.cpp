@@ -534,8 +534,8 @@ void RenderUI() {
       ImGui::Text("Control loop parameters:");
 
       // sliders for p , i
-      static float p_gui = 0.0f;
-      static float i_gui = 0.0f;
+      static float p_gui = 0.5f;
+      static float i_gui = 0.01f;
       
       ImGui::SliderFloat("P", &p_gui, 0.0f, 1.0f);
       ImGui::SliderFloat("I", &i_gui, 0.0f, 5e-2f);
