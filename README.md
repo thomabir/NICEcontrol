@@ -19,6 +19,7 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
      apt-get install libglfw3-dev fftw-dev
      ```
    * Install the piezo controller drivers from [MCL](http://www.madcitylabs.com/) (ask their support for the files)
+   * Install the piezo controller drivers from Physikinstrumente. (Download from their website or copy from installation medium)
 2. Clone the `NICEcontrol` repository and its submodules
    ```bash
    git clone --recurse-submodules https://github.com/thomabir/NICEcontrol
