@@ -380,11 +380,15 @@ void RenderUI() {
     // y axis: auto fit
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
-    if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 150 * io.FontGlobalScale))) {
+    static ImVec4 fft_color     = ImVec4(1,1,0,1);
+    static float  thickness = 1;
+
+    if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(fft_color, thickness);
       ImPlot::PlotLine("Measurement", &opd_buffer.Data[0].x, &opd_buffer.Data[0].y, opd_buffer.Data.size(), 0,
                        opd_buffer.Offset, 2 * sizeof(float));
       if (plot_setpoint){
@@ -441,7 +445,7 @@ void RenderUI() {
       fft_freq[i] = i * 6400. / fft_size;
     }
 
-    static ImVec4 fft_color     = ImVec4(1,1,0,1);
+    
     static float  fft_thickness = 3;
 
       
@@ -450,7 +454,7 @@ void RenderUI() {
     static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
     static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None; //ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
     // plot fft_power vs fft_freq, with log scale on x and y axis
-    if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 500 * io.FontGlobalScale))) {
+    if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 300 * io.FontGlobalScale))) {
       ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
       ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
       // yflags
@@ -468,7 +472,6 @@ void RenderUI() {
 
     // plot for current piezo position
     static ImVec4 color     = ImVec4(1,1,0,1);
-    static float  thickness = 3;
     static ScrollingBuffer piezo_buffer;
     piezo_buffer.AddPoint(t_gui, opd_read());
 
