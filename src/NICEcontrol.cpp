@@ -217,10 +217,10 @@ void run_calculation() {
   }
 
   // Open the output file
-  // std::ofstream outputFile("opd-data.csv");
-  // if (!outputFile) {
-  //   std::cerr << "Failed to open output file." << std::endl;
-  // }
+  std::ofstream outputFile("adc-data.csv");
+  if (!outputFile) {
+    std::cerr << "Failed to open output file." << std::endl;
+  }
 
   int count = 0;
   int prev = 0;
@@ -255,27 +255,36 @@ void run_calculation() {
     }
 
     // Convert received data to vector of 10 ints
-    int receivedDataInt[20];
-    std::memcpy(receivedDataInt, buffer, sizeof(int) * 20);
+    int receivedDataInt[50];
+    std::memcpy(receivedDataInt, buffer, sizeof(int) * 50);
 
-    // data comes in like this: 20 x (counter, phase)
+    // data comes in like this: 10 x (counter, adc1, adc2, adc3, adc4)
 
     // convert to nm
-    float receivedData[10];
+    static float adc1[10];
+    static float adc2[10];
+    static float adc3[10];
+    static float adc4[10];
     int counter[10];
+
     for (int i = 0; i < 10; i++) {
 
       // get counter
-      counter[i] = receivedDataInt[2*i];
+      counter[i] = receivedDataInt[5 * i];
+      adc1[i] = receivedDataInt[5 * i + 1];
+      adc2[i] = receivedDataInt[5 * i + 2];
+      adc3[i] = receivedDataInt[5 * i + 3];
+      adc4[i] = receivedDataInt[5 * i + 4];
 
       // convert from millidegree to rad
-      receivedData[i] = receivedDataInt[2*i+1] * 1e-3 * M_PI / 180.;
+      // receivedData[i] = receivedDataInt[2*i+1] * 1e-3 * M_PI / 180.;
 
       // from rad to nm, assuming 633 nm  = 2 pi rad
-      receivedData[i] *= 633. / (2. * M_PI);
+      // receivedData[i] *= 633. / (2. * M_PI);
 
       // save to file: current time, counter, phase
       // outputFile << t << "," << counter[i] << "," << receivedData[i] << "\n";
+      outputFile << t << "," << counter[i] << "," << adc1[i] << "," << adc2[i] << "," << adc3[i] << "," << adc4[i] << "\n";
       
     }
 
@@ -283,7 +292,7 @@ void run_calculation() {
     // Calculate average of received data
     float sum = 0;
     for (int i = 0; i < 10; i++) {
-      sum += receivedData[i];
+      sum += adc2[i];
     }
     float avg = sum / 10.;
 
