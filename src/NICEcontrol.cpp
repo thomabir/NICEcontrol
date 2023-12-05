@@ -134,10 +134,10 @@ std::condition_variable OpdControlCV;
 std::atomic<float> p = 0.0f;
 std::atomic<float> i = 0.0f;
 
-// OPD measurement
-std::atomic<bool> RunOpdMeasurement(false);
-std::mutex OpdMeasurementMutex;
-std::condition_variable OpdMeasurementCV;
+// variables that control the measurement thread
+std::atomic<bool> RunMeasurement(false);
+std::mutex MeasurementMutex;
+std::condition_variable MeasurementCV;
 std::ofstream outputFile;
 
 // OPD actuator
@@ -150,7 +150,8 @@ int initialise_opd_stage(){
 int handle = initialise_opd_stage();
 std::atomic<float> piezo_setpoint = 0.0f;
 
-TSQueue<Measurement> measurementQueue;
+TSQueue<Measurement> opdQueue;
+TSQueue<Measurement> x1Queue;
 
 // void run_calculation() {
 //   static float measurement = 0.0f;
@@ -160,8 +161,8 @@ TSQueue<Measurement> measurementQueue;
 
 //   while (true) {
 //     {
-//       std::unique_lock<std::mutex> lock(OpdMeasurementMutex);
-//       OpdMeasurementCV.wait(lock, [] { return RunOpdMeasurement.load(); });
+//       std::unique_lock<std::mutex> lock(MeasurementMutex);
+//       MeasurementCV.wait(lock, [] { return RunMeasurement.load(); });
 //     }
 
 //     // generate mock measurement with gaussian noise
@@ -174,7 +175,7 @@ TSQueue<Measurement> measurementQueue;
 //     auto t = getTime();
 
 //     // enqueue measurement and time
-//     measurementQueue.push({t, measurement});
+//     opdQueue.push({t, measurement});
 
 //     // Write measurement and time to the CSV file
 //     // outputFile << currentTime << "," << measurement.load() << "\n";
@@ -227,15 +228,13 @@ void run_calculation() {
   int buffer_size = 1024;
   char buffer[buffer_size];
 
-  static float measurement = 0.0f;
-
   // outputFile << "Time (s), Counter, OPD measurement (m)\n";
 
   while (true) {
     {
       std::unique_lock<std::mutex> lock(
-          OpdMeasurementMutex);  // the only purpose of that lock is to run/stop measurement?
-      OpdMeasurementCV.wait(lock, [] { return RunOpdMeasurement.load(); });
+          MeasurementMutex);  // the only purpose of that lock is to run/stop measurement?
+      MeasurementCV.wait(lock, [] { return RunMeasurement.load(); });
     }
 
     // read the measurement from the ethernet connection
@@ -260,7 +259,6 @@ void run_calculation() {
 
     // data comes in like this: 10 x (counter, adc1, adc2, adc3, adc4)
 
-    // convert to nm
     static float adc1[10];
     static float adc2[10];
     static float adc3[10];
@@ -271,10 +269,10 @@ void run_calculation() {
 
       // get counter
       counter[i] = receivedDataInt[5 * i];
-      adc1[i] = receivedDataInt[5 * i + 1];
-      adc2[i] = receivedDataInt[5 * i + 2];
-      adc3[i] = receivedDataInt[5 * i + 3];
-      adc4[i] = receivedDataInt[5 * i + 4];
+      adc1[i] = receivedDataInt[5 * i + 1]/1000.; // x1
+      adc2[i] = receivedDataInt[5 * i + 2]/1000.; // x2
+      adc3[i] = receivedDataInt[5 * i + 3]/1000.; // opd
+      adc4[i] = receivedDataInt[5 * i + 4]; // i1
 
       // convert from millidegree to rad
       // receivedData[i] = receivedDataInt[2*i+1] * 1e-3 * M_PI / 180.;
@@ -284,21 +282,22 @@ void run_calculation() {
 
       // save to file: current time, counter, phase
       // outputFile << t << "," << counter[i] << "," << receivedData[i] << "\n";
-      outputFile << t << "," << counter[i] << "," << adc1[i] << "," << adc2[i] << "," << adc3[i] << "," << adc4[i] << "\n";
+      // outputFile << t << "," << counter[i] << "," << adc1[i] << "," << adc2[i] << "," << adc3[i] << "," << adc4[i] << "\n";
       
     }
 
 
-    // Calculate average of received data
+    // Calculate average of received opd data
     float sum = 0;
     for (int i = 0; i < 10; i++) {
-      sum += adc2[i];
+      sum += adc3[i];
     }
     float avg = sum / 10.;
 
 
     // enqueue measurement and time
-    measurementQueue.push({t, avg});
+    opdQueue.push({t, avg});
+    x1Queue.push({t, adc1[0]});
 
     // variables for control
     static float opd_error = 0.0f;
@@ -332,12 +331,12 @@ void run_calculation() {
 }
 
 // Presenter
-void startOpdMeasurement() {
-  RunOpdMeasurement.store(true);
-  OpdMeasurementCV.notify_one();
+void startMeasurement() {
+  RunMeasurement.store(true);
+  MeasurementCV.notify_one();
 }
 
-void stopOpdMeasurement() { RunOpdMeasurement.store(false); }
+void stopMeasurement() { RunMeasurement.store(false); }
 
 void RenderUI() {
   ImGui::Begin("NICE Control");
@@ -345,8 +344,17 @@ void RenderUI() {
   ImGuiIO &io = ImGui::GetIO();
 
   static auto current_measurement = 0.f;
-  if (!measurementQueue.isempty()) {
-    current_measurement = measurementQueue.back().value;
+  if (!opdQueue.isempty()) {
+    current_measurement = opdQueue.back().value;
+  }
+
+  // Start measurement
+  static bool measure_button = true;
+  ImGui::Checkbox("Run measurement", &measure_button);
+  if (measure_button) {
+    startMeasurement();
+  } else {
+    stopMeasurement();
   }
 
   if (ImGui::CollapsingHeader("OPD")) {
@@ -366,11 +374,11 @@ void RenderUI() {
 
     // add the entire MeasurementQueue to the buffer
     // if there's nothing in it, just add a NaN
-    if (measurementQueue.isempty()) {
+    if (opdQueue.isempty()) {
       opd_buffer.AddPoint(t_gui, NAN);
     } else {
-      while (!measurementQueue.isempty()) {
-        auto m = measurementQueue.pop();
+      while (!opdQueue.isempty()) {
+        auto m = opdQueue.pop();
         opd_buffer.AddPoint(m.time, m.value);
       }
     }
@@ -558,15 +566,9 @@ void RenderUI() {
 
       const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
 
-      // if (ImGui::Button("Start Calculation")) startOpdMeasurement();
-      // if (ImGui::Button("Stop Calculation")) stopOpdMeasurement();
-      static bool measure_opd = true;
-      ImGui::Checkbox("Run measurement", &measure_opd);
-      if (measure_opd) {
-        startOpdMeasurement();
-      } else {
-        stopOpdMeasurement();
-      }
+      // if (ImGui::Button("Start Calculation")) startMeasurement();
+      // if (ImGui::Button("Stop Calculation")) stopMeasurement();
+      
 
       static bool control_opd = false;
       ImGui::Checkbox("Run control", &control_opd);
@@ -643,9 +645,88 @@ void RenderUI() {
       ImGui::TreePop();
     }
 
+  
+
     // TODO next: add seperate buttons for start/stop of
     // measurements (piezo pos, opd), and seperate logging of all at their own
     // speeds, in seperate threads
+  }
+
+  if (ImGui::CollapsingHeader("X1 position")) {
+
+    // real time plot
+    static ScrollingBuffer x1_buffer;
+    float t_gui_x1 = getTime();
+
+    // add the entire MeasurementQueue to the buffer
+    // if there's nothing in it, just add a NaN
+    if (x1Queue.isempty()) {
+      x1_buffer.AddPoint(t_gui_x1, NAN);
+    } else {
+      while (!x1Queue.isempty()) {
+        auto m = x1Queue.pop();
+        x1_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    static float x1_history_length = 10.0f;
+    ImGui::SliderFloat("History", &x1_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
+
+    // x axis: no ticks
+    static ImPlotAxisFlags x1_xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+
+    // y axis: auto fit
+    static ImPlotAxisFlags x1_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+
+    static ImVec4 x1_color     = ImVec4(1,1,0,1);
+    static float  x1_thickness = 1;
+
+    if (ImPlot::BeginPlot("##X1_Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
+      ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x1 - x1_history_length, t_gui_x1, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(x1_color, x1_thickness);
+      ImPlot::PlotLine("Measurement", &x1_buffer.Data[0].x, &x1_buffer.Data[0].y, x1_buffer.Data.size(), 0,
+                       x1_buffer.Offset, 2 * sizeof(float));
+      ImPlot::EndPlot();
+    }
+
+    if (ImGui::TreeNode("X1 metrology")) {
+      // Display measurement
+      // ImGui::Text("Current measurement: %.4f", current_measurement);
+
+      // // calculate mean and std of OPD buffer
+      // static float mean = 0.0f;
+      // static float stddev = 0.0f;
+
+      // if (opd_buffer.Data.size() > 0) {
+      //   // calculate mean
+      //   float sum = 0.0f;
+      //   for (auto &p : opd_buffer.Data) {
+      //     sum += p.y;
+      //   }
+      //   mean = sum / opd_buffer.Data.size();
+
+      //   // calculate std
+      //   float sum_sq = 0.0f;
+      //   for (auto &p : opd_buffer.Data) {
+      //     sum_sq += (p.y - mean) * (p.y - mean);
+      //   }
+      //   stddev = sqrt(sum_sq / opd_buffer.Data.size());
+      // }
+
+      // // Display mean and std
+      // ImGui::Text("Mean: %.4f", mean);
+      // ImGui::Text("Std: %.4f", stddev);
+
+
+
+
+      ImGui::TreePop();
+    }
+  
+
   }
 
   if (ImGui::CollapsingHeader("Program settings")) {
@@ -834,8 +915,8 @@ int main(int, char **) {
 
   // Stop the compute thread
   {
-    std::lock_guard<std::mutex> lock(MyApp::OpdMeasurementMutex);
-    MyApp::RunOpdMeasurement.store(false);
+    std::lock_guard<std::mutex> lock(MyApp::MeasurementMutex);
+    MyApp::RunMeasurement.store(false);
   }
   computeThread.join();
 
