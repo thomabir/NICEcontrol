@@ -370,13 +370,18 @@ void RenderUI() {
 
     // real time plot
     static ScrollingBuffer opd_buffer, setpoint_buffer;
-    float t_gui = getTime();
+    
+    static float t_gui = 0;
+
+     // if measurement is running, update gui time.
+    if (RunMeasurement.load()) {
+      t_gui = getTime();
+    }
+
 
     // add the entire MeasurementQueue to the buffer
     // if there's nothing in it, just add a NaN
-    if (opdQueue.isempty()) {
-      opd_buffer.AddPoint(t_gui, NAN);
-    } else {
+    if (!opdQueue.isempty()) {
       while (!opdQueue.isempty()) {
         auto m = opdQueue.pop();
         opd_buffer.AddPoint(m.time, m.value);
@@ -656,13 +661,19 @@ void RenderUI() {
 
     // real time plot
     static ScrollingBuffer x1_buffer;
-    float t_gui_x1 = getTime();
+
+   
+    static float t_gui_x1 = 0;
+
+     // if measurement is running, update gui time.
+    if (RunMeasurement.load()) {
+      t_gui_x1 = getTime();
+    }
+
 
     // add the entire MeasurementQueue to the buffer
     // if there's nothing in it, just add a NaN
-    if (x1Queue.isempty()) {
-      x1_buffer.AddPoint(t_gui_x1, NAN);
-    } else {
+    if (!x1Queue.isempty()) {
       while (!x1Queue.isempty()) {
         auto m = x1Queue.pop();
         x1_buffer.AddPoint(m.time, m.value);
