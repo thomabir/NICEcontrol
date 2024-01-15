@@ -159,6 +159,8 @@ TSQueue<Measurement> x1Queue;
 TSQueue<Measurement> x2Queue;
 TSQueue<Measurement> i1Queue;
 TSQueue<Measurement> i2Queue;
+TSQueue<Measurement> x1dQueue;
+TSQueue<Measurement> x2dQueue;
 
 // void run_calculation() {
 //   static float measurement = 0.0f;
@@ -304,12 +306,15 @@ void run_calculation() {
     float avg = sum / 10.;
 
 
+
     // enqueue measurement and time
     opdQueue.push({t, avg});
     x1Queue.push({t, adc1[0]});
     x2Queue.push({t, adc2[0]});
     i1Queue.push({t, adc4[0]});
     i2Queue.push({t, adc5[0]});
+    x1dQueue.push({t, static_cast<float>(adc1[0] / adc4[0] * 1.11e3)});
+    x2dQueue.push({t, static_cast<float>(adc2[0] / adc5[0] * 1.11e3)});
 
     // variables for control
     static float opd_error = 0.0f;
@@ -675,6 +680,8 @@ void RenderUI() {
     static ScrollingBuffer x2_buffer;
     static ScrollingBuffer i1_buffer;
     static ScrollingBuffer i2_buffer;
+    static ScrollingBuffer x1d_buffer;
+    static ScrollingBuffer x2d_buffer;
 
    
     static float t_gui_x = 0;
@@ -714,6 +721,20 @@ void RenderUI() {
       }
     }
 
+    if (!x1dQueue.isempty()) {
+      while (!x1dQueue.isempty()) {
+        auto m = x1dQueue.pop();
+        x1d_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    if (!x2dQueue.isempty()) {
+      while (!x2dQueue.isempty()) {
+        auto m = x2dQueue.pop();
+        x2d_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
     static float x1_history_length = 10.0f;
     ImGui::SliderFloat("History", &x1_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
 
@@ -748,7 +769,24 @@ void RenderUI() {
                        i2_buffer.Offset, 2 * sizeof(float));
       ImPlot::EndPlot();
     }
-  }
+
+    // plot x1d, x2d
+
+    if (ImPlot::BeginPlot("##X1D", ImVec2(-1, 200 * io.FontGlobalScale))) {
+      ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(x1_color, x1_thickness);
+      ImPlot::PlotLine("x1d", &x1d_buffer.Data[0].x, &x1d_buffer.Data[0].y, x1d_buffer.Data.size(), 0,
+                       x1d_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(x2_color, x1_thickness);
+      ImPlot::PlotLine("x2d", &x2d_buffer.Data[0].x, &x2d_buffer.Data[0].y, x2d_buffer.Data.size(), 0,
+                       x2d_buffer.Offset, 2 * sizeof(float));
+      ImPlot::EndPlot();
+    }
+  }  
+
 
   if (ImGui::CollapsingHeader("Program settings")) {
     ImGui::DragFloat("GUI scale", &io.FontGlobalScale, 0.005f, 0.5, 3.0, "%.2f",
