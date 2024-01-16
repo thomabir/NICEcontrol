@@ -60,6 +60,8 @@ struct Measurement {
   float value;
 };
 
+
+
 // thread-safe queue
 template <typename T>
 class TSQueue {
@@ -125,6 +127,64 @@ struct ScrollingBuffer {
     }
   }
 };
+
+class FFT_calculator {
+    public:
+      int size;
+      float sampling_rate;
+      ScrollingBuffer *measurement_buffer;
+      double *output_power;
+      double *output_freq;
+      fftw_complex *in, *out;
+      fftw_plan fft_plan;
+
+
+      FFT_calculator(int size, float sampling_rate, ScrollingBuffer *measurement_buffer, double *output_power, double *output_freq) {
+        // initialise fftw
+        in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * size);
+        out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * size);
+        fft_plan = fftw_plan_dft_1d(size, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+
+        // initialise variables
+        this->size = size;
+        this->sampling_rate = sampling_rate;
+        this->measurement_buffer = measurement_buffer;
+        this->output_power = output_power;
+        this->output_freq = output_freq;
+      }
+
+      void calculate() {
+        // if there are at least size points in the measurement_buffer, copy the size latest points to in
+        // Note: the most recent point is at measurement_buffer.Data[measurement_buffer.Offset].
+        // While looping over the buffer, if you reach measurement_buffer[0], you need to continue at measurement_buffer.Data[measurement_buffer.MaxSize-1]
+        int offset = measurement_buffer->Offset;
+        static int j = 0;
+        static int max_size = measurement_buffer->MaxSize;
+
+        if (measurement_buffer->Data.size() == max_size) {
+          for (int i = 0; i < size; i++) {
+            in[i][0] = measurement_buffer->Data[(offset - size + i + max_size) % max_size].y;
+            in[i][1] = 0.0f;
+          }
+        }
+
+        // execute fft
+        fftw_execute(fft_plan);
+
+        // calculate power spectrum (only the real half)
+        for (int i = 0; i < size / 2; i++) {
+          output_power[i] = out[i][0] * out[i][0] + out[i][1] * out[i][1];
+        }
+
+        // set first element to 0 (DC)
+        output_power[0] = 0.0f;
+
+        // find the frequency axis, assuming a sampling rate of 6.4 kHz
+        for (int i = 0; i < size / 2; i++) {
+          output_freq[i] = i * sampling_rate / size;
+        }
+      }
+    };
 
 // iir filters
 Iir::Butterworth::LowPass<4> x1d_lp_filter, x2d_lp_filter, opd_lp_filter, opd_control_lp_filter;
@@ -517,70 +577,29 @@ void RenderUI() {
       ImPlot::EndPlot();
     }
 
-    // plot for FFT using fftw3, using the last 1024 points of the opd_buffer
-    static int fft_size = 1024;
-    static fftw_complex *in, *out;
-    static fftw_plan fft_plan;
-    static bool fft_initialised = false;
-
-    // initialise fftw
-    if (!fft_initialised) {
-      
-      in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * fft_size);
-      out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * fft_size);
-      fft_plan = fftw_plan_dft_1d(fft_size, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
-      fft_initialised = true;
-    }
-
-    // if there are at least fft_size points in the opd_buffer, copy the fft_size latest points to in
-    // Note: the most recent point is at opd_buffer.Data[opd_buffer.Offset].
-    // While looping over the buffer, if you reach opd_buffer[0], you need to continue at opd_buffer.Data[opd_buffer.MaxSize-1]
-    int offset = opd_buffer.Offset;
-    static int j = 0;
-    static int max_size = opd_buffer.MaxSize;
-
-    if (opd_buffer.Data.size() == max_size) {
-      for (int i = 0; i < fft_size; i++) {
-        in[i][0] = opd_buffer.Data[(offset - fft_size + i + max_size) % max_size].y;
-        in[i][1] = 0.0f;
-      }
-    }
-
-    // execute fft
-    fftw_execute(fft_plan);
-
-    // calculate power spectrum (only the real half)
-    double fft_power[fft_size / 2];
-    for (int i = 0; i < fft_size / 2; i++) {
-      fft_power[i] = out[i][0] * out[i][0] + out[i][1] * out[i][1];
-    }
-
-    // set first element to 0 (DC)
-    fft_power[0] = 0.0f;
-
-    // find the frequency axis, assuming a sampling rate of 6.4 kHz
-    double fft_freq[fft_size / 2];
-    for (int i = 0; i < fft_size / 2; i++) {
-      fft_freq[i] = i * 6400. / fft_size;
-    }
-
     
+
+
+    // set up fft
+    const static int fft_size = 1024;
+    static double fft_power[fft_size / 2];
+    static double fft_freq[fft_size / 2];
+    static FFT_calculator fft(fft_size, 6400., &opd_buffer, fft_power, fft_freq);
+
+    // calculate fft
+    fft.calculate();
+
+
+    // plot fft_power vs fft_freq, with log scale on x and y axis
     static float  fft_thickness = 3;
-
-      
-
-    // x axis: no flags
     static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
     static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None; //ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-    // plot fft_power vs fft_freq, with log scale on x and y axis
     if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 300 * io.FontGlobalScale))) {
       ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
       ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-      // yflags
       ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, 10, 3200);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 1e8);
-      // ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       ImPlot::SetNextLineStyle(fft_color, fft_thickness);
       ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size/2);
       ImPlot::EndPlot();
