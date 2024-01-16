@@ -27,6 +27,9 @@
 // MCL piezo stage
 #include "../lib/madlib/madlib.h"
 
+// IIR filter from https://github.com/berndporr/iir1
+#include "Iir.h"
+
 // Fast Fourier Transform
 #include <fftw3.h>
 
@@ -122,6 +125,12 @@ struct ScrollingBuffer {
     }
   }
 };
+
+// iir filters
+Iir::Butterworth::LowPass<4> x1d_lp_filter, x2d_lp_filter;
+const float x1d_samplingrate = 6400.;
+const float x1d_cutoff = 50.;
+
 
 namespace MyApp {
 
@@ -237,6 +246,10 @@ void run_calculation() {
   int buffer_size = 1024;
   char buffer[buffer_size];
 
+  // initialise filter
+  x1d_lp_filter.setup(x1d_samplingrate, x1d_cutoff);
+  x2d_lp_filter.setup(x1d_samplingrate, x1d_cutoff);
+
   // outputFile << "Time (s), Counter, OPD measurement (m)\n";
 
   while (true) {
@@ -305,7 +318,12 @@ void run_calculation() {
     }
     float avg = sum / 10.;
 
+    // get and filter x1d
+    float x1d = adc1[0] / adc4[0] * 1.11e3;
+    x1d = x1d_lp_filter.filter(x1d);
 
+    float x2d = adc2[0] / adc5[0] * 1.11e3;
+    x2d = x2d_lp_filter.filter(x2d);
 
     // enqueue measurement and time
     opdQueue.push({t, avg});
@@ -313,8 +331,8 @@ void run_calculation() {
     x2Queue.push({t, adc2[0]});
     i1Queue.push({t, adc4[0]});
     i2Queue.push({t, adc5[0]});
-    x1dQueue.push({t, static_cast<float>(adc1[0] / adc4[0] * 1.11e3)});
-    x2dQueue.push({t, static_cast<float>(adc2[0] / adc5[0] * 1.11e3)});
+    x1dQueue.push({t, x1d});
+    x2dQueue.push({t, x2d});
 
     // variables for control
     static float opd_error = 0.0f;
@@ -750,28 +768,29 @@ void RenderUI() {
     static ImVec4 i2_color     = ImVec4(0,0,1,1);
     static float  x1_thickness = 1;
 
-    if (ImPlot::BeginPlot("##X1_Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
-      ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
-      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      ImPlot::SetNextLineStyle(x1_color, x1_thickness);
-      ImPlot::PlotLine("x1", &x1_buffer.Data[0].x, &x1_buffer.Data[0].y, x1_buffer.Data.size(), 0,
-                       x1_buffer.Offset, 2 * sizeof(float));
-      ImPlot::SetNextLineStyle(x2_color, x1_thickness);
-      ImPlot::PlotLine("x2", &x2_buffer.Data[0].x, &x2_buffer.Data[0].y, x2_buffer.Data.size(), 0,
-                       x2_buffer.Offset, 2 * sizeof(float));
-      ImPlot::SetNextLineStyle(i1_color, x1_thickness);
-      ImPlot::PlotLine("i1", &i1_buffer.Data[0].x, &i1_buffer.Data[0].y, i1_buffer.Data.size(), 0,
-                       i1_buffer.Offset, 2 * sizeof(float));
-      ImPlot::SetNextLineStyle(i2_color, x1_thickness);
-      ImPlot::PlotLine("i2", &i2_buffer.Data[0].x, &i2_buffer.Data[0].y, i2_buffer.Data.size(), 0,
-                       i2_buffer.Offset, 2 * sizeof(float));
-      ImPlot::EndPlot();
-    }
+    // To debug x1, x2, i1, i2
+    // if (ImPlot::BeginPlot("##X1_Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
+    //   ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
+    //   ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
+    //   ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+    //   ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+    //   ImPlot::SetNextLineStyle(x1_color, x1_thickness);
+    //   ImPlot::PlotLine("x1", &x1_buffer.Data[0].x, &x1_buffer.Data[0].y, x1_buffer.Data.size(), 0,
+    //                    x1_buffer.Offset, 2 * sizeof(float));
+    //   ImPlot::SetNextLineStyle(x2_color, x1_thickness);
+    //   ImPlot::PlotLine("x2", &x2_buffer.Data[0].x, &x2_buffer.Data[0].y, x2_buffer.Data.size(), 0,
+    //                    x2_buffer.Offset, 2 * sizeof(float));
+    //   ImPlot::SetNextLineStyle(i1_color, x1_thickness);
+    //   ImPlot::PlotLine("i1", &i1_buffer.Data[0].x, &i1_buffer.Data[0].y, i1_buffer.Data.size(), 0,
+    //                    i1_buffer.Offset, 2 * sizeof(float));
+    //   ImPlot::SetNextLineStyle(i2_color, x1_thickness);
+    //   ImPlot::PlotLine("i2", &i2_buffer.Data[0].x, &i2_buffer.Data[0].y, i2_buffer.Data.size(), 0,
+    //                    i2_buffer.Offset, 2 * sizeof(float));
+    //   ImPlot::EndPlot();
+    // }
+
 
     // plot x1d, x2d
-
     if (ImPlot::BeginPlot("##X1D", ImVec2(-1, 200 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
@@ -785,6 +804,126 @@ void RenderUI() {
                        x2d_buffer.Offset, 2 * sizeof(float));
       ImPlot::EndPlot();
     }
+
+    // calculate std and rms of x1d over last 1000 points
+    static float x1d_std = 0.0f;
+    static float x1d_rms = 0.0f;
+    static float x2d_std = 0.0f;
+    static float x2d_rms = 0.0f;
+
+    if (x1d_buffer.Data.size() > 0) {
+      // calculate mean
+      float sum = 0.0f;
+      for (auto &p : x1d_buffer.Data) {
+        sum += p.y;
+      }
+      float mean = sum / x1d_buffer.Data.size();
+
+      // calculate std
+      float sum_sq = 0.0f;
+      for (auto &p : x1d_buffer.Data) {
+        sum_sq += (p.y - mean) * (p.y - mean);
+      }
+      x1d_std = sqrt(sum_sq / x1d_buffer.Data.size());
+
+      // calculate rms
+      sum_sq = 0.0f;
+      for (auto &p : x1d_buffer.Data) {
+        sum_sq += p.y * p.y;
+      }
+      x1d_rms = sqrt(sum_sq / x1d_buffer.Data.size());
+    }
+
+  // print it
+  ImGui::Text("x1d std: %.4f", x1d_std);
+  ImGui::Text("x1d rms: %.4f", x1d_rms);
+
+  // FFT of x1d
+  const static int fft_size = 1024*8*8;
+  static fftw_complex *in, *out;
+  static fftw_plan fft_plan;
+  static bool fft_initialised = false;
+
+  // initialise fftw
+  if (!fft_initialised) {
+    
+    in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * fft_size);
+    out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * fft_size);
+    fft_plan = fftw_plan_dft_1d(fft_size, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+    fft_initialised = true;
+  }
+
+  // if there are at least fft_size points in the opd_buffer, copy the fft_size latest points to in
+  // Note: the most recent point is at opd_buffer.Data[opd_buffer.Offset].
+  // While looping over the buffer, if you reach opd_buffer[0], you need to continue at opd_buffer.Data[opd_buffer.MaxSize-1]
+  int offset = x1d_buffer.Offset;
+  static int j = 0;
+  static int max_size = x1d_buffer.MaxSize;
+  
+  if (x1d_buffer.Data.size() == max_size) {
+    for (int i = 0; i < fft_size; i++) {
+      in[i][0] = x1d_buffer.Data[(offset - fft_size + i + max_size) % max_size].y;
+      in[i][1] = 0.0f;
+    }
+
+    // execute fft
+    fftw_execute(fft_plan);
+
+    // calculate power spectrum (only the real half)
+    double fft_power[fft_size / 2];
+    for (int i = 0; i < fft_size / 2; i++) {
+      fft_power[i] = out[i][0] * out[i][0] + out[i][1] * out[i][1];
+    }
+
+    // set first element to 0 (DC)
+    fft_power[0] = 0.0f;
+    static ImVec4 fft_color     = ImVec4(1,1,0,1);
+
+    // average the last 60 ffts, to reduce noise
+    static int n_avg = 60;
+    static double fft_power_avg[fft_size / 2];
+    
+    if (j < n_avg) {
+      for (int i = 0; i < fft_size / 2; i++) {
+        fft_power_avg[i] += fft_power[i] / n_avg;
+      }
+      j++;
+    } else {
+      j = 0;
+    }
+
+  
+
+
+    // find the frequency axis, assuming a sampling rate of 6.4 kHz
+    double fft_freq[fft_size / 2];
+    for (int i = 0; i < fft_size / 2; i++) {
+      fft_freq[i] = i * 6400. / fft_size;
+    }
+
+
+    static float  fft_thickness = 3;
+
+    // x axis: no flags
+    static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
+    static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None; //ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+    // plot fft_power vs fft_freq, with log scale on x and y axis
+    if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 300 * io.FontGlobalScale))) {
+      ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+      // ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+      // yflags
+      ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, 10, 3200);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 1e8);
+      // ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(fft_color, fft_thickness);
+      ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power_avg[0], fft_size/2);
+      ImPlot::EndPlot();
+    }
+
+
+  }
+
   }  
 
 

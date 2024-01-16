@@ -20,6 +20,11 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
      ```
    * Install the piezo controller drivers from [MCL](http://www.madcitylabs.com/) (ask their support for the files)
    * Install the piezo controller drivers from Physikinstrumente. (Download from their website or copy from installation medium)
+   * Install [iir1](https://github.com/berndporr/iir1)|
+   ```bash
+   sudo add-apt-repository ppa:berndporr/dsp
+   sudo apt install iir1-dev
+   ```
 2. Clone the `NICEcontrol` repository and its submodules
    ```bash
    git clone --recurse-submodules https://github.com/thomabir/NICEcontrol
