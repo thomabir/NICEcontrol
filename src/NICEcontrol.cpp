@@ -157,7 +157,6 @@ class FFT_calculator {
     // While looping over the buffer, if you reach measurement_buffer[0], you need to continue at
     // measurement_buffer.Data[measurement_buffer.MaxSize-1]
     int offset = measurement_buffer->Offset;
-    static int j = 0;
     static int max_size = measurement_buffer->MaxSize;
 
     if (measurement_buffer->Data.size() == max_size) {
@@ -327,7 +326,6 @@ void run_calculation() {
   }
 
   int count = 0;
-  int prev = 0;
   int buffer_size = 1024;
   char buffer[buffer_size];
 
@@ -371,11 +369,10 @@ void run_calculation() {
     static float adc3[10];
     static float adc4[10];
     static float adc5[10];
-    int counter[10];
+    // int counter[10];
 
     for (int i = 0; i < 10; i++) {
-      // get counter
-      counter[i] = receivedDataInt[6 * i];
+      // counter[i] = receivedDataInt[6 * i];
       adc1[i] = receivedDataInt[6 * i + 1];          // x1
       adc2[i] = receivedDataInt[6 * i + 2];          // x2
       adc3[i] = receivedDataInt[6 * i + 3] / 1000.;  // opd
@@ -798,13 +795,15 @@ void RenderUI() {
     // y axis: auto fit
     static ImPlotAxisFlags x1_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
+    
+    static float x1_thickness = 1;
     static ImVec4 x1_color = ImVec4(1, 1, 0, 1);
     static ImVec4 x2_color = ImVec4(1, 0, 0, 1);
-    static ImVec4 i1_color = ImVec4(0, 1, 0, 1);
-    static ImVec4 i2_color = ImVec4(0, 0, 1, 1);
-    static float x1_thickness = 1;
 
     // To debug x1, x2, i1, i2
+    
+    // static ImVec4 i1_color = ImVec4(0, 1, 0, 1);
+    // static ImVec4 i2_color = ImVec4(0, 0, 1, 1);
     // if (ImPlot::BeginPlot("##X1_Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
     //   ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
     //   ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
@@ -843,8 +842,8 @@ void RenderUI() {
     // calculate std and rms of x1d over last 1000 points
     static float x1d_std = 0.0f;
     static float x1d_rms = 0.0f;
-    static float x2d_std = 0.0f;
-    static float x2d_rms = 0.0f;
+    // static float x2d_std = 0.0f;
+    // static float x2d_rms = 0.0f;
 
     if (x1d_buffer.Data.size() > 0) {
       // calculate mean
