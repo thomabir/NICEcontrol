@@ -127,12 +127,15 @@ struct ScrollingBuffer {
 };
 
 // iir filters
-Iir::Butterworth::LowPass<4> x1d_lp_filter, x2d_lp_filter;
+Iir::Butterworth::LowPass<4> x1d_lp_filter, x2d_lp_filter, opd_lp_filter, opd_control_lp_filter;
 const float x1d_samplingrate = 6400.;
 const float x1d_cutoff = 50.;
+const float opd_samplingrate = 64000.;
+const float opd_cutoff = 1000.;
+const float opd_control_cutoff = 50.;
 
 
-namespace MyApp {
+namespace NICEcontrol {
 
 // OPD control
 float opd_setpoint_gui = 0.001f;  // setpoint entered in GUI, may be out of range
@@ -149,19 +152,50 @@ std::mutex MeasurementMutex;
 std::condition_variable MeasurementCV;
 std::ofstream outputFile;
 
-// OPD actuator
-int initialise_opd_stage(){
-  // print startup
-  std::cout << "Initialising OPD stage" << std::endl;
-  int handle = MCL_InitHandle();
-  std::cout << "Handle: " << handle << std::endl;
-  // move to a safe central position
-  MCL_SingleWriteN(20., 3, handle);
-  std::cout << "OPD stage initialised" << std::endl;
-  return handle;
-}
-int handle = initialise_opd_stage();
-std::atomic<float> piezo_setpoint = 0.0f;
+
+
+// a class for the opd stage to make it easier to use
+class MCL_OPDStage {
+ public:
+  MCL_OPDStage() {
+    // print startup
+    std::cout << "Initialising OPD stage" << std::endl;
+    handle = MCL_InitHandle();
+
+    // if handle is 0: stage is not connected.
+    if (handle == 0) {
+      std::cout << "OPD stage not connected" << std::endl;
+      return;
+    }
+
+    std::cout << "Handle: " << handle << std::endl;
+    // move to a safe central position
+    MCL_SingleWriteN(20., 3, handle);
+    std::cout << "OPD stage initialised" << std::endl;
+  }
+
+  ~MCL_OPDStage() {
+    // move to a safe central position
+    MCL_SingleWriteN(20., 3, handle);
+    std::cout << "OPD stage closed" << std::endl;
+  }
+
+  void move_to(float setpoint) {
+    // move to setpoint in µm + 20 µm, to give some headroom in both directions
+    MCL_SingleWriteN(setpoint + 20., 3, handle);
+  }
+
+  double read() {
+    return MCL_SingleReadN(3, handle);
+  }
+
+ private:
+  int handle;
+};
+
+// initialise opd stage
+MCL_OPDStage opd_stage;
+
 
 TSQueue<Measurement> opdQueue;
 TSQueue<Measurement> x1Queue;
@@ -205,14 +239,9 @@ TSQueue<Measurement> x2dQueue;
 
 
 
-void opd_move_to(float setpoint) {
-  // move to setpoint in µm + 20 µm, to give some headroom in both directions
-  MCL_SingleWriteN(setpoint + 20., 3, handle);
-}
 
-double opd_read() {
-  return MCL_SingleReadN(3, handle);
-}
+
+
 
 void run_calculation() {
   // setup ethernet connection
@@ -249,6 +278,7 @@ void run_calculation() {
   // initialise filter
   x1d_lp_filter.setup(x1d_samplingrate, x1d_cutoff);
   x2d_lp_filter.setup(x1d_samplingrate, x1d_cutoff);
+  opd_lp_filter.setup(opd_samplingrate, opd_cutoff);
 
   // outputFile << "Time (s), Counter, OPD measurement (m)\n";
 
@@ -311,12 +341,22 @@ void run_calculation() {
     }
 
 
-    // Calculate average of received opd data
-    float sum = 0;
+    // filter opd by piping the 10 new measurements through the filter
+    float opd;
     for (int i = 0; i < 10; i++) {
-      sum += adc3[i];
+      opd = opd_lp_filter.filter(adc3[i]);
     }
-    float avg = sum / 10.;
+
+    float opd_control_measurement;
+    for (int i = 0; i < 10; i++) {
+      opd_control_measurement = opd_control_lp_filter.filter(adc3[i]);
+    }
+
+
+
+
+
+  
 
     // get and filter x1d
     float x1d = adc1[0] / adc4[0] * 1.11e3;
@@ -326,7 +366,7 @@ void run_calculation() {
     x2d = x2d_lp_filter.filter(x2d);
 
     // enqueue measurement and time
-    opdQueue.push({t, avg});
+    opdQueue.push({t, opd});
     x1Queue.push({t, adc1[0]});
     x2Queue.push({t, adc2[0]});
     i1Queue.push({t, adc4[0]});
@@ -342,7 +382,7 @@ void run_calculation() {
     // if RunOpdControl is true, calculate the control signal
     if (RunOpdControl.load()) {
       // calculate error
-      opd_error = opd_setpoint.load() - avg;
+      opd_error = opd_setpoint.load() - opd_control_measurement;
 
       // calculate integral
       opd_error_integral += i.load() * opd_error;
@@ -353,8 +393,9 @@ void run_calculation() {
       // calculate control signal
       opd_control_signal = p.load() * opd_error +  opd_error_integral;
 
-      // actuate piezo (takes input in µm)
-      opd_move_to(opd_control_signal/1000.);
+      // actuate piezo using class interface (takes input in µm)
+      opd_stage.move_to(opd_control_signal * 1e-3);
+
     }
 
 
@@ -529,7 +570,7 @@ void RenderUI() {
     // plot for current piezo position
     static ImVec4 color     = ImVec4(1,1,0,1);
     static ScrollingBuffer piezo_buffer;
-    piezo_buffer.AddPoint(t_gui, opd_read());
+    piezo_buffer.AddPoint(t_gui, opd_stage.read());
 
     if (ImPlot::BeginPlot("##Piezo", ImVec2(-1, 150 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
@@ -593,11 +634,11 @@ void RenderUI() {
       ImGui::Text("Control loop parameters:");
 
       // sliders for p , i
-      static float p_gui = 0.5f;
-      static float i_gui = 0.01f;
+      static float p_gui = 0.125f;
+      static float i_gui = 0.007f;
       
       ImGui::SliderFloat("P", &p_gui, 0.0f, 1.0f);
-      ImGui::SliderFloat("I", &i_gui, 0.0f, 5e-2f);
+      ImGui::SliderFloat("I", &i_gui, 0.0f, 3e-2f);
 
       // store p, i
       p.store(p_gui);
@@ -940,7 +981,7 @@ void RenderUI() {
   // ImPlot::ShowDemoWindow();
 }
 
-}  // namespace MyApp
+}  // namespace NICEcontrol
 
 // Main code
 int main(int, char **) {
@@ -1052,7 +1093,7 @@ int main(int, char **) {
   // bool show_another_window = false;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-  std::thread computeThread(MyApp::run_calculation);
+  std::thread computeThread(NICEcontrol::run_calculation);
 
   // Render loop
   while (!glfwWindowShouldClose(window)) {
@@ -1074,7 +1115,7 @@ int main(int, char **) {
 
     // My code
     ImGui::PushFont(font1);
-    MyApp::RenderUI();
+    NICEcontrol::RenderUI();
     ImGui::PopFont();
 
     // Rendering
@@ -1113,8 +1154,8 @@ int main(int, char **) {
 
   // Stop the compute thread
   {
-    std::lock_guard<std::mutex> lock(MyApp::MeasurementMutex);
-    MyApp::RunMeasurement.store(false);
+    std::lock_guard<std::mutex> lock(NICEcontrol::MeasurementMutex);
+    NICEcontrol::RunMeasurement.store(false);
   }
   computeThread.join();
 
