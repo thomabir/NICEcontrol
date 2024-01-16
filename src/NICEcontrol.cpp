@@ -186,7 +186,7 @@ class MCL_OPDStage {
   }
 
   double read() {
-    return MCL_SingleReadN(3, handle);
+    return MCL_SingleReadN(3, handle) - 20.;
   }
 
  private:
@@ -195,6 +195,7 @@ class MCL_OPDStage {
 
 // initialise opd stage
 MCL_OPDStage opd_stage;
+static float opd_open_loop_setpoint = 0.0f;
 
 
 TSQueue<Measurement> opdQueue;
@@ -444,6 +445,27 @@ void RenderUI() {
     ImGui::SameLine();
     ImGui::RadioButton("Closed loop", &loop_select, 2);
 
+    
+    // if (control_opd) {
+    //     RunOpdControl.store(true);
+    //   } else {
+    //     RunOpdControl.store(false);
+    //   }
+
+    // run control if "Closed loop" is selected
+    if (loop_select == 2) {
+      RunOpdControl.store(true);
+    } else {
+      RunOpdControl.store(false);
+    }
+
+    // move stage to open loop setpoint if "Open loop" is selected
+    if (loop_select == 1) {
+      opd_stage.move_to(opd_open_loop_setpoint);
+    }
+
+
+
     // real time plot
     static ScrollingBuffer opd_buffer, setpoint_buffer;
     
@@ -624,8 +646,7 @@ void RenderUI() {
       ImGui::Text("Current measurement: %.4f", piezo_measurement);
 
       // open loop setpoint µm
-      static float piezo_setpoint = 0.0f;
-      ImGui::SliderFloat("Setpoint", &piezo_setpoint, 0.0f, 50.0f);
+      ImGui::SliderFloat("Setpoint", &opd_open_loop_setpoint, -20.f, 30.0f);
 
       ImGui::TreePop();
     }
@@ -645,19 +666,7 @@ void RenderUI() {
       i.store(i_gui);
 
       const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
-
-      // if (ImGui::Button("Start Calculation")) startMeasurement();
-      // if (ImGui::Button("Stop Calculation")) stopMeasurement();
       
-
-      static bool control_opd = false;
-      ImGui::Checkbox("Run control", &control_opd);
-      if (control_opd) {
-        RunOpdControl.store(true);
-      } else {
-        RunOpdControl.store(false);
-      }
-
       // opd input: drag
       ImGui::SliderFloat("(Drag or double-click to adjust)", &opd_setpoint_gui, opd_setpoint_min,
                        opd_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
