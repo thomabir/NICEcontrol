@@ -907,77 +907,26 @@ void RenderUI() {
   ImGui::Text("x1d std: %.4f", x1d_std);
   ImGui::Text("x1d rms: %.4f", x1d_rms);
 
-  // FFT of x1d
+  
+
+  // set up fft of x1d
   const static int fft_size = 1024*8*8;
-  static fftw_complex *in, *out;
-  static fftw_plan fft_plan;
-  static bool fft_initialised = false;
+  static double fft_power[fft_size / 2];
+  static double fft_freq[fft_size / 2];
+  static FFT_calculator fft(fft_size, 6400., &x1d_buffer, fft_power, fft_freq);
 
-  // initialise fftw
-  if (!fft_initialised) {
-    
-    in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * fft_size);
-    out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * fft_size);
-    fft_plan = fftw_plan_dft_1d(fft_size, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
-    fft_initialised = true;
-  }
-
-  // if there are at least fft_size points in the opd_buffer, copy the fft_size latest points to in
-  // Note: the most recent point is at opd_buffer.Data[opd_buffer.Offset].
-  // While looping over the buffer, if you reach opd_buffer[0], you need to continue at opd_buffer.Data[opd_buffer.MaxSize-1]
-  int offset = x1d_buffer.Offset;
-  static int j = 0;
-  static int max_size = x1d_buffer.MaxSize;
-  
-  if (x1d_buffer.Data.size() == max_size) {
-    for (int i = 0; i < fft_size; i++) {
-      in[i][0] = x1d_buffer.Data[(offset - fft_size + i + max_size) % max_size].y;
-      in[i][1] = 0.0f;
-    }
-
-    // execute fft
-    fftw_execute(fft_plan);
-
-    // calculate power spectrum (only the real half)
-    double fft_power[fft_size / 2];
-    for (int i = 0; i < fft_size / 2; i++) {
-      fft_power[i] = out[i][0] * out[i][0] + out[i][1] * out[i][1];
-    }
-
-    // set first element to 0 (DC)
-    fft_power[0] = 0.0f;
-    static ImVec4 fft_color     = ImVec4(1,1,0,1);
-
-    // average the last 60 ffts, to reduce noise
-    static int n_avg = 60;
-    static double fft_power_avg[fft_size / 2];
-    
-    if (j < n_avg) {
-      for (int i = 0; i < fft_size / 2; i++) {
-        fft_power_avg[i] += fft_power[i] / n_avg;
-      }
-      j++;
-    } else {
-      j = 0;
-    }
-
-  
-
-
-    // find the frequency axis, assuming a sampling rate of 6.4 kHz
-    double fft_freq[fft_size / 2];
-    for (int i = 0; i < fft_size / 2; i++) {
-      fft_freq[i] = i * 6400. / fft_size;
-    }
+  // calculate fft
+  fft.calculate();
 
 
     static float  fft_thickness = 3;
+    ImVec4 fft_color = ImVec4(1,1,0,1);
 
     // x axis: no flags
     static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
     static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None; //ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
     // plot fft_power vs fft_freq, with log scale on x and y axis
-    if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 300 * io.FontGlobalScale))) {
+    if (ImPlot::BeginPlot("##FFT_x1d", ImVec2(-1, 300 * io.FontGlobalScale))) {
       ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
       // ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
       // yflags
@@ -986,14 +935,13 @@ void RenderUI() {
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 1e8);
       // ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       ImPlot::SetNextLineStyle(fft_color, fft_thickness);
-      ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power_avg[0], fft_size/2);
+      ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size/2);
       ImPlot::EndPlot();
     }
 
 
   }
 
-  }  
 
 
   if (ImGui::CollapsingHeader("Program settings")) {
