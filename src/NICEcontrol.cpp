@@ -291,7 +291,8 @@ TSQueue<Measurement> x2dQueue;
 //   }
 // }
 
-void run_calculation() {
+
+int setup_ethernet() {
   // setup ethernet connection
   // Create a UDP socket
   int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -311,6 +312,13 @@ void run_calculation() {
   if (bind(sockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
     std::cerr << "Failed to bind socket." << std::endl;
   }
+
+  return sockfd;
+}
+
+void run_calculation() {
+
+  int sockfd = setup_ethernet();
 
   // Open the output file
   std::ofstream outputFile("adc-data.csv");
