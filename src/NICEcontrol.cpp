@@ -578,7 +578,7 @@ void RenderUI() {
     }
 
     
-
+     if (ImGui::TreeNode("OPD FFT")) {
 
     // set up fft
     const static int fft_size = 1024;
@@ -605,24 +605,10 @@ void RenderUI() {
       ImPlot::EndPlot();
     }
 
+    ImGui::TreePop();
+     }
 
-
-
-    // plot for current piezo position
-    static ImVec4 color     = ImVec4(1,1,0,1);
-    static ScrollingBuffer piezo_buffer;
-    piezo_buffer.AddPoint(t_gui, opd_stage.read());
-
-    if (ImPlot::BeginPlot("##Piezo", ImVec2(-1, 150 * io.FontGlobalScale))) {
-      ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
-      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      ImPlot::SetNextLineStyle(color, thickness);
-      ImPlot::PlotLine("Piezo position", &piezo_buffer.Data[0].x, &piezo_buffer.Data[0].y, piezo_buffer.Data.size(), 0,
-                       piezo_buffer.Offset, 2 * sizeof(float));
-      ImPlot::EndPlot();
-    }
+    
 
     if (ImGui::TreeNode("OPD metrology")) {
       // Display measurement
@@ -659,6 +645,23 @@ void RenderUI() {
     }
 
     if (ImGui::TreeNode("Piezo stage")) {
+
+      // plot for current piezo position
+    static ImVec4 color     = ImVec4(1,1,0,1);
+    static ScrollingBuffer piezo_buffer;
+    piezo_buffer.AddPoint(t_gui, opd_stage.read());
+
+    if (ImPlot::BeginPlot("##Piezo", ImVec2(-1, 150 * io.FontGlobalScale))) {
+      ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(color, thickness);
+      ImPlot::PlotLine("Piezo position", &piezo_buffer.Data[0].x, &piezo_buffer.Data[0].y, piezo_buffer.Data.size(), 0,
+                       piezo_buffer.Offset, 2 * sizeof(float));
+      ImPlot::EndPlot();
+    }
+
       float piezo_measurement = 0.0f;
 
       // Display measurement
@@ -908,39 +911,45 @@ void RenderUI() {
   ImGui::Text("x1d rms: %.4f", x1d_rms);
 
   
+  // FFT
+  if (ImGui::TreeNode("X1D FFT")) {
 
-  // set up fft of x1d
-  const static int fft_size = 1024*8*8;
-  static double fft_power[fft_size / 2];
-  static double fft_freq[fft_size / 2];
-  static FFT_calculator fft(fft_size, 6400., &x1d_buffer, fft_power, fft_freq);
+    // set up fft of x1d
+    const static int fft_size = 1024*8*8;
+    static double fft_power[fft_size / 2];
+    static double fft_freq[fft_size / 2];
+    static FFT_calculator fft(fft_size, 6400., &x1d_buffer, fft_power, fft_freq);
 
-  // calculate fft
-  fft.calculate();
-
-
-    static float  fft_thickness = 3;
-    ImVec4 fft_color = ImVec4(1,1,0,1);
-
-    // x axis: no flags
-    static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
-    static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None; //ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-    // plot fft_power vs fft_freq, with log scale on x and y axis
-    if (ImPlot::BeginPlot("##FFT_x1d", ImVec2(-1, 300 * io.FontGlobalScale))) {
-      ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-      // ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-      // yflags
-      ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, 10, 3200);
-      ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 1e8);
-      // ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      ImPlot::SetNextLineStyle(fft_color, fft_thickness);
-      ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size/2);
-      ImPlot::EndPlot();
-    }
+    // calculate fft
+    fft.calculate();
 
 
+      static float  fft_thickness = 3;
+      ImVec4 fft_color = ImVec4(1,1,0,1);
+
+      // x axis: no flags
+      static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
+      static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None; //ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+      // plot fft_power vs fft_freq, with log scale on x and y axis
+      if (ImPlot::BeginPlot("##FFT_x1d", ImVec2(-1, 300 * io.FontGlobalScale))) {
+        ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+        // ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+        // yflags
+        ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, 10, 3200);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 1e8);
+        // ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+        ImPlot::SetNextLineStyle(fft_color, fft_thickness);
+        ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size/2);
+        ImPlot::EndPlot();
+      }
+  ImGui::TreePop();
   }
+
+  
+
+
+    }
 
 
 
