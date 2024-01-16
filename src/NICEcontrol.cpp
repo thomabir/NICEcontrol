@@ -168,15 +168,15 @@ class MCL_OPDStage {
       return;
     }
 
-    std::cout << "Handle: " << handle << std::endl;
-    // move to a safe central position
-    MCL_SingleWriteN(20., 3, handle);
+    // move to zero position
+    this->move_to(0.0f);
+
     std::cout << "OPD stage initialised" << std::endl;
   }
 
   ~MCL_OPDStage() {
-    // move to a safe central position
-    MCL_SingleWriteN(20., 3, handle);
+    // move to zero position
+    this->move_to(0.0f);
     std::cout << "OPD stage closed" << std::endl;
   }
 
