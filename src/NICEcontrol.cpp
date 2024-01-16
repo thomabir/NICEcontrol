@@ -60,8 +60,6 @@ struct Measurement {
   float value;
 };
 
-
-
 // thread-safe queue
 template <typename T>
 class TSQueue {
@@ -129,62 +127,63 @@ struct ScrollingBuffer {
 };
 
 class FFT_calculator {
-    public:
-      int size;
-      float sampling_rate;
-      ScrollingBuffer *measurement_buffer;
-      double *output_power;
-      double *output_freq;
-      fftw_complex *in, *out;
-      fftw_plan fft_plan;
+ public:
+  int size;
+  float sampling_rate;
+  ScrollingBuffer *measurement_buffer;
+  double *output_power;
+  double *output_freq;
+  fftw_complex *in, *out;
+  fftw_plan fft_plan;
 
+  FFT_calculator(int size, float sampling_rate, ScrollingBuffer *measurement_buffer, double *output_power,
+                 double *output_freq) {
+    // initialise fftw
+    in = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * size);
+    out = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * size);
+    fft_plan = fftw_plan_dft_1d(size, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
 
-      FFT_calculator(int size, float sampling_rate, ScrollingBuffer *measurement_buffer, double *output_power, double *output_freq) {
-        // initialise fftw
-        in = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * size);
-        out = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * size);
-        fft_plan = fftw_plan_dft_1d(size, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+    // initialise variables
+    this->size = size;
+    this->sampling_rate = sampling_rate;
+    this->measurement_buffer = measurement_buffer;
+    this->output_power = output_power;
+    this->output_freq = output_freq;
+  }
 
-        // initialise variables
-        this->size = size;
-        this->sampling_rate = sampling_rate;
-        this->measurement_buffer = measurement_buffer;
-        this->output_power = output_power;
-        this->output_freq = output_freq;
+  void calculate() {
+    // if there are at least size points in the measurement_buffer, copy the size latest points to in
+    // Note: the most recent point is at measurement_buffer.Data[measurement_buffer.Offset].
+    // While looping over the buffer, if you reach measurement_buffer[0], you need to continue at
+    // measurement_buffer.Data[measurement_buffer.MaxSize-1]
+    int offset = measurement_buffer->Offset;
+    static int j = 0;
+    static int max_size = measurement_buffer->MaxSize;
+
+    if (measurement_buffer->Data.size() == max_size) {
+      for (int i = 0; i < size; i++) {
+        in[i][0] = measurement_buffer->Data[(offset - size + i + max_size) % max_size].y;
+        in[i][1] = 0.0f;
       }
+    }
 
-      void calculate() {
-        // if there are at least size points in the measurement_buffer, copy the size latest points to in
-        // Note: the most recent point is at measurement_buffer.Data[measurement_buffer.Offset].
-        // While looping over the buffer, if you reach measurement_buffer[0], you need to continue at measurement_buffer.Data[measurement_buffer.MaxSize-1]
-        int offset = measurement_buffer->Offset;
-        static int j = 0;
-        static int max_size = measurement_buffer->MaxSize;
+    // execute fft
+    fftw_execute(fft_plan);
 
-        if (measurement_buffer->Data.size() == max_size) {
-          for (int i = 0; i < size; i++) {
-            in[i][0] = measurement_buffer->Data[(offset - size + i + max_size) % max_size].y;
-            in[i][1] = 0.0f;
-          }
-        }
+    // calculate power spectrum (only the real half)
+    for (int i = 0; i < size / 2; i++) {
+      output_power[i] = out[i][0] * out[i][0] + out[i][1] * out[i][1];
+    }
 
-        // execute fft
-        fftw_execute(fft_plan);
+    // set first element to 0 (DC)
+    output_power[0] = 0.0f;
 
-        // calculate power spectrum (only the real half)
-        for (int i = 0; i < size / 2; i++) {
-          output_power[i] = out[i][0] * out[i][0] + out[i][1] * out[i][1];
-        }
-
-        // set first element to 0 (DC)
-        output_power[0] = 0.0f;
-
-        // find the frequency axis, assuming a sampling rate of 6.4 kHz
-        for (int i = 0; i < size / 2; i++) {
-          output_freq[i] = i * sampling_rate / size;
-        }
-      }
-    };
+    // find the frequency axis, assuming a sampling rate of 6.4 kHz
+    for (int i = 0; i < size / 2; i++) {
+      output_freq[i] = i * sampling_rate / size;
+    }
+  }
+};
 
 // iir filters
 Iir::Butterworth::LowPass<4> x1d_lp_filter, x2d_lp_filter, opd_lp_filter, opd_control_lp_filter;
@@ -194,12 +193,11 @@ const float opd_samplingrate = 64000.;
 const float opd_cutoff = 1000.;
 const float opd_control_cutoff = 50.;
 
-
 namespace NICEcontrol {
 
 // OPD control
-float opd_setpoint_gui = 0.001f;  // setpoint entered in GUI, may be out of range
-std::atomic<float> opd_setpoint = 0.001f;      // setpoint used in calculation, clipped to valid range
+float opd_setpoint_gui = 0.001f;           // setpoint entered in GUI, may be out of range
+std::atomic<float> opd_setpoint = 0.001f;  // setpoint used in calculation, clipped to valid range
 std::atomic<bool> RunOpdControl(false);
 std::mutex OpdControlMutex;
 std::condition_variable OpdControlCV;
@@ -211,8 +209,6 @@ std::atomic<bool> RunMeasurement(false);
 std::mutex MeasurementMutex;
 std::condition_variable MeasurementCV;
 std::ofstream outputFile;
-
-
 
 // a class for the opd stage to make it easier to use
 class MCL_OPDStage {
@@ -245,9 +241,7 @@ class MCL_OPDStage {
     MCL_SingleWriteN(setpoint + 20., 3, handle);
   }
 
-  double read() {
-    return MCL_SingleReadN(3, handle) - 20.;
-  }
+  double read() { return MCL_SingleReadN(3, handle) - 20.; }
 
  private:
   int handle;
@@ -256,7 +250,6 @@ class MCL_OPDStage {
 // initialise opd stage
 MCL_OPDStage opd_stage;
 static float opd_open_loop_setpoint = 0.0f;
-
 
 TSQueue<Measurement> opdQueue;
 TSQueue<Measurement> x1Queue;
@@ -297,12 +290,6 @@ TSQueue<Measurement> x2dQueue;
 //     std::this_thread::sleep_for(std::chrono::microseconds(100));
 //   }
 // }
-
-
-
-
-
-
 
 void run_calculation() {
   // setup ethernet connection
@@ -345,8 +332,7 @@ void run_calculation() {
 
   while (true) {
     {
-      std::unique_lock<std::mutex> lock(
-          MeasurementMutex);  // the only purpose of that lock is to run/stop measurement?
+      std::unique_lock<std::mutex> lock(MeasurementMutex);  // the only purpose of that lock is to run/stop measurement?
       MeasurementCV.wait(lock, [] { return RunMeasurement.load(); });
     }
 
@@ -367,8 +353,8 @@ void run_calculation() {
     }
 
     // Convert received data to vector of 10 ints
-    int receivedDataInt[6*10];
-    std::memcpy(receivedDataInt, buffer, sizeof(int) * 6*10);
+    int receivedDataInt[6 * 10];
+    std::memcpy(receivedDataInt, buffer, sizeof(int) * 6 * 10);
 
     // data comes in like this: 10 x (count, x1, x2, opd, i1, i2)
 
@@ -380,14 +366,13 @@ void run_calculation() {
     int counter[10];
 
     for (int i = 0; i < 10; i++) {
-
       // get counter
       counter[i] = receivedDataInt[6 * i];
-      adc1[i] = receivedDataInt[6 * i + 1]; // x1
-      adc2[i] = receivedDataInt[6 * i + 2]; // x2
-      adc3[i] = receivedDataInt[6 * i + 3]/1000.; // opd
-      adc4[i] = receivedDataInt[6 * i + 4]; // i1
-      adc5[i] = receivedDataInt[6 * i + 5]; // i2
+      adc1[i] = receivedDataInt[6 * i + 1];          // x1
+      adc2[i] = receivedDataInt[6 * i + 2];          // x2
+      adc3[i] = receivedDataInt[6 * i + 3] / 1000.;  // opd
+      adc4[i] = receivedDataInt[6 * i + 4];          // i1
+      adc5[i] = receivedDataInt[6 * i + 5];          // i2
 
       // convert from millidegree to rad
       // receivedData[i] = receivedDataInt[2*i+1] * 1e-3 * M_PI / 180.;
@@ -397,10 +382,9 @@ void run_calculation() {
 
       // save to file: current time, counter, phase
       // outputFile << t << "," << counter[i] << "," << receivedData[i] << "\n";
-      // outputFile << t << "," << counter[i] << "," << adc1[i] << "," << adc2[i] << "," << adc3[i] << "," << adc4[i] << "\n";
-      
+      // outputFile << t << "," << counter[i] << "," << adc1[i] << "," << adc2[i] << "," << adc3[i] << "," << adc4[i] <<
+      // "\n";
     }
-
 
     // filter opd by piping the 10 new measurements through the filter
     float opd;
@@ -412,12 +396,6 @@ void run_calculation() {
     for (int i = 0; i < 10; i++) {
       opd_control_measurement = opd_control_lp_filter.filter(adc3[i]);
     }
-
-
-
-
-
-  
 
     // get and filter x1d
     float x1d = adc1[0] / adc4[0] * 1.11e3;
@@ -452,15 +430,11 @@ void run_calculation() {
       // opd_error_derivative = opd_error - opd_error_prev;
 
       // calculate control signal
-      opd_control_signal = p.load() * opd_error +  opd_error_integral;
+      opd_control_signal = p.load() * opd_error + opd_error_integral;
 
       // actuate piezo using class interface (takes input in µm)
       opd_stage.move_to(opd_control_signal * 1e-3);
-
     }
-
-
-    
 
     // wait 100 µs
     // std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -505,7 +479,6 @@ void RenderUI() {
     ImGui::SameLine();
     ImGui::RadioButton("Closed loop", &loop_select, 2);
 
-    
     // if (control_opd) {
     //     RunOpdControl.store(true);
     //   } else {
@@ -524,18 +497,15 @@ void RenderUI() {
       opd_stage.move_to(opd_open_loop_setpoint);
     }
 
-
-
     // real time plot
     static ScrollingBuffer opd_buffer, setpoint_buffer;
-    
+
     static float t_gui = 0;
 
-     // if measurement is running, update gui time.
+    // if measurement is running, update gui time.
     if (RunMeasurement.load()) {
       t_gui = getTime();
     }
-
 
     // add the entire MeasurementQueue to the buffer
     if (!opdQueue.isempty()) {
@@ -559,8 +529,8 @@ void RenderUI() {
     // y axis: auto fit
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
-    static ImVec4 fft_color     = ImVec4(1,1,0,1);
-    static float  thickness = 1;
+    static ImVec4 fft_color = ImVec4(1, 1, 0, 1);
+    static float thickness = 1;
 
     if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
@@ -570,45 +540,40 @@ void RenderUI() {
       ImPlot::SetNextLineStyle(fft_color, thickness);
       ImPlot::PlotLine("Measurement", &opd_buffer.Data[0].x, &opd_buffer.Data[0].y, opd_buffer.Data.size(), 0,
                        opd_buffer.Offset, 2 * sizeof(float));
-      if (plot_setpoint){
-      ImPlot::PlotLine("Setpoint", &setpoint_buffer.Data[0].x, &setpoint_buffer.Data[0].y, setpoint_buffer.Data.size(),
-                       0, setpoint_buffer.Offset, 2 * sizeof(float));
+      if (plot_setpoint) {
+        ImPlot::PlotLine("Setpoint", &setpoint_buffer.Data[0].x, &setpoint_buffer.Data[0].y,
+                         setpoint_buffer.Data.size(), 0, setpoint_buffer.Offset, 2 * sizeof(float));
       }
       ImPlot::EndPlot();
     }
 
-    
-     if (ImGui::TreeNode("OPD FFT")) {
+    if (ImGui::TreeNode("OPD FFT")) {
+      // set up fft
+      const static int fft_size = 1024;
+      static double fft_power[fft_size / 2];
+      static double fft_freq[fft_size / 2];
+      static FFT_calculator fft(fft_size, 6400., &opd_buffer, fft_power, fft_freq);
 
-    // set up fft
-    const static int fft_size = 1024;
-    static double fft_power[fft_size / 2];
-    static double fft_freq[fft_size / 2];
-    static FFT_calculator fft(fft_size, 6400., &opd_buffer, fft_power, fft_freq);
+      // calculate fft
+      fft.calculate();
 
-    // calculate fft
-    fft.calculate();
+      // plot fft_power vs fft_freq, with log scale on x and y axis
+      static float fft_thickness = 3;
+      static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
+      static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None;  // ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+      if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 300 * io.FontGlobalScale))) {
+        ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+        ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+        ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, 10, 3200);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 1e8);
+        ImPlot::SetNextLineStyle(fft_color, fft_thickness);
+        ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size / 2);
+        ImPlot::EndPlot();
+      }
 
-
-    // plot fft_power vs fft_freq, with log scale on x and y axis
-    static float  fft_thickness = 3;
-    static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
-    static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None; //ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-    if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 300 * io.FontGlobalScale))) {
-      ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-      ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-      ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, 10, 3200);
-      ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 1e8);
-      ImPlot::SetNextLineStyle(fft_color, fft_thickness);
-      ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size/2);
-      ImPlot::EndPlot();
+      ImGui::TreePop();
     }
-
-    ImGui::TreePop();
-     }
-
-    
 
     if (ImGui::TreeNode("OPD metrology")) {
       // Display measurement
@@ -638,29 +603,25 @@ void RenderUI() {
       ImGui::Text("Mean: %.4f", mean);
       ImGui::Text("Std: %.4f", stddev);
 
-
-
-
       ImGui::TreePop();
     }
 
     if (ImGui::TreeNode("Piezo stage")) {
-
       // plot for current piezo position
-    static ImVec4 color     = ImVec4(1,1,0,1);
-    static ScrollingBuffer piezo_buffer;
-    piezo_buffer.AddPoint(t_gui, opd_stage.read());
+      static ImVec4 color = ImVec4(1, 1, 0, 1);
+      static ScrollingBuffer piezo_buffer;
+      piezo_buffer.AddPoint(t_gui, opd_stage.read());
 
-    if (ImPlot::BeginPlot("##Piezo", ImVec2(-1, 150 * io.FontGlobalScale))) {
-      ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
-      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      ImPlot::SetNextLineStyle(color, thickness);
-      ImPlot::PlotLine("Piezo position", &piezo_buffer.Data[0].x, &piezo_buffer.Data[0].y, piezo_buffer.Data.size(), 0,
-                       piezo_buffer.Offset, 2 * sizeof(float));
-      ImPlot::EndPlot();
-    }
+      if (ImPlot::BeginPlot("##Piezo", ImVec2(-1, 150 * io.FontGlobalScale))) {
+        ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+        ImPlot::SetNextLineStyle(color, thickness);
+        ImPlot::PlotLine("Piezo position", &piezo_buffer.Data[0].x, &piezo_buffer.Data[0].y, piezo_buffer.Data.size(),
+                         0, piezo_buffer.Offset, 2 * sizeof(float));
+        ImPlot::EndPlot();
+      }
 
       float piezo_measurement = 0.0f;
 
@@ -679,7 +640,7 @@ void RenderUI() {
       // sliders for p , i
       static float p_gui = 0.125f;
       static float i_gui = 0.007f;
-      
+
       ImGui::SliderFloat("P", &p_gui, 0.0f, 1.0f);
       ImGui::SliderFloat("I", &i_gui, 0.0f, 3e-2f);
 
@@ -688,10 +649,10 @@ void RenderUI() {
       i.store(i_gui);
 
       const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
-      
+
       // opd input: drag
-      ImGui::SliderFloat("(Drag or double-click to adjust)", &opd_setpoint_gui, opd_setpoint_min,
-                       opd_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("(Drag or double-click to adjust)", &opd_setpoint_gui, opd_setpoint_min, opd_setpoint_max,
+                         "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
 
       // opd input: buttons
       if (ImGui::BeginTable("table1", 6, ImGuiTableFlags_SizingFixedFit)) {
@@ -756,15 +717,12 @@ void RenderUI() {
       ImGui::TreePop();
     }
 
-  
-
     // TODO next: add seperate buttons for start/stop of
     // measurements (piezo pos, opd), and seperate logging of all at their own
     // speeds, in seperate threads
   }
 
   if (ImGui::CollapsingHeader("X position")) {
-
     // real time plot
     static ScrollingBuffer x1_buffer;
     static ScrollingBuffer x2_buffer;
@@ -773,14 +731,12 @@ void RenderUI() {
     static ScrollingBuffer x1d_buffer;
     static ScrollingBuffer x2d_buffer;
 
-   
     static float t_gui_x = 0;
 
-     // if measurement is running, update gui time.
+    // if measurement is running, update gui time.
     if (RunMeasurement.load()) {
       t_gui_x = getTime();
     }
-
 
     // add the entire MeasurementQueue to the buffer
     if (!x1Queue.isempty()) {
@@ -834,11 +790,11 @@ void RenderUI() {
     // y axis: auto fit
     static ImPlotAxisFlags x1_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
-    static ImVec4 x1_color     = ImVec4(1,1,0,1);
-    static ImVec4 x2_color     = ImVec4(1,0,0,1);
-    static ImVec4 i1_color     = ImVec4(0,1,0,1);
-    static ImVec4 i2_color     = ImVec4(0,0,1,1);
-    static float  x1_thickness = 1;
+    static ImVec4 x1_color = ImVec4(1, 1, 0, 1);
+    static ImVec4 x2_color = ImVec4(1, 0, 0, 1);
+    static ImVec4 i1_color = ImVec4(0, 1, 0, 1);
+    static ImVec4 i2_color = ImVec4(0, 0, 1, 1);
+    static float x1_thickness = 1;
 
     // To debug x1, x2, i1, i2
     // if (ImPlot::BeginPlot("##X1_Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
@@ -860,7 +816,6 @@ void RenderUI() {
     //                    i2_buffer.Offset, 2 * sizeof(float));
     //   ImPlot::EndPlot();
     // }
-
 
     // plot x1d, x2d
     if (ImPlot::BeginPlot("##X1D", ImVec2(-1, 200 * io.FontGlobalScale))) {
@@ -906,30 +861,27 @@ void RenderUI() {
       x1d_rms = sqrt(sum_sq / x1d_buffer.Data.size());
     }
 
-  // print it
-  ImGui::Text("x1d std: %.4f", x1d_std);
-  ImGui::Text("x1d rms: %.4f", x1d_rms);
+    // print it
+    ImGui::Text("x1d std: %.4f", x1d_std);
+    ImGui::Text("x1d rms: %.4f", x1d_rms);
 
-  
-  // FFT
-  if (ImGui::TreeNode("X1D FFT")) {
+    // FFT
+    if (ImGui::TreeNode("X1D FFT")) {
+      // set up fft of x1d
+      const static int fft_size = 1024 * 8 * 8;
+      static double fft_power[fft_size / 2];
+      static double fft_freq[fft_size / 2];
+      static FFT_calculator fft(fft_size, 6400., &x1d_buffer, fft_power, fft_freq);
 
-    // set up fft of x1d
-    const static int fft_size = 1024*8*8;
-    static double fft_power[fft_size / 2];
-    static double fft_freq[fft_size / 2];
-    static FFT_calculator fft(fft_size, 6400., &x1d_buffer, fft_power, fft_freq);
+      // calculate fft
+      fft.calculate();
 
-    // calculate fft
-    fft.calculate();
-
-
-      static float  fft_thickness = 3;
-      ImVec4 fft_color = ImVec4(1,1,0,1);
+      static float fft_thickness = 3;
+      ImVec4 fft_color = ImVec4(1, 1, 0, 1);
 
       // x axis: no flags
       static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
-      static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None; //ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+      static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None;  // ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
       // plot fft_power vs fft_freq, with log scale on x and y axis
       if (ImPlot::BeginPlot("##FFT_x1d", ImVec2(-1, 300 * io.FontGlobalScale))) {
         ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
@@ -940,18 +892,12 @@ void RenderUI() {
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 1e8);
         // ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
         ImPlot::SetNextLineStyle(fft_color, fft_thickness);
-        ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size/2);
+        ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size / 2);
         ImPlot::EndPlot();
       }
-  ImGui::TreePop();
-  }
-
-  
-
-
+      ImGui::TreePop();
     }
-
-
+  }
 
   if (ImGui::CollapsingHeader("Program settings")) {
     ImGui::DragFloat("GUI scale", &io.FontGlobalScale, 0.005f, 0.5, 3.0, "%.2f",
