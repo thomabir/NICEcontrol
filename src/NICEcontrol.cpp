@@ -24,8 +24,6 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
-
-
 // IIR filter from https://github.com/berndporr/iir1
 #include "Iir.h"
 
@@ -38,8 +36,8 @@
 #include "../lib/implot/implot.h"
 
 // Actuators
-#include "MCL_NanoDrive.hpp" // Controller for MCL OPD Stage
-#include "PI_E727_Controller.hpp" // Controller for PI Tip/Tilt Stages
+#include "MCL_NanoDrive.hpp"       // Controller for MCL OPD Stage
+#include "PI_E727_Controller.hpp"  // Controller for PI Tip/Tilt Stages
 
 // Windows
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
@@ -224,8 +222,6 @@ std::atomic<bool> RunMeasurement(false);
 std::mutex MeasurementMutex;
 std::condition_variable MeasurementCV;
 std::ofstream outputFile;
-
-
 
 // initialise opd stage
 MCL_OPDStage opd_stage;
@@ -501,6 +497,13 @@ void RenderUI() {
   static int opd_loop_select = 0;
   static int xd_loop_select = 0;
 
+  static float p_gui = 0.125f;
+  static float i_gui = 0.007f;
+
+  // store p, i
+  opd_p.store(p_gui);
+  opd_i.store(i_gui);
+
   static auto current_measurement = 0.f;
   if (!opdQueue.isempty()) {
     current_measurement = opdQueue.back().value;
@@ -677,16 +680,9 @@ void RenderUI() {
     if (ImGui::TreeNode("Control loop")) {
       ImGui::Text("Control loop parameters:");
 
-      // sliders for p , i
-      static float p_gui = 0.125f;
-      static float i_gui = 0.007f;
-
+      // sliders for p ,i
       ImGui::SliderFloat("P", &p_gui, 0.0f, 1.0f);
       ImGui::SliderFloat("I", &i_gui, 0.0f, 3e-2f);
-
-      // store p, i
-      opd_p.store(p_gui);
-      opd_i.store(i_gui);
 
       const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
 
