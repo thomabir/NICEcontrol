@@ -24,8 +24,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
-// MCL piezo stage
-#include "../lib/madlib/madlib.h"
+
 
 // IIR filter from https://github.com/berndporr/iir1
 #include "Iir.h"
@@ -38,8 +37,9 @@
 #include "../lib/fonts/SourceSans3Regular.cpp"
 #include "../lib/implot/implot.h"
 
-// PI Tip/tilt
-#include "PI_E727_Controller.hpp"
+// Actuators
+#include "MCL_NanoDrive.hpp" // Controller for MCL OPD Stage
+#include "PI_E727_Controller.hpp" // Controller for PI Tip/Tilt Stages
 
 // Windows
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
@@ -225,44 +225,7 @@ std::mutex MeasurementMutex;
 std::condition_variable MeasurementCV;
 std::ofstream outputFile;
 
-// a class for the opd stage to make it easier to use
-class MCL_OPDStage {
- public:
-  MCL_OPDStage() {}
 
-  void init() {
-    // print startup
-    std::cout << "Initialising OPD stage" << std::endl;
-    handle = MCL_InitHandle();
-
-    // if handle is 0: stage is not connected.
-    if (handle == 0) {
-      std::cout << "OPD stage not connected" << std::endl;
-      return;
-    }
-
-    // move to zero position
-    this->move_to(0.0f);
-
-    std::cout << "OPD stage initialised" << std::endl;
-  }
-
-  ~MCL_OPDStage() {
-    // move to zero position
-    this->move_to(0.0f);
-    std::cout << "OPD stage closed" << std::endl;
-  }
-
-  void move_to(float setpoint) {
-    // move to setpoint in µm + 20 µm, to give some headroom in both directions
-    MCL_SingleWriteN(setpoint + 20., 3, handle);
-  }
-
-  double read() { return MCL_SingleReadN(3, handle) - 20.; }
-
- private:
-  int handle;
-};
 
 // initialise opd stage
 MCL_OPDStage opd_stage;
