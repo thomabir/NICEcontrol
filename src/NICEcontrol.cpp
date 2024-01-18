@@ -415,9 +415,8 @@ void run_calculation() {
     }
 
     // get and filter x1d
-    float x1d = adc1[0] / adc4[0] * 1.11e3 / 2.;
-    float x1d_control_measurement = x1d_control_lp_filter.filter(x1d);
-    x1d = x1d_lp_filter.filter(x1d);
+    float x1d = x1d_lp_filter.filter(adc1[0] / adc4[0] * 1.11e3 / 2.);
+    float x1d_control_measurement = x1d_control_lp_filter.filter(adc1[0] / adc4[0] * 1.11e3 / 2.);
 
     float x2d = adc2[0] / adc5[0] * 1.11e3 / 2.;
     // float x2d_control_measurement = x2d_control_lp_filter.filter(x2d);
@@ -461,7 +460,7 @@ void run_calculation() {
 
     if (RunXdControl.load()) {
       // calculate error
-      x1d_error = x1d_setpoint.load() - x1d_control_measurement;
+      x1d_error = x1d_control_measurement - x1d_setpoint.load();
 
       // calculate integral
       x1d_error_integral += xd_i.load() * x1d_error;
@@ -474,6 +473,9 @@ void run_calculation() {
 
       // actuate piezo using class interface (takes urad as input)
       tip_tilt_stage1.move_to_x(x1d_control_signal);
+
+      // print control signal
+      // std::cout << "Control signal: " << x1d_control_signal << std::endl;
     }
 
     // wait 100 µs
@@ -494,15 +496,19 @@ void RenderUI() {
 
   ImGuiIO &io = ImGui::GetIO();
 
+  // opd control gui parameters
   static int opd_loop_select = 0;
+  static float opd_p_gui = 0.125f;
+  static float opd_i_gui = 0.007f;
+  opd_p.store(opd_p_gui);
+  opd_i.store(opd_i_gui);
+
+  // x1d control gui parameters
   static int xd_loop_select = 0;
-
-  static float p_gui = 0.125f;
-  static float i_gui = 0.007f;
-
-  // store p, i
-  opd_p.store(p_gui);
-  opd_i.store(i_gui);
+  static float xd_p_gui = 0.001f;
+  static float xd_i_gui = 0.001f;
+  xd_p.store(xd_p_gui);
+  xd_i.store(xd_i_gui);
 
   static auto current_measurement = 0.f;
   if (!opdQueue.isempty()) {
@@ -590,7 +596,7 @@ void RenderUI() {
       ImPlot::EndPlot();
     }
 
-    if (ImGui::TreeNode("OPD FFT")) {
+    if (ImGui::TreeNode("FFT##OPD")) {
       // set up fft
       const static int fft_size = 1024;
       static double fft_power[fft_size / 2];
@@ -618,7 +624,7 @@ void RenderUI() {
       ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode("OPD metrology")) {
+    if (ImGui::TreeNode("Metrology##OPD")) {
       // Display measurement
       ImGui::Text("Current measurement: %.4f", current_measurement);
 
@@ -649,7 +655,7 @@ void RenderUI() {
       ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode("Piezo stage")) {
+    if (ImGui::TreeNode("Actuator##OPD")) {
       // plot for current piezo position
       static ImVec4 color = ImVec4(1, 1, 0, 1);
       static ScrollingBuffer piezo_buffer;
@@ -672,76 +678,23 @@ void RenderUI() {
       ImGui::Text("Current measurement: %.4f", piezo_measurement);
 
       // open loop setpoint µm
-      ImGui::SliderFloat("Setpoint", &opd_open_loop_setpoint, -20.f, 30.0f);
+      ImGui::SliderFloat("Setpoint##OPD", &opd_open_loop_setpoint, -20.f, 30.0f);
 
       ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode("Control loop")) {
+    if (ImGui::TreeNode("Control loop##OPD")) {
       ImGui::Text("Control loop parameters:");
 
       // sliders for p ,i
-      ImGui::SliderFloat("P", &p_gui, 0.0f, 1.0f);
-      ImGui::SliderFloat("I", &i_gui, 0.0f, 3e-2f);
+      ImGui::SliderFloat("P##OPD", &opd_p_gui, 0.0f, 1.0f);
+      ImGui::SliderFloat("I##OPD", &opd_i_gui, 0.0f, 3e-2f);
 
       const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
 
       // opd input: drag
       ImGui::SliderFloat("(Drag or double-click to adjust)", &opd_setpoint_gui, opd_setpoint_min, opd_setpoint_max,
                          "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
-
-      // opd input: buttons
-      if (ImGui::BeginTable("table1", 6, ImGuiTableFlags_SizingFixedFit)) {
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("Increase:");
-        ImGui::TableNextColumn();
-        if (ImGui::Button("+0.1 nm")) {
-          opd_setpoint_gui += 0.0001;
-        }
-        ImGui::TableNextColumn();
-        if (ImGui::Button("+1 nm")) {
-          opd_setpoint_gui += 0.001;
-        }
-        ImGui::TableNextColumn();
-        if (ImGui::Button("+10 nm")) {
-          opd_setpoint_gui += 0.01;
-        }
-        ImGui::TableNextColumn();
-        if (ImGui::Button("+100 nm")) {
-          opd_setpoint_gui += 0.1;
-        }
-        ImGui::TableNextColumn();
-        if (ImGui::Button("+1 µm")) {
-          opd_setpoint_gui += 1.;
-        }
-
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("Decrease:");
-        ImGui::TableNextColumn();
-        if (ImGui::Button("-0.1 nm")) {
-          opd_setpoint_gui -= 0.0001;
-        }
-        ImGui::TableNextColumn();
-        if (ImGui::Button("-1 nm")) {
-          opd_setpoint_gui -= 0.001;
-        }
-        ImGui::TableNextColumn();
-        if (ImGui::Button("-10 nm")) {
-          opd_setpoint_gui -= 0.01;
-        }
-        ImGui::TableNextColumn();
-        if (ImGui::Button("-100 nm")) {
-          opd_setpoint_gui -= 0.1;
-        }
-        ImGui::TableNextColumn();
-        if (ImGui::Button("-1 µm")) {
-          opd_setpoint_gui -= 1.;
-        }
-
-        ImGui::EndTable();
-      }
 
       // clamp opd_setpoint_gui to min/max
       if (opd_setpoint_gui < opd_setpoint_min) opd_setpoint_gui = opd_setpoint_min;
@@ -752,17 +705,8 @@ void RenderUI() {
 
       ImGui::TreePop();
     }
-
-    // TODO next: add seperate buttons for start/stop of
-    // measurements (piezo pos, opd), and seperate logging of all at their own
-    // speeds, in seperate threads
   }
 
-  // PROBLEMS:
-  // - cannot switch from open loop to off or closed loop
-  // - cannot go negative -> copy from old mz_control to get a new zero point, realign setup (I want best contrast for
-  // good measurements!)
-  // - closed loop not implemented yet, do that.
 
   if (ImGui::CollapsingHeader("X position")) {
     // control mode selector
@@ -930,7 +874,7 @@ void RenderUI() {
     ImGui::Text("x1d rms: %.4f", x1d_rms);
 
     // FFT
-    if (ImGui::TreeNode("X1D FFT")) {
+    if (ImGui::TreeNode("FFT##X1D")) {
       // set up fft of x1d
       const static int fft_size = 1024 * 8 * 8;
       static double fft_power[fft_size / 2];
@@ -963,7 +907,7 @@ void RenderUI() {
     }
 
     // Tip/Tilt actuator (piezo)
-    if (ImGui::TreeNode("Tip/Tilt actuator")) {
+    if (ImGui::TreeNode("Actuator##X1D")) {
       // plot for current piezo position
       static ImVec4 color = ImVec4(1, 1, 0, 1);
       static ScrollingBuffer tip_tilt_actuator_buffer;
@@ -987,7 +931,31 @@ void RenderUI() {
       ImGui::Text("Current measurement: %.4f", tip_tilt_actuator_measurement);
 
       // open loop setpoint µm
-      ImGui::SliderFloat("Setpoint", &x1d_open_loop_setpoint, -100.0f, 3000.0f);
+      ImGui::SliderFloat("Setpoint##X1D", &x1d_open_loop_setpoint, -100.0f, 1900.0f);
+
+      ImGui::TreePop();
+    }
+
+    // control
+    if (ImGui::TreeNode("Control loop##X1D")) {
+      ImGui::Text("Control loop parameters:");
+
+      // sliders for p ,i
+      ImGui::SliderFloat("P##X1D", &xd_p_gui, 0.0f, 0.1f);
+      ImGui::SliderFloat("I##X1D", &xd_i_gui, 0.0f, 0.1f);
+
+      const float x1d_setpoint_min = -100.0f, x1d_setpoint_max = 100.0f;
+
+      // x1d input: drag
+      ImGui::SliderFloat("(Drag or double-click to adjust)", &x1d_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
+                         "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
+
+      // clamp x1d_setpoint_gui to min/max
+      if (x1d_setpoint_gui < x1d_setpoint_min) x1d_setpoint_gui = x1d_setpoint_min;
+      if (x1d_setpoint_gui > x1d_setpoint_max) x1d_setpoint_gui = x1d_setpoint_max;
+
+      // set x1d_setpoint
+      x1d_setpoint.store(x1d_setpoint_gui);
 
       ImGui::TreePop();
     }
