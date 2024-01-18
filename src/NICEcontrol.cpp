@@ -229,7 +229,9 @@ std::ofstream outputFile;
 // a class for the opd stage to make it easier to use
 class MCL_OPDStage {
  public:
-  MCL_OPDStage() {
+  MCL_OPDStage() {}
+
+  void init() {
     // print startup
     std::cout << "Initialising OPD stage" << std::endl;
     handle = MCL_InitHandle();
@@ -316,10 +318,18 @@ class PI_E727_Controller {
  private:
   int iD;
   char serialNumberString[1024];
+  char name[1024];
+  double offset = 100.0; // urad
 };
 
 PI_E727_Controller::PI_E727_Controller(char *serialNumberString) {
+
+  // set serial number
   std::strcpy(this->serialNumberString, serialNumberString);
+
+  // set name
+  std::strcpy(this->name, "PI E-727 Tip/Tilt Piezo Controller S/N ");
+  std::strcat(this->name, serialNumberString);
 }
 
 PI_E727_Controller::~PI_E727_Controller() { close(); }
@@ -336,9 +346,9 @@ void PI_E727_Controller::init() {
 
   // Check if connection was successful
   if (PI_IsConnected(iD)) {
-    std::cout << "PI Tip/tilt controller S/N " << this->serialNumberString << ": Connection successful" << std::endl;
+    std::cout << this->name << ": Connection successful" << std::endl;
   } else {
-    std::cout << "PI Tip/tilt controller S/N " << this->serialNumberString << ": Connection failed" << std::endl;
+    std::cout << this->name << ": Connection failed" << std::endl;
     return;
   }
 
@@ -352,56 +362,50 @@ void PI_E727_Controller::init() {
   // PI_qPUN(iD, "2", szUnits, 1024);
   // std::cout << "Units: " << szUnits << std::endl;
 
-  // set servo mode
-  const int iEnable = 1;
-  PI_SVO(iD, "2", &iEnable);
-
-  // check if servo mode is enabled
-  int iServoStatus = 0;
-  PI_qSVO(iD, "2", &iServoStatus);
-  if (iServoStatus != 1) {
-    std::cout << "Error: Servo mode not enabled. Try autozero." << std::endl;
+  // If an error occurred, print it to the console
+  int iError = 0;
+  PI_qERR(iD, &iError);
+  if (iError != 0) {
+    std::cout << this->name << ": Error: " << iError << std::endl;
   }
 
-  // move to 20, wait 10 ms, print position
-  this->move_to_x(20.0);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "x Position: " << this->readx() << std::endl;
+  // set servo mode
+  const int iEnable = 1;
+  PI_SVO(iD, "1", &iEnable);
+  PI_SVO(iD, "2", &iEnable);
+  
 
-  // move to 0, wait 10 ms, print position
-  this->move_to_x(0.0);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "x Position: " << this->readx() << std::endl;
-
-  // same for y
-  this->move_to_y(20.0);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "y Position: " << this->ready() << std::endl;
-
-  this->move_to_y(0.0);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "y Position: " << this->ready() << std::endl;
+  // check if both axes servo modes are enabled. Print error if at least one is not enabled.
+  int iServoStatus = 0;
+  PI_qSVO(iD, "1", &iServoStatus);
+  if (iServoStatus != 1) {
+    std::cout << this->name << ": Error: Cannot turn on servo on axis 1" << std::endl;
+  }
+  PI_qSVO(iD, "2", &iServoStatus);
+  if (iServoStatus != 1) {
+    std::cout << this->name << ": Error: Cannot turn on servo on axis 2" << std::endl;
+  }
 }
 
 double PI_E727_Controller::readx() {
   double value = 0;
   PI_qPOS(iD, "2", &value);
-  return value;
+  return value - offset;
 }
 
 double PI_E727_Controller::ready() {
   double value = 0;
   PI_qPOS(iD, "1", &value);
-  return value;
+  return value - offset;
 }
 
 void PI_E727_Controller::move_to_x(double value) {
-  const double dValue = value;
+  const double dValue = value + offset;
   PI_MOV(iD, "2", &dValue);
 }
 
 void PI_E727_Controller::move_to_y(double value) {
-  const double dValue = value;
+  const double dValue = value + offset;
   PI_MOV(iD, "1", &dValue);
 }
 
@@ -426,6 +430,34 @@ PI_E727_Controller tip_tilt_stage1(serial_number1);
 
 char serial_number2[1024] = "0122042007";
 PI_E727_Controller tip_tilt_stage2(serial_number2);
+
+void setupActuators() {
+  // connect and intialise all piezo stages
+
+  // Tip/tilt stage 1
+  tip_tilt_stage1.init();
+  tip_tilt_stage1.move_to_x(0.0f);
+  tip_tilt_stage1.move_to_y(0.0f);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::cout << "x Position: " << tip_tilt_stage1.readx() << std::endl;
+  std::cout << "y Position: " << tip_tilt_stage1.ready() << std::endl;
+
+  // Tip/tilt stage 2
+  tip_tilt_stage2.init();
+  tip_tilt_stage2.move_to_x(0.0f);
+  tip_tilt_stage2.move_to_y(0.0f);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::cout << "x Position: " << tip_tilt_stage2.readx() << std::endl;
+  std::cout << "y Position: " << tip_tilt_stage2.ready() << std::endl;
+
+  // if necessary, autozero the tip/tilt stages
+  // tip_tilt_stage1.autozero();
+  // tip_tilt_stage2.autozero();
+
+  // OPD stage
+  opd_stage.init();
+  opd_stage.move_to(0.0f);
+}
 
 static float x1d_open_loop_setpoint = 0.0f;
 
@@ -1153,7 +1185,7 @@ void RenderUI() {
       ImGui::Text("Current measurement: %.4f", tip_tilt_actuator_measurement);
 
       // open loop setpoint µm
-      ImGui::SliderFloat("Setpoint", &x1d_open_loop_setpoint, -20.f, 30.0f);
+      ImGui::SliderFloat("Setpoint", &x1d_open_loop_setpoint, -100.0f, 3000.0f);
 
       ImGui::TreePop();
     }
@@ -1287,14 +1319,8 @@ int main(int, char **) {
 
   std::thread computeThread(NICEcontrol::run_calculation);
 
-  // init tip/tilt stages
-  NICEcontrol::tip_tilt_stage1.init();  // TODO this really should not be here
-  NICEcontrol::tip_tilt_stage2.init();  // TODO this really should not be here
-
-  // autozero stage 2
-  // autozero stage 2
-  // NICEcontrol::tip_tilt_stage1.autozero();
-  // NICEcontrol::tip_tilt_stage2.autozero();
+  // call setupActuators
+  NICEcontrol::setupActuators();
 
   // Render loop
   while (!glfwWindowShouldClose(window)) {
