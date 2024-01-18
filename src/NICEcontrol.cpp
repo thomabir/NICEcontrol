@@ -535,6 +535,9 @@ void RenderUI() {
 
   ImGuiIO &io = ImGui::GetIO();
 
+  static int opd_loop_select = 0;
+  static int xd_loop_select = 0;
+
   static auto current_measurement = 0.f;
   if (!opdQueue.isempty()) {
     current_measurement = opdQueue.back().value;
@@ -551,14 +554,13 @@ void RenderUI() {
 
   if (ImGui::CollapsingHeader("OPD")) {
     // control mode selector
-    static int opd_loop_select = 0;
     ImGui::Text("Control mode:");
     ImGui::SameLine();
-    ImGui::RadioButton("Off", &opd_loop_select, 0);
+    ImGui::RadioButton("Off##OPD", &opd_loop_select, 0);
     ImGui::SameLine();
-    ImGui::RadioButton("Open loop", &opd_loop_select, 1);
+    ImGui::RadioButton("Open loop##OPD", &opd_loop_select, 1);
     ImGui::SameLine();
-    ImGui::RadioButton("Closed loop", &opd_loop_select, 2);
+    ImGui::RadioButton("Closed loop##OPD", &opd_loop_select, 2);
 
     // run control if "Closed loop" is selected
     if (opd_loop_select == 2) {
@@ -805,14 +807,13 @@ void RenderUI() {
 
   if (ImGui::CollapsingHeader("X position")) {
     // control mode selector
-    static int xd_loop_select = 0;
     ImGui::Text("Control mode:");
     ImGui::SameLine();
-    ImGui::RadioButton("Off", &xd_loop_select, 0);
+    ImGui::RadioButton("Off##X", &xd_loop_select, 0);
     ImGui::SameLine();
-    ImGui::RadioButton("Open loop", &xd_loop_select, 1);
+    ImGui::RadioButton("Open loop##X", &xd_loop_select, 1);
     ImGui::SameLine();
-    ImGui::RadioButton("Closed loop", &xd_loop_select, 2);
+    ImGui::RadioButton("Closed loop##X", &xd_loop_select, 2);
 
     // run control if "Closed loop" is selected
     if (xd_loop_select == 2) {
