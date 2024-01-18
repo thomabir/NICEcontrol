@@ -19,8 +19,8 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
      apt-get install libglfw3-dev fftw-dev
      ```
    * Install the piezo controller drivers from [MCL](http://www.madcitylabs.com/) (ask their support for the files)
-   * Install the piezo controller drivers from Physikinstrumente. (Download from their website or copy from installation medium)
-   * Install [iir1](https://github.com/berndporr/iir1)|
+   * Install the piezo controller drivers from Physikinstrumente. (Download from their website or copy from installation medium). Then, copy `AutoZeroSample.h` and `PI_GCS2_DLL.h` from the installation files into `NICEcontrol/lib/pi`. See [PIcontrol](https://github.com/thomabir/PIcontrol) Readme for more information.
+   * Install [iir1](https://github.com/berndporr/iir1)
    ```bash
    sudo add-apt-repository ppa:berndporr/dsp
    sudo apt install iir1-dev
