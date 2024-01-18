@@ -38,6 +38,10 @@
 #include "../lib/fonts/SourceSans3Regular.cpp"
 #include "../lib/implot/implot.h"
 
+// PI tip/tilt piezo stage
+#include "../lib/pi/AutoZeroSample.h"
+#include "../lib/pi/PI_GCS2_DLL.h"
+
 // Windows
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
@@ -185,9 +189,11 @@ class FFT_calculator {
 };
 
 // iir filters
-Iir::Butterworth::LowPass<4> x1d_lp_filter, x2d_lp_filter, opd_lp_filter, opd_control_lp_filter;
-const float x1d_samplingrate = 6400.;
-const float x1d_cutoff = 50.;
+Iir::Butterworth::LowPass<4> x1d_lp_filter, x2d_lp_filter, x1d_control_lp_filter, x2d_control_lp_filter;
+Iir::Butterworth::LowPass<4> opd_lp_filter, opd_control_lp_filter;
+const float xd_samplingrate = 6400.;
+const float xd_cutoff = 50.;
+const float xd_control_cutoff = 5.;
 const float opd_samplingrate = 64000.;
 const float opd_cutoff = 1000.;
 const float opd_control_cutoff = 50.;
@@ -200,8 +206,19 @@ std::atomic<float> opd_setpoint = 0.001f;  // setpoint used in calculation, clip
 std::atomic<bool> RunOpdControl(false);
 std::mutex OpdControlMutex;
 std::condition_variable OpdControlCV;
-std::atomic<float> p = 0.0f;
-std::atomic<float> i = 0.0f;
+std::atomic<float> opd_p = 0.0f;
+std::atomic<float> opd_i = 0.0f;
+
+// xd control
+float x1d_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
+std::atomic<float> x1d_setpoint = 0.0f;  // setpoint used in calculation, clipped to valid range
+float x2d_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
+std::atomic<float> x2d_setpoint = 0.0f;  // setpoint used in calculation, clipped to valid range
+std::atomic<bool> RunXdControl(false);
+std::mutex XdControlMutex;
+std::condition_variable XdControlCV;
+std::atomic<float> xd_p = 0.0f;
+std::atomic<float> xd_i = 0.0f;
 
 // variables that control the measurement thread
 std::atomic<bool> RunMeasurement(false);
@@ -250,6 +267,168 @@ class MCL_OPDStage {
 MCL_OPDStage opd_stage;
 static float opd_open_loop_setpoint = 0.0f;
 
+// stuff for tip/tilt stage
+bool AutoZeroIfNeeded(int ID, const std::string axis) {
+  BOOL bAutoZeroed;
+
+  if (!PI_qATZ(ID, axis.c_str(), &bAutoZeroed)) {
+    return false;
+  }
+
+  if (!bAutoZeroed) {
+    // if needed, autozero the axis
+    std::cout << "AutoZero axis " << axis << "..." << std::endl;
+
+    BOOL bUseDefaultVoltageArray[1];
+    bUseDefaultVoltageArray[0] = TRUE;
+
+    if (!PI_ATZ(ID, axis.c_str(), NULL, bUseDefaultVoltageArray)) {
+      return false;
+    }
+
+    // Wait until the autozero move is done.
+    BOOL bFlag = FALSE;
+
+    while (bFlag != TRUE) {
+      if (!PI_IsControllerReady(ID, &bFlag)) {
+        return false;
+      }
+    }
+  }
+
+  std::cout << "AutoZero finished successfully" << std::endl;
+
+  return true;
+}
+
+class PI_E727_Controller {
+ public:
+  PI_E727_Controller(char *serialNumberString);
+  ~PI_E727_Controller();
+  void init();
+  double readx();
+  double ready();
+  void move_to_x(double value);
+  void move_to_y(double value);
+  void close();
+  void autozero();
+
+ private:
+  int iD;
+  char serialNumberString[1024];
+};
+
+PI_E727_Controller::PI_E727_Controller(char *serialNumberString) {
+  std::strcpy(this->serialNumberString, serialNumberString);
+}
+
+PI_E727_Controller::~PI_E727_Controller() { close(); }
+
+void PI_E727_Controller::init() {
+  // Connect to the piezo controller
+
+  // PI writes very verbose messages to stdout, so we temporarilly redirect stdout to /dev/null
+  // I am aware this is an ugly hack, but I haven't found a better way.
+  // Probably not thread-safe.
+  fclose(stdout);
+  iD = PI_ConnectUSB(this->serialNumberString);
+  freopen("/dev/tty", "w", stdout);
+
+  // Check if connection was successful
+  if (PI_IsConnected(iD)) {
+    std::cout << "PI Tip/tilt controller S/N " << this->serialNumberString << ": Connection successful" << std::endl;
+  } else {
+    std::cout << "PI Tip/tilt controller S/N " << this->serialNumberString << ": Connection failed" << std::endl;
+    return;
+  }
+
+  // find available axes
+  // char szAxes[1024];
+  // PI_qSAI(iD, szAxes, 1024);
+  // std::cout << "Available axes: " << szAxes << std::endl;
+
+  // find units that qPOS and MOV use
+  // char szUnits[1024];
+  // PI_qPUN(iD, "2", szUnits, 1024);
+  // std::cout << "Units: " << szUnits << std::endl;
+
+  // set servo mode
+  const int iEnable = 1;
+  PI_SVO(iD, "2", &iEnable);
+
+  // check if servo mode is enabled
+  int iServoStatus = 0;
+  PI_qSVO(iD, "2", &iServoStatus);
+  if (iServoStatus != 1) {
+    std::cout << "Error: Servo mode not enabled. Try autozero." << std::endl;
+  }
+
+  // move to 20, wait 10 ms, print position
+  this->move_to_x(20.0);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::cout << "x Position: " << this->readx() << std::endl;
+
+  // move to 0, wait 10 ms, print position
+  this->move_to_x(0.0);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::cout << "x Position: " << this->readx() << std::endl;
+
+  // same for y
+  this->move_to_y(20.0);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::cout << "y Position: " << this->ready() << std::endl;
+
+  this->move_to_y(0.0);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::cout << "y Position: " << this->ready() << std::endl;
+}
+
+double PI_E727_Controller::readx() {
+  double value = 0;
+  PI_qPOS(iD, "2", &value);
+  return value;
+}
+
+double PI_E727_Controller::ready() {
+  double value = 0;
+  PI_qPOS(iD, "1", &value);
+  return value;
+}
+
+void PI_E727_Controller::move_to_x(double value) {
+  const double dValue = value;
+  PI_MOV(iD, "2", &dValue);
+}
+
+void PI_E727_Controller::move_to_y(double value) {
+  const double dValue = value;
+  PI_MOV(iD, "1", &dValue);
+}
+
+// run autozero procedure
+void PI_E727_Controller::autozero() {
+  // axis 1
+  if (!AutoZeroIfNeeded(this->iD, "1")) {
+    std::cout << "Autozero axis 1 failed" << std::endl;
+  }
+
+  // axis 2
+  if (!AutoZeroIfNeeded(this->iD, "2")) {
+    std::cout << "Autozero axis 2 failed" << std::endl;
+  }
+}
+
+void PI_E727_Controller::close() { PI_CloseConnection(iD); }
+
+// initialise tip/tilt stages
+char serial_number1[1024] = "0122040101";
+PI_E727_Controller tip_tilt_stage1(serial_number1);
+
+char serial_number2[1024] = "0122042007";
+PI_E727_Controller tip_tilt_stage2(serial_number2);
+
+static float x1d_open_loop_setpoint = 0.0f;
+
 TSQueue<Measurement> opdQueue;
 TSQueue<Measurement> x1Queue;
 TSQueue<Measurement> x2Queue;
@@ -290,7 +469,6 @@ TSQueue<Measurement> x2dQueue;
 //   }
 // }
 
-
 int setup_ethernet() {
   // setup ethernet connection
   // Create a UDP socket
@@ -316,7 +494,6 @@ int setup_ethernet() {
 }
 
 void run_calculation() {
-
   int sockfd = setup_ethernet();
 
   // Open the output file
@@ -330,8 +507,10 @@ void run_calculation() {
   char buffer[buffer_size];
 
   // initialise filter
-  x1d_lp_filter.setup(x1d_samplingrate, x1d_cutoff);
-  x2d_lp_filter.setup(x1d_samplingrate, x1d_cutoff);
+  x1d_lp_filter.setup(xd_samplingrate, xd_cutoff);
+  x1d_control_lp_filter.setup(xd_samplingrate, xd_control_cutoff);
+  x2d_lp_filter.setup(xd_samplingrate, xd_cutoff);
+  x2d_control_lp_filter.setup(xd_samplingrate, xd_control_cutoff);
   opd_lp_filter.setup(opd_samplingrate, opd_cutoff);
 
   // outputFile << "Time (s), Counter, OPD measurement (m)\n";
@@ -403,10 +582,12 @@ void run_calculation() {
     }
 
     // get and filter x1d
-    float x1d = adc1[0] / adc4[0] * 1.11e3;
+    float x1d = adc1[0] / adc4[0] * 1.11e3 / 2.;
+    float x1d_control_measurement = x1d_control_lp_filter.filter(x1d);
     x1d = x1d_lp_filter.filter(x1d);
 
-    float x2d = adc2[0] / adc5[0] * 1.11e3;
+    float x2d = adc2[0] / adc5[0] * 1.11e3 / 2.;
+    // float x2d_control_measurement = x2d_control_lp_filter.filter(x2d);
     x2d = x2d_lp_filter.filter(x2d);
 
     // enqueue measurement and time
@@ -423,22 +604,43 @@ void run_calculation() {
     static float opd_error_integral = 0.0f;
     static float opd_control_signal = 0.0f;
 
+    static float x1d_error = 0.0f;
+    static float x1d_error_integral = 0.0f;
+    static float x1d_control_signal = 0.0f;
+
     // if RunOpdControl is true, calculate the control signal
     if (RunOpdControl.load()) {
       // calculate error
       opd_error = opd_setpoint.load() - opd_control_measurement;
 
       // calculate integral
-      opd_error_integral += i.load() * opd_error;
+      opd_error_integral += opd_i.load() * opd_error;
 
       // calculate derivative
       // opd_error_derivative = opd_error - opd_error_prev;
 
       // calculate control signal
-      opd_control_signal = p.load() * opd_error + opd_error_integral;
+      opd_control_signal = opd_p.load() * opd_error + opd_error_integral;
 
       // actuate piezo using class interface (takes input in µm)
       opd_stage.move_to(opd_control_signal * 1e-3);
+    }
+
+    if (RunXdControl.load()) {
+      // calculate error
+      x1d_error = x1d_setpoint.load() - x1d_control_measurement;
+
+      // calculate integral
+      x1d_error_integral += xd_i.load() * x1d_error;
+
+      // calculate derivative
+      // x1d_error_derivative = x1d_error - x1d_error_prev;
+
+      // calculate control signal
+      x1d_control_signal = xd_p.load() * x1d_error + x1d_error_integral;
+
+      // actuate piezo using class interface (takes urad as input)
+      tip_tilt_stage1.move_to_x(x1d_control_signal);
     }
 
     // wait 100 µs
@@ -475,30 +677,24 @@ void RenderUI() {
 
   if (ImGui::CollapsingHeader("OPD")) {
     // control mode selector
-    static int loop_select = 0;
+    static int opd_loop_select = 0;
     ImGui::Text("Control mode:");
     ImGui::SameLine();
-    ImGui::RadioButton("Off", &loop_select, 0);
+    ImGui::RadioButton("Off", &opd_loop_select, 0);
     ImGui::SameLine();
-    ImGui::RadioButton("Open loop", &loop_select, 1);
+    ImGui::RadioButton("Open loop", &opd_loop_select, 1);
     ImGui::SameLine();
-    ImGui::RadioButton("Closed loop", &loop_select, 2);
-
-    // if (control_opd) {
-    //     RunOpdControl.store(true);
-    //   } else {
-    //     RunOpdControl.store(false);
-    //   }
+    ImGui::RadioButton("Closed loop", &opd_loop_select, 2);
 
     // run control if "Closed loop" is selected
-    if (loop_select == 2) {
+    if (opd_loop_select == 2) {
       RunOpdControl.store(true);
     } else {
       RunOpdControl.store(false);
     }
 
     // move stage to open loop setpoint if "Open loop" is selected
-    if (loop_select == 1) {
+    if (opd_loop_select == 1) {
       opd_stage.move_to(opd_open_loop_setpoint);
     }
 
@@ -650,8 +846,8 @@ void RenderUI() {
       ImGui::SliderFloat("I", &i_gui, 0.0f, 3e-2f);
 
       // store p, i
-      p.store(p_gui);
-      i.store(i_gui);
+      opd_p.store(p_gui);
+      opd_i.store(i_gui);
 
       const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
 
@@ -727,7 +923,35 @@ void RenderUI() {
     // speeds, in seperate threads
   }
 
+  // PROBLEMS:
+  // - cannot switch from open loop to off or closed loop
+  // - cannot go negative -> copy from old mz_control to get a new zero point, realign setup (I want best contrast for
+  // good measurements!)
+  // - closed loop not implemented yet, do that.
+
   if (ImGui::CollapsingHeader("X position")) {
+    // control mode selector
+    static int xd_loop_select = 0;
+    ImGui::Text("Control mode:");
+    ImGui::SameLine();
+    ImGui::RadioButton("Off", &xd_loop_select, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Open loop", &xd_loop_select, 1);
+    ImGui::SameLine();
+    ImGui::RadioButton("Closed loop", &xd_loop_select, 2);
+
+    // run control if "Closed loop" is selected
+    if (xd_loop_select == 2) {
+      RunXdControl.store(true);
+    } else {
+      RunXdControl.store(false);
+    }
+
+    // open loop
+    if (xd_loop_select == 1) {
+      tip_tilt_stage1.move_to_x(x1d_open_loop_setpoint);
+    }
+
     // real time plot
     static ScrollingBuffer x1_buffer;
     static ScrollingBuffer x2_buffer;
@@ -795,13 +1019,12 @@ void RenderUI() {
     // y axis: auto fit
     static ImPlotAxisFlags x1_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
-    
     static float x1_thickness = 1;
     static ImVec4 x1_color = ImVec4(1, 1, 0, 1);
     static ImVec4 x2_color = ImVec4(1, 0, 0, 1);
 
     // To debug x1, x2, i1, i2
-    
+
     // static ImVec4 i1_color = ImVec4(0, 1, 0, 1);
     // static ImVec4 i2_color = ImVec4(0, 0, 1, 1);
     // if (ImPlot::BeginPlot("##X1_Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
@@ -904,7 +1127,38 @@ void RenderUI() {
       }
       ImGui::TreePop();
     }
-  }
+
+    // Tip/Tilt actuator (piezo)
+    if (ImGui::TreeNode("Tip/Tilt actuator")) {
+      // plot for current piezo position
+      static ImVec4 color = ImVec4(1, 1, 0, 1);
+      static ScrollingBuffer tip_tilt_actuator_buffer;
+      tip_tilt_actuator_buffer.AddPoint(t_gui_x, tip_tilt_stage1.readx());
+
+      if (ImPlot::BeginPlot("##Tip/Tilt actuator", ImVec2(-1, 150 * io.FontGlobalScale))) {
+        ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+        ImPlot::SetNextLineStyle(color, x1_thickness);
+        ImPlot::PlotLine("Tip/Tilt actuator position", &tip_tilt_actuator_buffer.Data[0].x,
+                         &tip_tilt_actuator_buffer.Data[0].y, tip_tilt_actuator_buffer.Data.size(), 0,
+                         tip_tilt_actuator_buffer.Offset, 2 * sizeof(float));
+        ImPlot::EndPlot();
+      }
+
+      float tip_tilt_actuator_measurement = 0.0f;
+
+      // Display measurement
+      ImGui::Text("Current measurement: %.4f", tip_tilt_actuator_measurement);
+
+      // open loop setpoint µm
+      ImGui::SliderFloat("Setpoint", &x1d_open_loop_setpoint, -20.f, 30.0f);
+
+      ImGui::TreePop();
+    }
+
+  }  // end of x position
 
   if (ImGui::CollapsingHeader("Program settings")) {
     ImGui::DragFloat("GUI scale", &io.FontGlobalScale, 0.005f, 0.5, 3.0, "%.2f",
@@ -1032,6 +1286,15 @@ int main(int, char **) {
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   std::thread computeThread(NICEcontrol::run_calculation);
+
+  // init tip/tilt stages
+  NICEcontrol::tip_tilt_stage1.init();  // TODO this really should not be here
+  NICEcontrol::tip_tilt_stage2.init();  // TODO this really should not be here
+
+  // autozero stage 2
+  // autozero stage 2
+  // NICEcontrol::tip_tilt_stage1.autozero();
+  // NICEcontrol::tip_tilt_stage2.autozero();
 
   // Render loop
   while (!glfwWindowShouldClose(window)) {

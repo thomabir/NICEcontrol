@@ -46,7 +46,7 @@ CXXFLAGS += -g -Wall -Wformat
 # CXXFLAGS += -Os
 
 
-LIBS = -lmadlib -lfftw3 -lm -liir
+LIBS = -lmadlib -lfftw3 -lm -liir -lpi_pi_gcs2
 
 ##---------------------------------------------------------------------
 ## OPENGL ES
