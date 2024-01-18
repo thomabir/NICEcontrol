@@ -13,6 +13,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <queue>
@@ -326,6 +327,17 @@ int setup_ethernet() {
   return sockfd;
 }
 
+void move_to_x1d(float target) {
+  // a slow function (takes 1 ms, when it should be 10 us)
+  // it has thus been banished to live in its own thread
+
+  // move tip/tilt stage 1 to x1d
+  tip_tilt_stage1.move_to_x(target);
+}
+
+bool is_first_iteration = true;  // to check if the slow move has been executed yet
+std::future<void> slow_move_future;
+
 void run_calculation() {
   int sockfd = setup_ethernet();
 
@@ -471,11 +483,13 @@ void run_calculation() {
       // calculate control signal
       x1d_control_signal = xd_p.load() * x1d_error + x1d_error_integral;
 
-      // actuate piezo using class interface (takes urad as input)
-      tip_tilt_stage1.move_to_x(x1d_control_signal);
-
-      // print control signal
-      // std::cout << "Control signal: " << x1d_control_signal << std::endl;
+      // actuate piezo actuator
+      // he lives in his own thread because he's slow
+      if (is_first_iteration || slow_move_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        // move_to_x(x1d_control_signal); // too slow, takes 1 ms
+        slow_move_future = std::async(std::launch::async, move_to_x1d, x1d_control_signal);
+        is_first_iteration = false;
+      }
     }
 
     // wait 100 µs
@@ -706,7 +720,6 @@ void RenderUI() {
       ImGui::TreePop();
     }
   }
-
 
   if (ImGui::CollapsingHeader("X position")) {
     // control mode selector
