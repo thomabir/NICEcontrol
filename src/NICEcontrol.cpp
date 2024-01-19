@@ -191,7 +191,7 @@ Iir::Butterworth::LowPass<4> x1d_lp_filter, x2d_lp_filter, x1d_control_lp_filter
 Iir::Butterworth::LowPass<4> opd_lp_filter, opd_control_lp_filter;
 const float xd_samplingrate = 6400.;
 const float xd_cutoff = 50.;
-const float xd_control_cutoff = 5.;
+const float xd_control_cutoff = 50.;
 const float opd_samplingrate = 64000.;
 const float opd_cutoff = 1000.;
 const float opd_control_cutoff = 50.;
@@ -215,8 +215,8 @@ std::atomic<float> x2d_setpoint = 0.0f;  // setpoint used in calculation, clippe
 std::atomic<bool> RunXdControl(false);
 std::mutex XdControlMutex;
 std::condition_variable XdControlCV;
-std::atomic<float> xd_p = 0.0f;
-std::atomic<float> xd_i = 0.0f;
+std::atomic<float> xd_p = 0.4f;
+std::atomic<float> xd_i = 0.007f;
 
 // variables that control the measurement thread
 std::atomic<bool> RunMeasurement(false);
@@ -954,8 +954,8 @@ void RenderUI() {
       ImGui::Text("Control loop parameters:");
 
       // sliders for p ,i
-      ImGui::SliderFloat("P##X1D", &xd_p_gui, 0.0f, 0.1f);
-      ImGui::SliderFloat("I##X1D", &xd_i_gui, 0.0f, 0.1f);
+      ImGui::SliderFloat("P##X1D", &xd_p_gui, 0.0f, 1.0f);
+      ImGui::SliderFloat("I##X1D", &xd_i_gui, 0.0f, 0.05f);
 
       const float x1d_setpoint_min = -100.0f, x1d_setpoint_max = 100.0f;
 
