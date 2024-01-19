@@ -187,20 +187,20 @@ class FFT_calculator {
 };
 
 // iir filters
-Iir::Butterworth::LowPass<4> x1d_lp_filter, x2d_lp_filter, x1d_control_lp_filter, x2d_control_lp_filter;
-Iir::Butterworth::LowPass<4> opd_lp_filter, opd_control_lp_filter;
+Iir::Butterworth::LowPass<2> x1d_lp_filter, x2d_lp_filter, x1d_control_lp_filter, x2d_control_lp_filter;
+Iir::Butterworth::LowPass<2> opd_lp_filter, opd_control_lp_filter;
 const float xd_samplingrate = 6400.;
 const float xd_cutoff = 50.;
 const float xd_control_cutoff = 50.;
 const float opd_samplingrate = 64000.;
 const float opd_cutoff = 1000.;
-const float opd_control_cutoff = 50.;
+const float opd_control_cutoff = 100.;
 
 namespace NICEcontrol {
 
 // OPD control
-float opd_setpoint_gui = 0.001f;           // setpoint entered in GUI, may be out of range
-std::atomic<float> opd_setpoint = 0.001f;  // setpoint used in calculation, clipped to valid range
+float opd_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
+std::atomic<float> opd_setpoint = 0.0f;  // setpoint used in calculation, clipped to valid range
 std::atomic<bool> RunOpdControl(false);
 std::mutex OpdControlMutex;
 std::condition_variable OpdControlCV;
@@ -215,8 +215,8 @@ std::atomic<float> x2d_setpoint = 0.0f;  // setpoint used in calculation, clippe
 std::atomic<bool> RunXdControl(false);
 std::mutex XdControlMutex;
 std::condition_variable XdControlCV;
-std::atomic<float> xd_p = 0.4f;
-std::atomic<float> xd_i = 0.007f;
+std::atomic<float> xd_p = 0.0f;
+std::atomic<float> xd_i = 0.0f;
 
 // variables that control the measurement thread
 std::atomic<bool> RunMeasurement(false);
@@ -342,10 +342,13 @@ void run_calculation() {
   int sockfd = setup_ethernet();
 
   // Open the output file
-  std::ofstream outputFile("adc-data.csv");
+  std::ofstream outputFile("data.csv");
   if (!outputFile) {
     std::cerr << "Failed to open output file." << std::endl;
   }
+
+  // Write header of the CSV file
+  outputFile << "Time (s),Counter,OPD loop closed,OPD (nm),OPD filtered (nm),X1D loop closed,X1D (um),X1D filtered (um)\n";
 
   int count = 0;
   int buffer_size = 1024;
@@ -358,7 +361,7 @@ void run_calculation() {
   x2d_control_lp_filter.setup(xd_samplingrate, xd_control_cutoff);
   opd_lp_filter.setup(opd_samplingrate, opd_cutoff);
 
-  // outputFile << "Time (s), Counter, OPD measurement (m)\n";
+  
 
   while (true) {
     {
@@ -402,17 +405,6 @@ void run_calculation() {
       adc3[i] = receivedDataInt[6 * i + 3] / 1000.;  // opd
       adc4[i] = receivedDataInt[6 * i + 4];          // i1
       adc5[i] = receivedDataInt[6 * i + 5];          // i2
-
-      // convert from millidegree to rad
-      // receivedData[i] = receivedDataInt[2*i+1] * 1e-3 * M_PI / 180.;
-
-      // from rad to nm, assuming 633 nm  = 2 pi rad
-      // receivedData[i] *= 633. / (2. * M_PI);
-
-      // save to file: current time, counter, phase
-      // outputFile << t << "," << counter[i] << "," << receivedData[i] << "\n";
-      // outputFile << t << "," << counter[i] << "," << adc1[i] << "," << adc2[i] << "," << adc3[i] << "," << adc4[i] <<
-      // "\n";
     }
 
     // filter opd by piping the 10 new measurements through the filter
@@ -491,9 +483,14 @@ void run_calculation() {
         is_first_iteration = false;
       }
     }
+  
+    // every 6th iteration of this loop, log to csv
+    if (count % 6 == 0) {
+      // Write log to the CSV file
+        outputFile << t << "," << count << "," << RunOpdControl.load() << "," << opd << "," << opd_control_measurement << "," << RunXdControl.load() << "," << x1d << "," << x1d_control_measurement << "\n";
+    }
+    
 
-    // wait 100 µs
-    // std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
 }
 
@@ -512,15 +509,15 @@ void RenderUI() {
 
   // opd control gui parameters
   static int opd_loop_select = 0;
-  static float opd_p_gui = 0.125f;
-  static float opd_i_gui = 0.007f;
+  static float opd_p_gui = 0.0f;
+  static float opd_i_gui = 0.004f;
   opd_p.store(opd_p_gui);
   opd_i.store(opd_i_gui);
 
   // x1d control gui parameters
   static int xd_loop_select = 0;
-  static float xd_p_gui = 0.001f;
-  static float xd_i_gui = 0.001f;
+  static float xd_p_gui = 0.4f;
+  static float xd_i_gui = 0.007f;
   xd_p.store(xd_p_gui);
   xd_i.store(xd_i_gui);
 
@@ -593,6 +590,7 @@ void RenderUI() {
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
     static ImVec4 fft_color = ImVec4(1, 1, 0, 1);
+    static ImVec4 setpoint_color = ImVec4(1, 1, 1, 1);
     static float thickness = 1;
 
     if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
@@ -604,6 +602,7 @@ void RenderUI() {
       ImPlot::PlotLine("Measurement", &opd_buffer.Data[0].x, &opd_buffer.Data[0].y, opd_buffer.Data.size(), 0,
                        opd_buffer.Offset, 2 * sizeof(float));
       if (plot_setpoint) {
+        ImPlot::SetNextLineStyle(setpoint_color, thickness);
         ImPlot::PlotLine("Setpoint", &setpoint_buffer.Data[0].x, &setpoint_buffer.Data[0].y,
                          setpoint_buffer.Data.size(), 0, setpoint_buffer.Offset, 2 * sizeof(float));
       }
@@ -612,7 +611,7 @@ void RenderUI() {
 
     if (ImGui::TreeNode("FFT##OPD")) {
       // set up fft
-      const static int fft_size = 1024;
+      const static int fft_size = 1024*8*8;
       static double fft_power[fft_size / 2];
       static double fft_freq[fft_size / 2];
       static FFT_calculator fft(fft_size, 6400., &opd_buffer, fft_power, fft_freq);
@@ -624,12 +623,12 @@ void RenderUI() {
       static float fft_thickness = 3;
       static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
       static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None;  // ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-      if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 300 * io.FontGlobalScale))) {
+      if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 500 * io.FontGlobalScale))) {
         ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
         ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
         ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, 10, 3200);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 1e8);
+        ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 10, 1e13);
         ImPlot::SetNextLineStyle(fft_color, fft_thickness);
         ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size / 2);
         ImPlot::EndPlot();
