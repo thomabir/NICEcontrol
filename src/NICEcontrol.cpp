@@ -271,38 +271,6 @@ TSQueue<Measurement> i2Queue;
 TSQueue<Measurement> x1dQueue;
 TSQueue<Measurement> x2dQueue;
 
-// void run_calculation() {
-//   static float measurement = 0.0f;
-
-//   // outputFile.open("data.csv");
-//   // outputFile << "Time (ms),Measurement\n";
-
-//   while (true) {
-//     {
-//       std::unique_lock<std::mutex> lock(MeasurementMutex);
-//       MeasurementCV.wait(lock, [] { return RunMeasurement.load(); });
-//     }
-
-//     // generate mock measurement with gaussian noise
-//     static double mean = 0.0;
-//     static double stddev = 0.1;
-//     static std::default_random_engine generator;
-//     static std::normal_distribution<double> dist(mean, stddev);
-//     auto noise = dist(generator);
-//     measurement = opd_setpoint + noise;
-//     auto t = getTime();
-
-//     // enqueue measurement and time
-//     opdQueue.push({t, measurement});
-
-//     // Write measurement and time to the CSV file
-//     // outputFile << currentTime << "," << measurement.load() << "\n";
-
-//     // wait 100 µs
-//     std::this_thread::sleep_for(std::chrono::microseconds(100));
-//   }
-// }
-
 int setup_ethernet() {
   // setup ethernet connection
   // Create a UDP socket
@@ -342,13 +310,13 @@ void run_calculation() {
   int sockfd = setup_ethernet();
 
   // Open the output file
-  std::ofstream outputFile("data.csv");
-  if (!outputFile) {
-    std::cerr << "Failed to open output file." << std::endl;
-  }
+  // std::ofstream outputFile("data.csv");
+  // if (!outputFile) {
+  //   std::cerr << "Failed to open output file." << std::endl;
+  // }
 
   // Write header of the CSV file
-  outputFile << "Time (s),Counter,OPD loop closed,OPD (nm),OPD filtered (nm),X1D loop closed,X1D (um),X1D filtered (um)\n";
+  // outputFile << "Time (s),Counter,OPD loop closed,OPD (nm),OPD filtered (nm),X1D loop closed,X1D (um),X1D filtered (um)\n";
 
   int count = 0;
   int buffer_size = 1024;
@@ -365,7 +333,7 @@ void run_calculation() {
 
   while (true) {
     {
-      std::unique_lock<std::mutex> lock(MeasurementMutex);  // the only purpose of that lock is to run/stop measurement?
+      std::unique_lock<std::mutex> lock(MeasurementMutex);
       MeasurementCV.wait(lock, [] { return RunMeasurement.load(); });
     }
 
@@ -1099,9 +1067,11 @@ int main(int, char **) {
   // bool show_another_window = false;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
+  std::cout << "Starting run_calculation" << std::endl;
   std::thread computeThread(NICEcontrol::run_calculation);
 
   // call setupActuators
+  std::cout << "Starting setupActuators" << std::endl;
   NICEcontrol::setupActuators();
 
   // Render loop
