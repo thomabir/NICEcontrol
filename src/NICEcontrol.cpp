@@ -111,6 +111,10 @@ struct ScrollingBuffer {
     MaxSize = max_size;
     Offset = 0;
     Data.reserve(MaxSize);
+    // fill with zeros
+    for (int i = 0; i < MaxSize; i++) {
+      Data.push_back(ImVec2(0, 0));
+    }
   }
   void AddPoint(float x, float y) {
     if (Data.size() < MaxSize)
@@ -125,6 +129,16 @@ struct ScrollingBuffer {
       Data.shrink(0);
       Offset = 0;
     }
+  }
+
+  // get last n points
+  ImVector<ImVec2> GetLastN(int n) {
+    ImVector<ImVec2> last_n;
+    last_n.reserve(n);
+    for (int i = 0; i < n; i++) {
+      last_n.push_back(Data[(Offset - n + i + MaxSize) % MaxSize]);
+    }
+    return last_n;
   }
 };
 
@@ -612,22 +626,27 @@ void RenderUI() {
       // calculate mean and std of OPD buffer
       static float mean = 0.0f;
       static float stddev = 0.0f;
+      const int N_points_stats = 10000;
 
-      if (opd_buffer.Data.size() > 0) {
-        // calculate mean
-        float sum = 0.0f;
-        for (auto &p : opd_buffer.Data) {
-          sum += p.y;
+      
+      if (opd_buffer.Data.size() > N_points_stats+2) {
+        // get the last 1000 measurements using ImVector<ImVec2> GetLastN(int n)
+        auto last_1000_measurements_data = opd_buffer.GetLastN(N_points_stats);
+        // get the y values
+        std::vector<float> last_1000_measurements;
+        for (auto &m : last_1000_measurements_data) {
+          last_1000_measurements.push_back(m.y);
         }
-        mean = sum / opd_buffer.Data.size();
 
-        // calculate std
-        float sum_sq = 0.0f;
-        for (auto &p : opd_buffer.Data) {
-          sum_sq += (p.y - mean) * (p.y - mean);
-        }
-        stddev = sqrt(sum_sq / opd_buffer.Data.size());
+        // calculate mean and stdev
+        mean = std::accumulate(last_1000_measurements.begin(), last_1000_measurements.end(), 0.0) / last_1000_measurements.size();
+        float sq_sum = std::inner_product(last_1000_measurements.begin(), last_1000_measurements.end(), last_1000_measurements.begin(), 0.0);
+        stddev = std::sqrt(sq_sum / last_1000_measurements.size() - mean * mean);
       }
+  
+      
+
+
 
       // Display mean and std
       ImGui::Text("Mean: %.4f", mean);
