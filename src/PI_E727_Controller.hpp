@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 class PI_E727_Controller {
  public:
   PI_E727_Controller(char *serialNumberString);
@@ -11,6 +13,7 @@ class PI_E727_Controller {
   void move_to_y(double value);
   void close();
   void autozero();
+  int autozero_axis(int ID, const std::string axis);
 
  private:
   int iD;

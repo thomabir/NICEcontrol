@@ -24,7 +24,7 @@ BUILD_DIR = build
 SOURCES = $(SRC_DIR)/NICEcontrol.cpp
 
 # add rest of the SRC_DIR
-SOURCES += $(SRC_DIR)/PI_E727_Controller.cpp $(SRC_DIR)/MCL_NanoDrive.cpp
+SOURCES += $(SRC_DIR)/PI_E727_Controller.cpp $(SRC_DIR)/MCL_NanoDrive.cpp $(SRC_DIR)/PI_E754_Controller.cpp
 
 # add general imgui sources
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp

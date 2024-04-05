@@ -1,22 +1,22 @@
-#include "PI_E727_Controller.hpp"
+#include "PI_E754_Controller.hpp"
 
 #include <cstring>
 
 #include "../lib/pi/AutoZeroSample.h"
 #include "../lib/pi/PI_GCS2_DLL.h"
 
-PI_E727_Controller::PI_E727_Controller(char *serialNumberString) {
+PI_E754_Controller::PI_E754_Controller(char *serialNumberString) {
   // set serial number
   std::strcpy(this->serialNumberString, serialNumberString);
 
   // set name
-  std::strcpy(this->name, "PI E-727 Tip/Tilt Piezo Controller S/N ");
+  std::strcpy(this->name, "PI E-754 Tip/Tilt Piezo Controller S/N ");
   std::strcat(this->name, serialNumberString);
 }
 
-PI_E727_Controller::~PI_E727_Controller() { close(); }
+PI_E754_Controller::~PI_E754_Controller() { close(); }
 
-void PI_E727_Controller::init() {
+void PI_E754_Controller::init() {
   // Connect to the piezo controller
 
   // PI writes very verbose messages to stdout, so we temporarilly redirect stdout to /dev/null
@@ -54,7 +54,6 @@ void PI_E727_Controller::init() {
   // set servo mode
   const int iEnable = 1;
   PI_SVO(iD, "1", &iEnable);
-  PI_SVO(iD, "2", &iEnable);
 
   // check if both axes servo modes are enabled. Print error if at least one is not enabled.
   int iServoStatus = 0;
@@ -62,43 +61,27 @@ void PI_E727_Controller::init() {
   if (iServoStatus != 1) {
     std::cout << this->name << ": Error: Cannot turn on servo on axis 1" << std::endl;
   }
-  PI_qSVO(iD, "2", &iServoStatus);
-  if (iServoStatus != 1) {
-    std::cout << this->name << ": Error: Cannot turn on servo on axis 2" << std::endl;
-  }
 }
 
-double PI_E727_Controller::readx() {
-  double value = 0;
-  PI_qPOS(iD, "2", &value);
-  return value - offset;
-}
-
-double PI_E727_Controller::ready() {
+double PI_E754_Controller::read() {
   double value = 0;
   PI_qPOS(iD, "1", &value);
   return value - offset;
 }
 
-void PI_E727_Controller::move_to_x(double value) {
-  const double dValue = value + offset;
-  PI_MOV(iD, "2", &dValue);
-}
-
-void PI_E727_Controller::move_to_y(double value) {
+void PI_E754_Controller::move_to(double value) {
   const double dValue = value + offset;
   PI_MOV(iD, "1", &dValue);
 }
 
 // run autozero procedure
-void PI_E727_Controller::autozero() {
+void PI_E754_Controller::autozero() {
   autozero_axis(iD, "1");
-  autozero_axis(iD, "2");
 }
 
-void PI_E727_Controller::close() { PI_CloseConnection(iD); }
+void PI_E754_Controller::close() { PI_CloseConnection(iD); }
 
-int PI_E727_Controller::autozero_axis(int ID, const std::string axis) {
+int PI_E754_Controller::autozero_axis(int ID, const std::string axis) {
   BOOL bAutoZeroed;
 
   if (!PI_qATZ(ID, axis.c_str(), &bAutoZeroed)) {

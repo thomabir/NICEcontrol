@@ -39,6 +39,7 @@
 // Actuators
 #include "MCL_NanoDrive.hpp"       // Controller for MCL OPD Stage
 #include "PI_E727_Controller.hpp"  // Controller for PI Tip/Tilt Stages
+#include "PI_E754_Controller.hpp"  // Controller for PI OPD Stage
 
 // Windows
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
@@ -239,8 +240,10 @@ std::condition_variable MeasurementCV;
 std::ofstream outputFile;
 
 // initialise opd stage
-MCL_OPDStage opd_stage;
+// MCL_OPDStage opd_stage;
 static float opd_open_loop_setpoint = 0.0f;
+char serial_number[1024] = "123076463";
+PI_E754_Controller opd_stage(serial_number);
 
 // initialise tip/tilt stages
 char serial_number1[1024] = "0122040101";
@@ -317,8 +320,18 @@ void move_to_x1d(float target) {
   tip_tilt_stage1.move_to_x(target);
 }
 
-bool is_first_iteration = true;  // to check if the slow move has been executed yet
-std::future<void> slow_move_future;
+void move_to_opd(float target) {
+  // a slow function (takes 1 ms, when it should be 10 us)
+  // it has thus been banished to live in its own thread
+
+  // move opd stage to opd
+  opd_stage.move_to(target);
+}
+
+bool is_first_x1d_iteration = true;  // to check if the slow move has been executed yet
+bool is_first_opd_iteration = true;  // to check if the slow move has been executed yet
+std::future<void> slow_x1d_move_future;
+std::future<void> slow_opd_move_future;
 
 void run_calculation() {
   int sockfd = setup_ethernet();
@@ -368,7 +381,7 @@ void run_calculation() {
     }
 
     // Convert received data to vector of 10 ints
-    int receivedDataInt[6 * 10];
+    int receivedDataInt[3 * 10];
     std::memcpy(receivedDataInt, buffer, sizeof(int) * 6 * 10);
 
     // data comes in like this: 10 x (count, x1, x2, opd, i1, i2)
@@ -440,8 +453,12 @@ void run_calculation() {
       // calculate control signal
       opd_control_signal = opd_p.load() * opd_error + opd_error_integral;
 
-      // actuate piezo using class interface (takes input in µm)
-      opd_stage.move_to(opd_control_signal * 1e-3);
+      // actuate piezo actuator
+      // he lives in his own thread because he's slow
+      if (is_first_opd_iteration || slow_opd_move_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        slow_opd_move_future = std::async(std::launch::async, move_to_opd, opd_control_signal * 1e-3);
+        is_first_opd_iteration = false;
+      }
     }
 
     if (RunXdControl.load()) {
@@ -459,18 +476,18 @@ void run_calculation() {
 
       // actuate piezo actuator
       // he lives in his own thread because he's slow
-      if (is_first_iteration || slow_move_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+      if (is_first_x1d_iteration || slow_x1d_move_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         // move_to_x(x1d_control_signal); // too slow, takes 1 ms
-        slow_move_future = std::async(std::launch::async, move_to_x1d, x1d_control_signal);
-        is_first_iteration = false;
+        slow_x1d_move_future = std::async(std::launch::async, move_to_x1d, x1d_control_signal);
+        is_first_x1d_iteration = false;
       }
     }
   
-    // every 6th iteration of this loop, log to csv
-    if (count % 6 == 0) {
-      // Write log to the CSV file
-        outputFile << t << "," << count << "," << RunOpdControl.load() << "," << opd << "," << opd_control_measurement << "," << RunXdControl.load() << "," << x1d << "," << x1d_control_measurement << "\n";
-    }
+    // // every 6th iteration of this loop, log to csv
+    // if (count % 6 == 0) {
+    //   // Write log to the CSV file
+    //     outputFile << t << "," << count << "," << RunOpdControl.load() << "," << opd << "," << opd_control_measurement << "," << RunXdControl.load() << "," << x1d << "," << x1d_control_measurement << "\n";
+    // }
     
 
   }
@@ -491,8 +508,8 @@ void RenderUI() {
 
   // opd control gui parameters
   static int opd_loop_select = 0;
-  static float opd_p_gui = 0.0f;
-  static float opd_i_gui = 0.004f;
+  static float opd_p_gui = 0.470f;
+  static float opd_i_gui = 0.009f;
   opd_p.store(opd_p_gui);
   opd_i.store(opd_i_gui);
 
@@ -678,7 +695,7 @@ void RenderUI() {
       ImGui::Text("Current measurement: %.4f", piezo_measurement);
 
       // open loop setpoint µm
-      ImGui::SliderFloat("Setpoint##OPD", &opd_open_loop_setpoint, -20.f, 30.0f);
+      ImGui::SliderFloat("Setpoint##OPD", &opd_open_loop_setpoint, 0.f, 15.0f);
 
       ImGui::TreePop();
     }
