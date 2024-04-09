@@ -50,16 +50,16 @@ static void glfw_error_callback(int error, const char *description) {
   fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-float getTime() {
+double getTime() {
   // returns time in seconds since the start of the program
   static auto t0 = std::chrono::system_clock::now();
   auto tnow = std::chrono::system_clock::now();
-  float t_since_start = std::chrono::duration_cast<std::chrono::microseconds>(tnow - t0).count() / 1.0e6;
+  double t_since_start = std::chrono::duration_cast<std::chrono::microseconds>(tnow - t0).count() / 1.0e6;
   return t_since_start;
 }
 
 struct Measurement {
-  float time;
+  double time;
   float value;
 };
 
