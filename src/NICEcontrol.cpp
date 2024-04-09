@@ -63,6 +63,12 @@ struct Measurement {
   float value;
 };
 
+template <typename T, typename U>
+struct MeasurementT {
+  T time;
+  U value;
+};
+
 // thread-safe queue
 template <typename T>
 class TSQueue {
@@ -288,8 +294,8 @@ TSQueue<Measurement> i2Queue;
 TSQueue<Measurement> x1dQueue;
 TSQueue<Measurement> x2dQueue;
 
-TSQueue<Measurement> adc1Queue;
-TSQueue<Measurement> adc2Queue;
+TSQueue<MeasurementT<double, float>> adc1Queue;
+TSQueue<MeasurementT<double, float>> adc2Queue;
 
 int setup_ethernet() {
   // setup ethernet connection
@@ -399,7 +405,7 @@ void run_calculation() {
     // int counter[10];
 
     for (int i = 0; i < 10; i++) {
-      counter[i] = receivedDataInt[6 * i];
+      counter[i] = receivedDataInt[3 * i];
       adc1[i] = - receivedDataInt[3 * i + 1] / 1000.;         // adc1
       adc2[i] = receivedDataInt[3 * i + 2];          // adc2
       adc3[i] = 0; // receivedDataInt[3 * i + 3] / 1000.;  
@@ -438,7 +444,8 @@ void run_calculation() {
     // enqueue adc measurements
     static const float sampling_rate = 128e3;
     for (int i = 0; i < 10; i++) {
-      float tnow = t + float(i) / sampling_rate;
+      double tnow = t + double(i) / sampling_rate;
+      // std::cout << "counter: " << counter[i] << std::endl;
       adc1Queue.push({tnow, adc1[i]});
       adc2Queue.push({tnow, adc2[i]});
     }
@@ -560,11 +567,13 @@ void RenderUI() {
     // plot of ADC1 and ADC2
     static ScrollingBuffer adc1_buffer, adc2_buffer;
 
-    static float t_gui = 0;
+    static float t_adc = 0;
 
-    // if measurement is running, update gui time.
+    // get lates time in ADC queue
     if (RunMeasurement.load()) {
-      t_gui = getTime();
+      if (!adc1Queue.isempty()) {
+        t_adc = adc1Queue.back().time;
+      }
     }
 
     // add the entire MeasurementQueue to the buffer
@@ -583,7 +592,7 @@ void RenderUI() {
     }
 
     static float history_length = 0.01f;
-    ImGui::SliderFloat("History", &history_length, 0.0001, 0.01, "%.3f s", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("History", &history_length, 0.0001, 0.1, "%.5f s", ImGuiSliderFlags_Logarithmic);
 
     // x axis: no ticks
     static ImPlotAxisFlags xflags = ImPlotAxisFlags_None;
@@ -595,9 +604,9 @@ void RenderUI() {
     static ImVec4 adc2_color = ImVec4(0, 1, 0, 1);
     static float thickness = 1;
 
-    if (ImPlot::BeginPlot("##ADC", ImVec2(-1, 200 * io.FontGlobalScale))) {
+    if (ImPlot::BeginPlot("##ADC", ImVec2(-1, 400 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_adc - history_length, t_adc, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       ImPlot::SetNextLineStyle(adc1_color, thickness);
