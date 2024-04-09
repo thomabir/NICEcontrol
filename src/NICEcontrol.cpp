@@ -288,6 +288,9 @@ TSQueue<Measurement> i2Queue;
 TSQueue<Measurement> x1dQueue;
 TSQueue<Measurement> x2dQueue;
 
+TSQueue<Measurement> adc1Queue;
+TSQueue<Measurement> adc2Queue;
+
 int setup_ethernet() {
   // setup ethernet connection
   // Create a UDP socket
@@ -325,6 +328,7 @@ void move_to_opd(float target) {
   // it has thus been banished to live in its own thread
 
   // move opd stage to opd
+  // std ::cout << "Moving to " << target << std::endl;
   opd_stage.move_to(target);
 }
 
@@ -337,13 +341,13 @@ void run_calculation() {
   int sockfd = setup_ethernet();
 
   // Open the output file
-  // std::ofstream outputFile("data.csv");
-  // if (!outputFile) {
-  //   std::cerr << "Failed to open output file." << std::endl;
-  // }
+  std::ofstream outputFile("data.csv");
+  if (!outputFile) {
+    std::cerr << "Failed to open output file." << std::endl;
+  }
 
   // Write header of the CSV file
-  // outputFile << "Time (s),Counter,OPD loop closed,OPD (nm),OPD filtered (nm),X1D loop closed,X1D (um),X1D filtered (um)\n";
+  outputFile << "Time (s),OPD (nm)\n";
 
   int count = 0;
   int buffer_size = 1024;
@@ -382,10 +386,11 @@ void run_calculation() {
 
     // Convert received data to vector of 10 ints
     int receivedDataInt[3 * 10];
-    std::memcpy(receivedDataInt, buffer, sizeof(int) * 6 * 10);
+    std::memcpy(receivedDataInt, buffer, sizeof(int) * 3 * 10);
 
     // data comes in like this: 10 x (count, x1, x2, opd, i1, i2)
 
+    static int counter[10];
     static float adc1[10];
     static float adc2[10];
     static float adc3[10];
@@ -394,23 +399,23 @@ void run_calculation() {
     // int counter[10];
 
     for (int i = 0; i < 10; i++) {
-      // counter[i] = receivedDataInt[6 * i];
-      adc1[i] = receivedDataInt[6 * i + 1];          // x1
-      adc2[i] = receivedDataInt[6 * i + 2];          // x2
-      adc3[i] = receivedDataInt[6 * i + 3] / 1000.;  // opd
-      adc4[i] = receivedDataInt[6 * i + 4];          // i1
-      adc5[i] = receivedDataInt[6 * i + 5];          // i2
+      counter[i] = receivedDataInt[6 * i];
+      adc1[i] = - receivedDataInt[3 * i + 1] / 1000.;         // adc1
+      adc2[i] = receivedDataInt[3 * i + 2];          // adc2
+      adc3[i] = 0; // receivedDataInt[3 * i + 3] / 1000.;  
+      adc4[i] = 0; //receivedDataInt[6 * i + 4];          // i1
+      adc5[i] = 0; // receivedDataInt[6 * i + 5];          // i2
     }
 
     // filter opd by piping the 10 new measurements through the filter
     float opd;
     for (int i = 0; i < 10; i++) {
-      opd = opd_lp_filter.filter(adc3[i]);
+      opd = opd_lp_filter.filter(adc1[i]);
     }
 
     float opd_control_measurement;
     for (int i = 0; i < 10; i++) {
-      opd_control_measurement = opd_control_lp_filter.filter(adc3[i]);
+      opd_control_measurement = opd_control_lp_filter.filter(adc1[i]);
     }
 
     // get and filter x1d
@@ -429,6 +434,20 @@ void run_calculation() {
     i2Queue.push({t, adc5[0]});
     x1dQueue.push({t, x1d});
     x2dQueue.push({t, x2d});
+
+    // enqueue adc measurements
+    static const float sampling_rate = 128e3;
+    for (int i = 0; i < 10; i++) {
+      float tnow = t + float(i) / sampling_rate;
+      adc1Queue.push({tnow, adc1[i]});
+      adc2Queue.push({tnow, adc2[i]});
+    }
+
+
+
+    // write to file
+    // outputFile << t << "," << opd << "\n";
+
 
     // variables for control
     static float opd_error = 0.0f;
@@ -452,6 +471,7 @@ void run_calculation() {
 
       // calculate control signal
       opd_control_signal = opd_p.load() * opd_error + opd_error_integral;
+
 
       // actuate piezo actuator
       // he lives in his own thread because he's slow
@@ -533,6 +553,63 @@ void RenderUI() {
   } else {
     stopMeasurement();
   }
+
+  // header: ADC measurements
+  if (ImGui::CollapsingHeader("ADC Measurements")) {
+
+    // plot of ADC1 and ADC2
+    static ScrollingBuffer adc1_buffer, adc2_buffer;
+
+    static float t_gui = 0;
+
+    // if measurement is running, update gui time.
+    if (RunMeasurement.load()) {
+      t_gui = getTime();
+    }
+
+    // add the entire MeasurementQueue to the buffer
+    if (!adc1Queue.isempty()) {
+      while (!adc1Queue.isempty()) {
+        auto m = adc1Queue.pop();
+        adc1_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    if (!adc2Queue.isempty()) {
+      while (!adc2Queue.isempty()) {
+        auto m = adc2Queue.pop();
+        adc2_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    static float history_length = 0.01f;
+    ImGui::SliderFloat("History", &history_length, 0.0001, 0.01, "%.3f s", ImGuiSliderFlags_Logarithmic);
+
+    // x axis: no ticks
+    static ImPlotAxisFlags xflags = ImPlotAxisFlags_None;
+
+    // y axis: auto fit
+    static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+
+    static ImVec4 adc1_color = ImVec4(1, 0, 0, 1);
+    static ImVec4 adc2_color = ImVec4(0, 1, 0, 1);
+    static float thickness = 1;
+
+    if (ImPlot::BeginPlot("##ADC", ImVec2(-1, 200 * io.FontGlobalScale))) {
+      ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(adc1_color, thickness);
+      ImPlot::PlotLine("ADC1", &adc1_buffer.Data[0].x, &adc1_buffer.Data[0].y, adc1_buffer.Data.size(), 0,
+                       adc1_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(adc2_color, thickness);
+      ImPlot::PlotLine("ADC2", &adc2_buffer.Data[0].x, &adc2_buffer.Data[0].y, adc2_buffer.Data.size(), 0,
+                       adc2_buffer.Offset, 2 * sizeof(float));
+      ImPlot::EndPlot();
+    }
+  }
+
 
   if (ImGui::CollapsingHeader("OPD")) {
     // control mode selector

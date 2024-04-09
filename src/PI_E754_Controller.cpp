@@ -70,7 +70,7 @@ double PI_E754_Controller::read() {
 }
 
 void PI_E754_Controller::move_to(double value) {
-  const double dValue = value + offset;
+  double dValue = value + offset;
   PI_MOV(iD, "1", &dValue);
 }
 
