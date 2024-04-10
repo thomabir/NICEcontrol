@@ -46,6 +46,9 @@
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif
 
+// Constants
+#define PI 3.14159265359
+
 static void glfw_error_callback(int error, const char *description) {
   fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
@@ -391,63 +394,71 @@ void run_calculation() {
     }
 
     // Convert received data to vector of 10 ints
-    int receivedDataInt[3 * 10];
-    std::memcpy(receivedDataInt, buffer, sizeof(int) * 3 * 10);
-
-    // data comes in like this: 10 x (count, x1, x2, opd, i1, i2)
+    int receivedDataInt[12 * 10];
+    std::memcpy(receivedDataInt, buffer, sizeof(int) * 12 * 10);
 
     static int counter[10];
-    static float adc1[10];
-    static float adc2[10];
-    static float adc3[10];
-    static float adc4[10];
-    static float adc5[10];
-    // int counter[10];
+    static float adc_shear1[10];
+    static float adc_shear2[10];
+    static float adc_shear3[10];
+    static float adc_shear4[10];
+    static float adc_point1[10];
+    static float adc_point2[10];
+    static float adc_point3[10];
+    static float adc_point4[10];
+    static float adc_sine_ref[10];
+    static float adc_opd_ref[10];
+    static float opd_nm[10];
 
     for (int i = 0; i < 10; i++) {
-      counter[i] = receivedDataInt[3 * i];
-      adc1[i] = - receivedDataInt[3 * i + 1] / 1000.;         // adc1
-      adc2[i] = receivedDataInt[3 * i + 2];          // adc2
-      adc3[i] = 0; // receivedDataInt[3 * i + 3] / 1000.;  
-      adc4[i] = 0; //receivedDataInt[6 * i + 4];          // i1
-      adc5[i] = 0; // receivedDataInt[6 * i + 5];          // i2
+      counter[i] = receivedDataInt[12 * i];
+      adc_shear1[i] = receivedDataInt[12 * i + 1];
+      adc_shear2[i] = receivedDataInt[12 * i + 2];
+      adc_shear3[i] = receivedDataInt[12 * i + 3];
+      adc_shear4[i] = receivedDataInt[12 * i + 4];
+      adc_point1[i] = receivedDataInt[12 * i + 5];
+      adc_point2[i] = receivedDataInt[12 * i + 6];
+      adc_point3[i] = receivedDataInt[12 * i + 7];
+      adc_point4[i] = receivedDataInt[12 * i + 8];
+      adc_sine_ref[i] = receivedDataInt[12 * i + 9];
+      adc_opd_ref[i] = receivedDataInt[12 * i + 10];
+      opd_nm[i] = float(receivedDataInt[12 * i + 11]) / (2 * PI * 10000.) * 360.; //* 1550.; // 0.1 mrad -> nm
     }
 
     // filter opd by piping the 10 new measurements through the filter
     float opd;
     for (int i = 0; i < 10; i++) {
-      opd = opd_lp_filter.filter(adc1[i]);
+      opd = opd_lp_filter.filter(opd_nm[i]);
     }
 
     float opd_control_measurement;
     for (int i = 0; i < 10; i++) {
-      opd_control_measurement = opd_control_lp_filter.filter(adc1[i]);
+      opd_control_measurement = opd_control_lp_filter.filter(opd_nm[i]);
     }
 
     // get and filter x1d
-    float x1d = x1d_lp_filter.filter(adc1[0] / adc4[0] * 1.11e3 / 2.);
-    float x1d_control_measurement = x1d_control_lp_filter.filter(adc1[0] / adc4[0] * 1.11e3 / 2.);
+    // float x1d = x1d_lp_filter.filter(adc1[0] / adc4[0] * 1.11e3 / 2.);
+    // float x1d_control_measurement = x1d_control_lp_filter.filter(adc1[0] / adc4[0] * 1.11e3 / 2.);
 
-    float x2d = adc2[0] / adc5[0] * 1.11e3 / 2.;
-    // float x2d_control_measurement = x2d_control_lp_filter.filter(x2d);
-    x2d = x2d_lp_filter.filter(x2d);
+    // float x2d = adc2[0] / adc5[0] * 1.11e3 / 2.;
+    // x2d = x2d_lp_filter.filter(x2d);
 
     // enqueue measurement and time
     opdQueue.push({t, opd});
-    x1Queue.push({t, adc1[0]});
-    x2Queue.push({t, adc2[0]});
-    i1Queue.push({t, adc4[0]});
-    i2Queue.push({t, adc5[0]});
-    x1dQueue.push({t, x1d});
-    x2dQueue.push({t, x2d});
+    // x1Queue.push({t, adc1[0]});
+    // x2Queue.push({t, adc2[0]});
+    // i1Queue.push({t, adc4[0]});
+    // i2Queue.push({t, adc5[0]});
+    // x1dQueue.push({t, x1d});
+    // x2dQueue.push({t, x2d});
 
     // enqueue adc measurements
     static const float sampling_rate = 128e3;
     for (int i = 0; i < 10; i++) {
       double tnow = t + double(i) / sampling_rate;
       // std::cout << "counter: " << counter[i] << std::endl;
-      adc1Queue.push({tnow, adc1[i]});
-      adc2Queue.push({tnow, adc2[i]});
+      adc1Queue.push({tnow, adc_shear1[i]});
+      adc2Queue.push({tnow, adc_opd_ref[i]});
     }
 
 
@@ -488,34 +499,27 @@ void run_calculation() {
       }
     }
 
-    if (RunXdControl.load()) {
-      // calculate error
-      x1d_error = x1d_control_measurement - x1d_setpoint.load();
+    // if (RunXdControl.load()) {
+    //   // calculate error
+    //   x1d_error = x1d_control_measurement - x1d_setpoint.load();
 
-      // calculate integral
-      x1d_error_integral += xd_i.load() * x1d_error;
+    //   // calculate integral
+    //   x1d_error_integral += xd_i.load() * x1d_error;
 
-      // calculate derivative
-      // x1d_error_derivative = x1d_error - x1d_error_prev;
+    //   // calculate derivative
+    //   // x1d_error_derivative = x1d_error - x1d_error_prev;
 
-      // calculate control signal
-      x1d_control_signal = xd_p.load() * x1d_error + x1d_error_integral;
+    //   // calculate control signal
+    //   x1d_control_signal = xd_p.load() * x1d_error + x1d_error_integral;
 
-      // actuate piezo actuator
-      // he lives in his own thread because he's slow
-      if (is_first_x1d_iteration || slow_x1d_move_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-        // move_to_x(x1d_control_signal); // too slow, takes 1 ms
-        slow_x1d_move_future = std::async(std::launch::async, move_to_x1d, x1d_control_signal);
-        is_first_x1d_iteration = false;
-      }
-    }
-  
-    // // every 6th iteration of this loop, log to csv
-    // if (count % 6 == 0) {
-    //   // Write log to the CSV file
-    //     outputFile << t << "," << count << "," << RunOpdControl.load() << "," << opd << "," << opd_control_measurement << "," << RunXdControl.load() << "," << x1d << "," << x1d_control_measurement << "\n";
+    //   // actuate piezo actuator
+    //   // he lives in his own thread because he's slow
+    //   if (is_first_x1d_iteration || slow_x1d_move_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+    //     // move_to_x(x1d_control_signal); // too slow, takes 1 ms
+    //     slow_x1d_move_future = std::async(std::launch::async, move_to_x1d, x1d_control_signal);
+    //     is_first_x1d_iteration = false;
+    //   }
     // }
-    
 
   }
 }
@@ -591,8 +595,8 @@ void RenderUI() {
       }
     }
 
-    static float history_length = 0.01f;
-    ImGui::SliderFloat("History", &history_length, 0.0001, 0.1, "%.5f s", ImGuiSliderFlags_Logarithmic);
+    static float adc_history_length = 0.01f;
+    ImGui::SliderFloat("ADC History", &adc_history_length, 0.0001, 0.1, "%.5f s", ImGuiSliderFlags_Logarithmic);
 
     // x axis: no ticks
     static ImPlotAxisFlags xflags = ImPlotAxisFlags_None;
@@ -606,7 +610,7 @@ void RenderUI() {
 
     if (ImPlot::BeginPlot("##ADC", ImVec2(-1, 400 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, t_adc - history_length, t_adc, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_adc - adc_history_length, t_adc, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       ImPlot::SetNextLineStyle(adc1_color, thickness);
@@ -665,8 +669,8 @@ void RenderUI() {
     static bool plot_setpoint = false;
     ImGui::Checkbox("Plot setpoint", &plot_setpoint);
 
-    static float history_length = 10.0f;
-    ImGui::SliderFloat("History", &history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
+    static float opd_history_length = 10.0f;
+    ImGui::SliderFloat("OPD History", &opd_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
 
     // x axis: no ticks
     static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
@@ -680,7 +684,7 @@ void RenderUI() {
 
     if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - opd_history_length, t_gui, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       ImPlot::SetNextLineStyle(fft_color, thickness);
@@ -766,7 +770,7 @@ void RenderUI() {
 
       if (ImPlot::BeginPlot("##Piezo", ImVec2(-1, 150 * io.FontGlobalScale))) {
         ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - history_length, t_gui, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - opd_history_length, t_gui, ImGuiCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
         ImPlot::SetNextLineStyle(color, thickness);
