@@ -297,8 +297,10 @@ TSQueue<Measurement> i2Queue;
 TSQueue<Measurement> x1dQueue;
 TSQueue<Measurement> x2dQueue;
 
-TSQueue<MeasurementT<double, float>> adc1Queue;
-TSQueue<MeasurementT<double, float>> adc2Queue;
+TSQueue<MeasurementT<double, float>> shear1Queue;
+TSQueue<MeasurementT<double, float>> opdrefQueue;
+TSQueue<MeasurementT<double, float>> point1Queue;
+TSQueue<MeasurementT<double, float>> point2Queue;
 
 int setup_ethernet() {
   // setup ethernet connection
@@ -457,8 +459,10 @@ void run_calculation() {
     for (int i = 0; i < 10; i++) {
       double tnow = t + double(i) / sampling_rate;
       // std::cout << "counter: " << counter[i] << std::endl;
-      adc1Queue.push({tnow, adc_shear1[i]});
-      adc2Queue.push({tnow, adc_opd_ref[i]});
+      shear1Queue.push({tnow, adc_shear1[i]});
+      opdrefQueue.push({tnow, adc_opd_ref[i]});
+      point1Queue.push({tnow, adc_point1[i]});
+      point2Queue.push({tnow, adc_point2[i]});
     }
 
 
@@ -569,29 +573,43 @@ void RenderUI() {
   if (ImGui::CollapsingHeader("ADC Measurements")) {
 
     // plot of ADC1 and ADC2
-    static ScrollingBuffer adc1_buffer, adc2_buffer;
+    static ScrollingBuffer adc1_buffer, adc2_buffer, point1_buffer, point2_buffer;
 
     static float t_adc = 0;
 
     // get lates time in ADC queue
     if (RunMeasurement.load()) {
-      if (!adc1Queue.isempty()) {
-        t_adc = adc1Queue.back().time;
+      if (!shear1Queue.isempty()) {
+        t_adc = shear1Queue.back().time;
       }
     }
 
     // add the entire MeasurementQueue to the buffer
-    if (!adc1Queue.isempty()) {
-      while (!adc1Queue.isempty()) {
-        auto m = adc1Queue.pop();
+    if (!shear1Queue.isempty()) {
+      while (!shear1Queue.isempty()) {
+        auto m = shear1Queue.pop();
         adc1_buffer.AddPoint(m.time, m.value);
       }
     }
 
-    if (!adc2Queue.isempty()) {
-      while (!adc2Queue.isempty()) {
-        auto m = adc2Queue.pop();
+    if (!opdrefQueue.isempty()) {
+      while (!opdrefQueue.isempty()) {
+        auto m = opdrefQueue.pop();
         adc2_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    if (!point1Queue.isempty()) {
+      while (!point1Queue.isempty()) {
+        auto m = point1Queue.pop();
+        point1_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    if (!point2Queue.isempty()) {
+      while (!point2Queue.isempty()) {
+        auto m = point2Queue.pop();
+        point2_buffer.AddPoint(m.time, m.value);
       }
     }
 
@@ -606,7 +624,9 @@ void RenderUI() {
 
     static ImVec4 adc1_color = ImVec4(1, 0, 0, 1);
     static ImVec4 adc2_color = ImVec4(0, 1, 0, 1);
-    static float thickness = 1;
+    static ImVec4 point1_color = ImVec4(0, 0, 1, 1);
+    static ImVec4 point2_color = ImVec4(1, 1, 0, 1);
+    static float thickness = 2;
 
     if (ImPlot::BeginPlot("##ADC", ImVec2(-1, 400 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
@@ -619,6 +639,12 @@ void RenderUI() {
       ImPlot::SetNextLineStyle(adc2_color, thickness);
       ImPlot::PlotLine("ADC2", &adc2_buffer.Data[0].x, &adc2_buffer.Data[0].y, adc2_buffer.Data.size(), 0,
                        adc2_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(point1_color, thickness);
+      ImPlot::PlotLine("Point1", &point1_buffer.Data[0].x, &point1_buffer.Data[0].y, point1_buffer.Data.size(), 0,
+                       point1_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(point2_color, thickness);
+      ImPlot::PlotLine("Point2", &point2_buffer.Data[0].x, &point2_buffer.Data[0].y, point2_buffer.Data.size(), 0,
+                       point2_buffer.Offset, 2 * sizeof(float));
       ImPlot::EndPlot();
     }
   }
