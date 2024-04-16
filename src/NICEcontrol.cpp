@@ -298,10 +298,10 @@ TSQueue<Measurement> i2Queue;
 TSQueue<Measurement> x1dQueue;
 TSQueue<Measurement> x2dQueue;
 
-TSQueue<MeasurementT<double, float>> shear1Queue;
-TSQueue<MeasurementT<double, float>> opdrefQueue;
-TSQueue<MeasurementT<double, float>> point1Queue;
-TSQueue<MeasurementT<double, float>> point2Queue;
+TSQueue<MeasurementT<int, int>> adc_queues[4];
+
+// vector of queues
+
 
 int setup_ethernet() {
   // setup ethernet connection
@@ -460,10 +460,10 @@ void run_calculation() {
     for (int i = 0; i < 10; i++) {
       // double tnow = t + double(i) / sampling_rate;
       // std::cout << "counter: " << counter[i] << std::endl;
-      shear1Queue.push({counter[i], adc_shear1[i]});
-      opdrefQueue.push({counter[i], adc_opd_ref[i]});
-      point1Queue.push({counter[i], adc_point1[i]});
-      point2Queue.push({counter[i], adc_point2[i]});
+      adc_queues[0].push({counter[i], adc_shear1[i]});
+      adc_queues[1].push({counter[i], adc_opd_ref[i]});
+      adc_queues[2].push({counter[i], adc_point1[i]});
+      adc_queues[3].push({counter[i], adc_point2[i]});
     }
 
     // write to file
@@ -570,79 +570,52 @@ void RenderUI() {
   // header: ADC measurements
   if (ImGui::CollapsingHeader("ADC Measurements")) {
 
-    // plot of ADC1 and ADC2
-    static ScrollingBuffer adc1_buffer, adc2_buffer, point1_buffer, point2_buffer;
-
+    static ScrollingBuffer adc_buffers[4];
     static float t_adc = 0;
 
     // get lates time in ADC queue
     if (RunMeasurement.load()) {
-      if (!shear1Queue.isempty()) {
-        t_adc = shear1Queue.back().time;
+      if (!adc_queues[0].isempty()) {
+        t_adc = adc_queues[0].back().time;
       }
     }
 
-    // add the entire MeasurementQueue to the buffer
-    if (!shear1Queue.isempty()) {
-      while (!shear1Queue.isempty()) {
-        auto m = shear1Queue.pop();
-        adc1_buffer.AddPoint(m.time, m.value);
+    // add all measurements to the plot buffers
+    for (int i = 0; i < 4; i++) {
+      if (!adc_queues[i].isempty()) {
+        int N = adc_queues[i].size();
+        for (int j = 0; j < N; j++) {
+          auto m = adc_queues[i].pop();
+          adc_buffers[i].AddPoint(m.time, m.value);
+        }
       }
     }
 
-    if (!opdrefQueue.isempty()) {
-      while (!opdrefQueue.isempty()) {
-        auto m = opdrefQueue.pop();
-        adc2_buffer.AddPoint(m.time, m.value);
-      }
-    }
 
-    if (!point1Queue.isempty()) {
-      while (!point1Queue.isempty()) {
-        auto m = point1Queue.pop();
-        point1_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
-    if (!point2Queue.isempty()) {
-      while (!point2Queue.isempty()) {
-        auto m = point2Queue.pop();
-        point2_buffer.AddPoint(m.time, m.value);
-      }
-    }
 
     static float adc_history_length = 1000.f;
     ImGui::SliderFloat("ADC History", &adc_history_length, 1, 128000, "%.5f s", ImGuiSliderFlags_Logarithmic);
 
-    // x axis: no ticks
-    static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+    
 
-    // y axis: auto fit
-    static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+    // plot label names
+    static const char *plot_labels[4] = {"Shear1", "OPD ref", "Point1", "Point2"};
 
-    static ImVec4 adc1_color = ImVec4(1, 0, 0, 1);
-    static ImVec4 adc2_color = ImVec4(0, 1, 0, 1);
-    static ImVec4 point1_color = ImVec4(0, 0, 1, 1);
-    static ImVec4 point2_color = ImVec4(1, 1, 0, 1);
+    // plot style
     static float thickness = 2;
+    static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+    static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
     if (ImPlot::BeginPlot("##ADC", ImVec2(-1, 400 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, t_adc - adc_history_length, t_adc, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      ImPlot::SetNextLineStyle(adc1_color, thickness);
-      ImPlot::PlotLine("ADC1", &adc1_buffer.Data[0].x, &adc1_buffer.Data[0].y, adc1_buffer.Data.size(), 0,
-                       adc1_buffer.Offset, 2 * sizeof(float));
-      ImPlot::SetNextLineStyle(adc2_color, thickness);
-      ImPlot::PlotLine("ADC2", &adc2_buffer.Data[0].x, &adc2_buffer.Data[0].y, adc2_buffer.Data.size(), 0,
-                       adc2_buffer.Offset, 2 * sizeof(float));
-      ImPlot::SetNextLineStyle(point1_color, thickness);
-      ImPlot::PlotLine("Point1", &point1_buffer.Data[0].x, &point1_buffer.Data[0].y, point1_buffer.Data.size(), 0,
-                       point1_buffer.Offset, 2 * sizeof(float));
-      ImPlot::SetNextLineStyle(point2_color, thickness);
-      ImPlot::PlotLine("Point2", &point2_buffer.Data[0].x, &point2_buffer.Data[0].y, point2_buffer.Data.size(), 0,
-                       point2_buffer.Offset, 2 * sizeof(float));
+      for (int i = 0; i < 4; i++) {
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), thickness);
+        ImPlot::PlotLine(plot_labels[i], &adc_buffers[i].Data[0].x, &adc_buffers[i].Data[0].y, adc_buffers[i].Data.size(),
+                         0, adc_buffers[i].Offset, 2 * sizeof(float));
+      }
       ImPlot::EndPlot();
     }
   }

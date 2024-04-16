@@ -45,7 +45,7 @@ LINUX_GL_LIBS = -lGL
 
 # compiler flags
 CXXFLAGS = -std=c++20 -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends
-CXXFLAGS += -O2 -g -Wall -Wformat
+CXXFLAGS += -Ofast -Wall -Wformat #-g
 # CXXFLAGS += -Os
 
 
