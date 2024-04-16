@@ -153,6 +153,48 @@ struct ScrollingBuffer {
   }
 };
 
+// scrolling buffer for data of type MeasurementT
+// does not use ImVector<ImVec2> but ImVector<MesurementT>
+template <typename T, typename U>
+struct ScrollingBufferT {
+  int MaxSize;
+  int Offset;
+  ImVector<MeasurementT<T, U>> Data;
+  ScrollingBufferT(int max_size = 70000) {
+    MaxSize = max_size;
+    Offset = 0;
+    Data.reserve(MaxSize);
+    // fill with zeros
+    for (int i = 0; i < MaxSize; i++) {
+      Data.push_back(MeasurementT<T, U>(0, 0));
+    }
+  }
+  void AddPoint(T x, U y) {
+    if (Data.size() < MaxSize)
+      Data.push_back(MeasurementT<T, U>(x, y));
+    else {
+      Data[Offset] = MeasurementT<T, U>(x, y);
+      Offset = (Offset + 1) % MaxSize;
+    }
+  }
+  void Erase() {
+    if (Data.size() > 0) {
+      Data.shrink(0);
+      Offset = 0;
+    }
+  }
+
+  // get last n points
+  ImVector<MeasurementT<T, U>> GetLastN(int n) {
+    ImVector<MeasurementT<T, U>> last_n;
+    last_n.reserve(n);
+    for (int i = 0; i < n; i++) {
+      last_n.push_back(Data[(Offset - n + i + MaxSize) % MaxSize]);
+    }
+    return last_n;
+  }
+};
+
 class FFT_calculator {
  public:
   int size;
@@ -570,7 +612,7 @@ void RenderUI() {
   // header: ADC measurements
   if (ImGui::CollapsingHeader("ADC Measurements")) {
 
-    static ScrollingBuffer adc_buffers[4];
+    static ScrollingBufferT<int, int> adc_buffers[4];
     static float t_adc = 0;
 
     // get lates time in ADC queue
@@ -613,8 +655,8 @@ void RenderUI() {
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       for (int i = 0; i < 4; i++) {
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), thickness);
-        ImPlot::PlotLine(plot_labels[i], &adc_buffers[i].Data[0].x, &adc_buffers[i].Data[0].y, adc_buffers[i].Data.size(),
-                         0, adc_buffers[i].Offset, 2 * sizeof(float));
+        ImPlot::PlotLine(plot_labels[i], &adc_buffers[i].Data[0].time, &adc_buffers[i].Data[0].value, adc_buffers[i].Data.size(),
+                         0, adc_buffers[i].Offset, 2 * sizeof(int));
       }
       ImPlot::EndPlot();
     }
