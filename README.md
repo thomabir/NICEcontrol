@@ -8,17 +8,12 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
 
 ## Install
 
-1. Install prerequisites
-   * macOS (untested)
+1. Prerequisites
+
+   * Install libraries
 
      ```bash
-     brew install glfw fftw
-     ```
-
-   * Linux
-
-     ```bash
-     apt-get install libglfw3-dev fftw-dev
+     sudo apt-get install libglfw3-dev fftw-dev libboost-all-dev
      ```
 
    * Install the piezo controller drivers from [MCL](http://www.madcitylabs.com/) (ask their support for the files)

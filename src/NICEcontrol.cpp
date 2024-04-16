@@ -10,6 +10,7 @@
 #include <stdio.h>
 
 #include <atomic>
+#include <boost/circular_buffer.hpp>
 #include <chrono>
 #include <condition_variable>
 #include <fstream>
@@ -400,16 +401,16 @@ void run_calculation() {
     std::memcpy(receivedDataInt, buffer, sizeof(int) * 12 * 10);
 
     static int counter[10];
-    static float adc_shear1[10];
-    static float adc_shear2[10];
-    static float adc_shear3[10];
-    static float adc_shear4[10];
-    static float adc_point1[10];
-    static float adc_point2[10];
-    static float adc_point3[10];
-    static float adc_point4[10];
-    static float adc_sine_ref[10];
-    static float adc_opd_ref[10];
+    static int adc_shear1[10];
+    static int adc_shear2[10];
+    static int adc_shear3[10];
+    static int adc_shear4[10];
+    static int adc_point1[10];
+    static int adc_point2[10];
+    static int adc_point3[10];
+    static int adc_point4[10];
+    static int adc_sine_ref[10];
+    static int adc_opd_ref[10];
     static float opd_nm[10];
 
     for (int i = 0; i < 10; i++) {
@@ -424,7 +425,7 @@ void run_calculation() {
       adc_point4[i] = receivedDataInt[12 * i + 8];
       adc_sine_ref[i] = receivedDataInt[12 * i + 9];
       adc_opd_ref[i] = receivedDataInt[12 * i + 10];
-      opd_nm[i] = float(receivedDataInt[12 * i + 11]) / (2 * PI * 10000.) * 360.; //* 1550.; // 0.1 mrad -> nm
+      opd_nm[i] = float(receivedDataInt[12 * i + 11]) / (2 * PI * 10000.) * 360.;  //* 1550.; // 0.1 mrad -> nm
     }
 
     // filter opd by piping the 10 new measurements through the filter
@@ -457,19 +458,16 @@ void run_calculation() {
     // enqueue adc measurements
     static const float sampling_rate = 128e3;
     for (int i = 0; i < 10; i++) {
-      double tnow = t + double(i) / sampling_rate;
+      // double tnow = t + double(i) / sampling_rate;
       // std::cout << "counter: " << counter[i] << std::endl;
-      shear1Queue.push({tnow, adc_shear1[i]});
-      opdrefQueue.push({tnow, adc_opd_ref[i]});
-      point1Queue.push({tnow, adc_point1[i]});
-      point2Queue.push({tnow, adc_point2[i]});
+      shear1Queue.push({counter[i], adc_shear1[i]});
+      opdrefQueue.push({counter[i], adc_opd_ref[i]});
+      point1Queue.push({counter[i], adc_point1[i]});
+      point2Queue.push({counter[i], adc_point2[i]});
     }
-
-
 
     // write to file
     // outputFile << t << "," << opd << "\n";
-
 
     // variables for control
     static float opd_error = 0.0f;
@@ -494,10 +492,10 @@ void run_calculation() {
       // calculate control signal
       opd_control_signal = opd_p.load() * opd_error + opd_error_integral;
 
-
       // actuate piezo actuator
       // he lives in his own thread because he's slow
-      if (is_first_opd_iteration || slow_opd_move_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+      if (is_first_opd_iteration ||
+          slow_opd_move_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         slow_opd_move_future = std::async(std::launch::async, move_to_opd, opd_control_signal * 1e-3);
         is_first_opd_iteration = false;
       }
@@ -518,13 +516,13 @@ void run_calculation() {
 
     //   // actuate piezo actuator
     //   // he lives in his own thread because he's slow
-    //   if (is_first_x1d_iteration || slow_x1d_move_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+    //   if (is_first_x1d_iteration || slow_x1d_move_future.wait_for(std::chrono::milliseconds(0)) ==
+    //   std::future_status::ready) {
     //     // move_to_x(x1d_control_signal); // too slow, takes 1 ms
     //     slow_x1d_move_future = std::async(std::launch::async, move_to_x1d, x1d_control_signal);
     //     is_first_x1d_iteration = false;
     //   }
     // }
-
   }
 }
 
@@ -613,11 +611,11 @@ void RenderUI() {
       }
     }
 
-    static float adc_history_length = 0.01f;
-    ImGui::SliderFloat("ADC History", &adc_history_length, 0.0001, 0.1, "%.5f s", ImGuiSliderFlags_Logarithmic);
+    static float adc_history_length = 1000.f;
+    ImGui::SliderFloat("ADC History", &adc_history_length, 1, 128000, "%.5f s", ImGuiSliderFlags_Logarithmic);
 
     // x axis: no ticks
-    static ImPlotAxisFlags xflags = ImPlotAxisFlags_None;
+    static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
 
     // y axis: auto fit
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
@@ -726,7 +724,7 @@ void RenderUI() {
 
     if (ImGui::TreeNode("FFT##OPD")) {
       // set up fft
-      const static int fft_size = 1024*8*8;
+      const static int fft_size = 1024 * 8 * 8;
       static double fft_power[fft_size / 2];
       static double fft_freq[fft_size / 2];
       static FFT_calculator fft(fft_size, 6400., &opd_buffer, fft_power, fft_freq);
@@ -761,8 +759,7 @@ void RenderUI() {
       static float stddev = 0.0f;
       const int N_points_stats = 10000;
 
-      
-      if (opd_buffer.Data.size() > N_points_stats+2) {
+      if (opd_buffer.Data.size() > N_points_stats + 2) {
         // get the last 1000 measurements using ImVector<ImVec2> GetLastN(int n)
         auto last_1000_measurements_data = opd_buffer.GetLastN(N_points_stats);
         // get the y values
@@ -772,14 +769,12 @@ void RenderUI() {
         }
 
         // calculate mean and stdev
-        mean = std::accumulate(last_1000_measurements.begin(), last_1000_measurements.end(), 0.0) / last_1000_measurements.size();
-        float sq_sum = std::inner_product(last_1000_measurements.begin(), last_1000_measurements.end(), last_1000_measurements.begin(), 0.0);
+        mean = std::accumulate(last_1000_measurements.begin(), last_1000_measurements.end(), 0.0) /
+               last_1000_measurements.size();
+        float sq_sum = std::inner_product(last_1000_measurements.begin(), last_1000_measurements.end(),
+                                          last_1000_measurements.begin(), 0.0);
         stddev = std::sqrt(sq_sum / last_1000_measurements.size() - mean * mean);
       }
-  
-      
-
-
 
       // Display mean and std
       ImGui::Text("Mean: %.4f", mean);
@@ -1101,7 +1096,9 @@ void RenderUI() {
   ImGui::End();
 
   // demo window
+  static bool show_app_metrics = true;
   // ImGui::ShowDemoWindow();
+  ImGui::ShowMetricsWindow(&show_app_metrics);
 
   // implot demo window
   // ImPlot::ShowDemoWindow();
