@@ -333,16 +333,13 @@ void setupActuators() {
 static float x1d_open_loop_setpoint = 0.0f;
 
 TSQueue<Measurement> opdQueue;
-TSQueue<Measurement> x1Queue;
-TSQueue<Measurement> x2Queue;
-TSQueue<Measurement> i1Queue;
-TSQueue<Measurement> i2Queue;
-TSQueue<Measurement> x1dQueue;
-TSQueue<Measurement> x2dQueue;
+TSQueue<Measurement> shear_x1Queue;
+TSQueue<Measurement> shear_x2Queue;
+TSQueue<Measurement> shear_y1Queue;
+TSQueue<Measurement> shear_y2Queue;
 
-TSQueue<MeasurementT<int, int>> adc_queues[4];
+TSQueue<MeasurementT<int, int>> adc_queues[10];
 
-// vector of queues
 
 
 int setup_ethernet() {
@@ -439,7 +436,7 @@ void run_calculation() {
     }
 
     // Convert received data to vector of 10 ints
-    int receivedDataInt[12 * 10];
+    int receivedDataInt[16 * 10];
     std::memcpy(receivedDataInt, buffer, sizeof(int) * 12 * 10);
 
     static int counter[10];
@@ -454,20 +451,30 @@ void run_calculation() {
     static int adc_sine_ref[10];
     static int adc_opd_ref[10];
     static float opd_nm[10];
+    static float shear_x1_um[10];
+    static float shear_x2_um[10];
+    static float shear_y1_um[10];
+    static float shear_y2_um[10];
+
+
 
     for (int i = 0; i < 10; i++) {
-      counter[i] = receivedDataInt[12 * i];
-      adc_shear1[i] = receivedDataInt[12 * i + 1];
-      adc_shear2[i] = receivedDataInt[12 * i + 2];
-      adc_shear3[i] = receivedDataInt[12 * i + 3];
-      adc_shear4[i] = receivedDataInt[12 * i + 4];
-      adc_point1[i] = receivedDataInt[12 * i + 5];
-      adc_point2[i] = receivedDataInt[12 * i + 6];
-      adc_point3[i] = receivedDataInt[12 * i + 7];
-      adc_point4[i] = receivedDataInt[12 * i + 8];
-      adc_sine_ref[i] = receivedDataInt[12 * i + 9];
-      adc_opd_ref[i] = receivedDataInt[12 * i + 10];
-      opd_nm[i] = float(receivedDataInt[12 * i + 11]) / (2 * PI * 10000.) * 360.;  //* 1550.; // 0.1 mrad -> nm
+      counter[i] = receivedDataInt[16 * i];
+      adc_shear1[i] = receivedDataInt[16 * i + 1];
+      adc_shear2[i] = receivedDataInt[16 * i + 2];
+      adc_shear3[i] = receivedDataInt[16 * i + 3];
+      adc_shear4[i] = receivedDataInt[16 * i + 4];
+      adc_point1[i] = receivedDataInt[16 * i + 5];
+      adc_point2[i] = receivedDataInt[16 * i + 6];
+      adc_point3[i] = receivedDataInt[16 * i + 7];
+      adc_point4[i] = receivedDataInt[16 * i + 8];
+      adc_sine_ref[i] = receivedDataInt[16 * i + 9];
+      adc_opd_ref[i] = receivedDataInt[16 * i + 10];
+      opd_nm[i] = float(receivedDataInt[16 * i + 11]) / (2 * PI * 10000.) * 360.;  //* 1550.; // 0.1 mrad -> nm
+      shear_x1_um[i] = float(receivedDataInt[16 * i + 12]) / 1000.;
+      shear_x2_um[i] = float(receivedDataInt[16 * i + 13]) / 1000.;
+      shear_y1_um[i] = float(receivedDataInt[16 * i + 14]) / 1000.;
+      shear_y2_um[i] = float(receivedDataInt[16 * i + 15]) / 1000.;
     }
 
     // filter opd by piping the 10 new measurements through the filter
@@ -490,12 +497,10 @@ void run_calculation() {
 
     // enqueue measurement and time
     opdQueue.push({t, opd});
-    // x1Queue.push({t, adc1[0]});
-    // x2Queue.push({t, adc2[0]});
-    // i1Queue.push({t, adc4[0]});
-    // i2Queue.push({t, adc5[0]});
-    // x1dQueue.push({t, x1d});
-    // x2dQueue.push({t, x2d});
+    shear_x1Queue.push({t, shear_x1_um[0]});
+    shear_x2Queue.push({t, shear_x2_um[0]});
+    shear_y1Queue.push({t, shear_y1_um[0]});
+    shear_y2Queue.push({t, shear_y2_um[0]});
 
     // enqueue adc measurements
     static const float sampling_rate = 128e3;
@@ -503,9 +508,15 @@ void run_calculation() {
       // double tnow = t + double(i) / sampling_rate;
       // std::cout << "counter: " << counter[i] << std::endl;
       adc_queues[0].push({counter[i], adc_shear1[i]});
-      adc_queues[1].push({counter[i], adc_opd_ref[i]});
-      adc_queues[2].push({counter[i], adc_point1[i]});
-      adc_queues[3].push({counter[i], adc_point2[i]});
+      adc_queues[1].push({counter[i], adc_shear2[i]});
+      adc_queues[2].push({counter[i], adc_shear3[i]});
+      adc_queues[3].push({counter[i], adc_shear4[i]});
+      adc_queues[4].push({counter[i], adc_point1[i]});
+      adc_queues[5].push({counter[i], adc_point2[i]});
+      adc_queues[6].push({counter[i], adc_point3[i]});
+      adc_queues[7].push({counter[i], adc_point4[i]});
+      adc_queues[8].push({counter[i], adc_sine_ref[i]});
+      adc_queues[9].push({counter[i], adc_opd_ref[i]});
     }
 
     // write to file
@@ -612,7 +623,7 @@ void RenderUI() {
   // header: ADC measurements
   if (ImGui::CollapsingHeader("ADC Measurements")) {
 
-    static ScrollingBufferT<int, int> adc_buffers[4];
+    static ScrollingBufferT<int, int> adc_buffers[10];
     static float t_adc = 0;
 
     // get lates time in ADC queue
@@ -623,7 +634,7 @@ void RenderUI() {
     }
 
     // add all measurements to the plot buffers
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 10; i++) {
       if (!adc_queues[i].isempty()) {
         int N = adc_queues[i].size();
         for (int j = 0; j < N; j++) {
@@ -641,7 +652,9 @@ void RenderUI() {
     
 
     // plot label names
-    static const char *plot_labels[4] = {"Shear1", "OPD ref", "Point1", "Point2"};
+    static const char *plot_labels[10] = {"Shear1", "Shear2", "Shear3", "Shear4",
+                                          "Point1", "Point2", "Point3", "Point4",
+                                          "SineRef", "OPDRef"};
 
     // plot style
     static float thickness = 2;
@@ -653,7 +666,7 @@ void RenderUI() {
       ImPlot::SetupAxisLimits(ImAxis_X1, t_adc - adc_history_length, t_adc, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      for (int i = 0; i < 4; i++) {
+      for (int i = 0; i < 10; i++) {
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), thickness);
         ImPlot::PlotLine(plot_labels[i], &adc_buffers[i].Data[0].time, &adc_buffers[i].Data[0].value, adc_buffers[i].Data.size(),
                          0, adc_buffers[i].Offset, 2 * sizeof(int));
@@ -850,7 +863,7 @@ void RenderUI() {
     }
   }
 
-  if (ImGui::CollapsingHeader("X position")) {
+  if (ImGui::CollapsingHeader("Shear")) {
     // control mode selector
     ImGui::Text("Control mode:");
     ImGui::SameLine();
@@ -873,12 +886,7 @@ void RenderUI() {
     }
 
     // real time plot
-    static ScrollingBuffer x1_buffer;
-    static ScrollingBuffer x2_buffer;
-    static ScrollingBuffer i1_buffer;
-    static ScrollingBuffer i2_buffer;
-    static ScrollingBuffer x1d_buffer;
-    static ScrollingBuffer x2d_buffer;
+    static ScrollingBuffer shear_x1_buffer, shear_x2_buffer, shear_y1_buffer, shear_y2_buffer;
 
     static float t_gui_x = 0;
 
@@ -888,45 +896,31 @@ void RenderUI() {
     }
 
     // add the entire MeasurementQueue to the buffer
-    if (!x1Queue.isempty()) {
-      while (!x1Queue.isempty()) {
-        auto m = x1Queue.pop();
-        x1_buffer.AddPoint(m.time, m.value);
+    if (!shear_x1Queue.isempty()) {
+      while (!shear_x1Queue.isempty()) {
+        auto m = shear_x1Queue.pop();
+        shear_x1_buffer.AddPoint(m.time, m.value);
       }
     }
 
-    if (!x2Queue.isempty()) {
-      while (!x2Queue.isempty()) {
-        auto m = x2Queue.pop();
-        x2_buffer.AddPoint(m.time, m.value);
+    if (!shear_x2Queue.isempty()) {
+      while (!shear_x2Queue.isempty()) {
+        auto m = shear_x2Queue.pop();
+        shear_x2_buffer.AddPoint(m.time, m.value);
       }
     }
 
-    if (!i1Queue.isempty()) {
-      while (!i1Queue.isempty()) {
-        auto m = i1Queue.pop();
-        i1_buffer.AddPoint(m.time, m.value);
+    if (!shear_y1Queue.isempty()) {
+      while (!shear_y1Queue.isempty()) {
+        auto m = shear_y1Queue.pop();
+        shear_y1_buffer.AddPoint(m.time, m.value);
       }
     }
 
-    if (!i2Queue.isempty()) {
-      while (!i2Queue.isempty()) {
-        auto m = i2Queue.pop();
-        i2_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
-    if (!x1dQueue.isempty()) {
-      while (!x1dQueue.isempty()) {
-        auto m = x1dQueue.pop();
-        x1d_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
-    if (!x2dQueue.isempty()) {
-      while (!x2dQueue.isempty()) {
-        auto m = x2dQueue.pop();
-        x2d_buffer.AddPoint(m.time, m.value);
+    if (!shear_y2Queue.isempty()) {
+      while (!shear_y2Queue.isempty()) {
+        auto m = shear_y2Queue.pop();
+        shear_y2_buffer.AddPoint(m.time, m.value);
       }
     }
 
@@ -940,45 +934,25 @@ void RenderUI() {
     static ImPlotAxisFlags x1_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
     static float x1_thickness = 1;
-    static ImVec4 x1_color = ImVec4(1, 1, 0, 1);
-    static ImVec4 x2_color = ImVec4(1, 0, 0, 1);
-
-    // To debug x1, x2, i1, i2
-
-    // static ImVec4 i1_color = ImVec4(0, 1, 0, 1);
-    // static ImVec4 i2_color = ImVec4(0, 0, 1, 1);
-    // if (ImPlot::BeginPlot("##X1_Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
-    //   ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
-    //   ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
-    //   ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-    //   ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-    //   ImPlot::SetNextLineStyle(x1_color, x1_thickness);
-    //   ImPlot::PlotLine("x1", &x1_buffer.Data[0].x, &x1_buffer.Data[0].y, x1_buffer.Data.size(), 0,
-    //                    x1_buffer.Offset, 2 * sizeof(float));
-    //   ImPlot::SetNextLineStyle(x2_color, x1_thickness);
-    //   ImPlot::PlotLine("x2", &x2_buffer.Data[0].x, &x2_buffer.Data[0].y, x2_buffer.Data.size(), 0,
-    //                    x2_buffer.Offset, 2 * sizeof(float));
-    //   ImPlot::SetNextLineStyle(i1_color, x1_thickness);
-    //   ImPlot::PlotLine("i1", &i1_buffer.Data[0].x, &i1_buffer.Data[0].y, i1_buffer.Data.size(), 0,
-    //                    i1_buffer.Offset, 2 * sizeof(float));
-    //   ImPlot::SetNextLineStyle(i2_color, x1_thickness);
-    //   ImPlot::PlotLine("i2", &i2_buffer.Data[0].x, &i2_buffer.Data[0].y, i2_buffer.Data.size(), 0,
-    //                    i2_buffer.Offset, 2 * sizeof(float));
-    //   ImPlot::EndPlot();
-    // }
-
-    // plot x1d, x2d
-    if (ImPlot::BeginPlot("##X1D", ImVec2(-1, 200 * io.FontGlobalScale))) {
+  
+    // plot x1, x2
+    if (ImPlot::BeginPlot("##X1", ImVec2(-1, 200 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      ImPlot::SetNextLineStyle(x1_color, x1_thickness);
-      ImPlot::PlotLine("x1d", &x1d_buffer.Data[0].x, &x1d_buffer.Data[0].y, x1d_buffer.Data.size(), 0,
-                       x1d_buffer.Offset, 2 * sizeof(float));
-      ImPlot::SetNextLineStyle(x2_color, x1_thickness);
-      ImPlot::PlotLine("x2d", &x2d_buffer.Data[0].x, &x2d_buffer.Data[0].y, x2d_buffer.Data.size(), 0,
-                       x2d_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), x1_thickness);
+      ImPlot::PlotLine("Shear X1", &shear_x1_buffer.Data[0].x, &shear_x1_buffer.Data[0].y, shear_x1_buffer.Data.size(),
+                       0, shear_x1_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), x1_thickness);
+      ImPlot::PlotLine("Shear X2", &shear_x2_buffer.Data[0].x, &shear_x2_buffer.Data[0].y, shear_x2_buffer.Data.size(),
+                       0, shear_x2_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), x1_thickness);
+      ImPlot::PlotLine("Shear Y1", &shear_y1_buffer.Data[0].x, &shear_y1_buffer.Data[0].y, shear_y1_buffer.Data.size(),
+                       0, shear_y1_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), x1_thickness);
+      ImPlot::PlotLine("Shear Y2", &shear_y2_buffer.Data[0].x, &shear_y2_buffer.Data[0].y, shear_y2_buffer.Data.size(),
+                       0, shear_y2_buffer.Offset, 2 * sizeof(float));
       ImPlot::EndPlot();
     }
 
@@ -988,27 +962,27 @@ void RenderUI() {
     // static float x2d_std = 0.0f;
     // static float x2d_rms = 0.0f;
 
-    if (x1d_buffer.Data.size() > 0) {
+    if (shear_x1_buffer.Data.size() > 1000) {
       // calculate mean
       float sum = 0.0f;
-      for (auto &p : x1d_buffer.Data) {
+      for (auto &p : shear_x1_buffer.Data) {
         sum += p.y;
       }
-      float mean = sum / x1d_buffer.Data.size();
+      float mean = sum / shear_x1_buffer.Data.size();
 
       // calculate std
       float sum_sq = 0.0f;
-      for (auto &p : x1d_buffer.Data) {
+      for (auto &p : shear_x1_buffer.Data) {
         sum_sq += (p.y - mean) * (p.y - mean);
       }
-      x1d_std = sqrt(sum_sq / x1d_buffer.Data.size());
+      x1d_std = sqrt(sum_sq / shear_x1_buffer.Data.size());
 
       // calculate rms
       sum_sq = 0.0f;
-      for (auto &p : x1d_buffer.Data) {
+      for (auto &p : shear_x1_buffer.Data) {
         sum_sq += p.y * p.y;
       }
-      x1d_rms = sqrt(sum_sq / x1d_buffer.Data.size());
+      x1d_rms = sqrt(sum_sq / shear_x1_buffer.Data.size());
     }
 
     // print it
@@ -1021,7 +995,7 @@ void RenderUI() {
       const static int fft_size = 1024 * 8 * 8;
       static double fft_power[fft_size / 2];
       static double fft_freq[fft_size / 2];
-      static FFT_calculator fft(fft_size, 6400., &x1d_buffer, fft_power, fft_freq);
+      static FFT_calculator fft(fft_size, 6400., &shear_x1_buffer, fft_power, fft_freq);
 
       // calculate fft
       fft.calculate();
