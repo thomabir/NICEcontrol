@@ -339,6 +339,8 @@ TSQueue<Measurement> shear_y1Queue;
 TSQueue<Measurement> shear_y2Queue;
 
 TSQueue<MeasurementT<int, int>> adc_queues[10];
+TSQueue<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
+
 
 
 
@@ -517,7 +519,10 @@ void run_calculation() {
       adc_queues[7].push({counter[i], adc_point4[i]});
       adc_queues[8].push({counter[i], adc_sine_ref[i]});
       adc_queues[9].push({counter[i], adc_opd_ref[i]});
+      shear_sum_queue.push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
+      point_sum_queue.push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
     }
+
 
     // write to file
     // outputFile << t << "," << opd << "\n";
@@ -624,6 +629,7 @@ void RenderUI() {
   if (ImGui::CollapsingHeader("ADC Measurements")) {
 
     static ScrollingBufferT<int, int> adc_buffers[10];
+    static ScrollingBufferT<int, int> shear_sum_buffer, point_sum_buffer;
     static float t_adc = 0;
 
     // get lates time in ADC queue
@@ -644,6 +650,72 @@ void RenderUI() {
       }
     }
 
+    // shear sum
+    if (!shear_sum_queue.isempty()) {
+      int N = shear_sum_queue.size();
+      for (int j = 0; j < N; j++) {
+        auto m = shear_sum_queue.pop();
+        shear_sum_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    // pointing
+    if (!point_sum_queue.isempty()) {
+      int N = point_sum_queue.size();
+      for (int j = 0; j < N; j++) {
+        auto m = point_sum_queue.pop();
+        point_sum_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+
+    // print peak-to-peak and mean value of OPDRef
+    if (!adc_buffers[9].Data.empty()) {
+      auto last_1000_measurements_data = adc_buffers[9].GetLastN(1000);
+      std::vector<int> last_1000_measurements;
+      for (auto &m : last_1000_measurements_data) {
+        last_1000_measurements.push_back(m.value);
+      }
+      int min = *std::min_element(last_1000_measurements.begin(), last_1000_measurements.end());
+      int max = *std::max_element(last_1000_measurements.begin(), last_1000_measurements.end());
+      float mean = std::accumulate(last_1000_measurements.begin(), last_1000_measurements.end(), 0.0) /
+                   last_1000_measurements.size();
+      // print peak-to-peak as floating point number, e.g. 9.432E4
+      ImGui::Text("Peak-to-peak OPDRef: %.2E", float(max - min));
+      ImGui::Text("Mean OPDRef: %.2E", mean);
+    }
+
+    // same for shear sum
+    if (!adc_buffers[0].Data.empty()) {
+      auto last_1000_shear_sum_data = shear_sum_buffer.GetLastN(1000);
+      std::vector<int> last_1000_shear_sum;
+      for (auto &m : last_1000_shear_sum_data) {
+        last_1000_shear_sum.push_back(m.value);
+      }
+      int min = *std::min_element(last_1000_shear_sum.begin(), last_1000_shear_sum.end());
+      int max = *std::max_element(last_1000_shear_sum.begin(), last_1000_shear_sum.end());
+      float mean = std::accumulate(last_1000_shear_sum.begin(), last_1000_shear_sum.end(), 0.0) /
+                   last_1000_shear_sum.size();
+      // print peak-to-peak as floating point number, e.g. 9.432E4
+      ImGui::Text("Peak-to-peak ShearSum: %.2E", float(max - min));
+      ImGui::Text("Mean ShearSum: %.2E", mean);
+    }
+
+    // same for pointing sum
+    if (!adc_buffers[4].Data.empty()) {
+      auto last_1000_point_sum_data = point_sum_buffer.GetLastN(1000);
+      std::vector<int> last_1000_point_sum;
+      for (auto &m : last_1000_point_sum_data) {
+        last_1000_point_sum.push_back(m.value);
+      }
+      int min = *std::min_element(last_1000_point_sum.begin(), last_1000_point_sum.end());
+      int max = *std::max_element(last_1000_point_sum.begin(), last_1000_point_sum.end());
+      float mean = std::accumulate(last_1000_point_sum.begin(), last_1000_point_sum.end(), 0.0) /
+                   last_1000_point_sum.size();
+      // print peak-to-peak as floating point number, e.g. 9.432E4
+      ImGui::Text("Peak-to-peak PointSum: %.2E", float(max - min));
+      ImGui::Text("Mean PointSum: %.2E", mean);
+    }
 
 
     static float adc_history_length = 1000.f;
@@ -657,7 +729,7 @@ void RenderUI() {
                                           "SineRef", "OPDRef"};
 
     // plot style
-    static float thickness = 2;
+    static float thickness = 5;
     static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
@@ -671,6 +743,16 @@ void RenderUI() {
         ImPlot::PlotLine(plot_labels[i], &adc_buffers[i].Data[0].time, &adc_buffers[i].Data[0].value, adc_buffers[i].Data.size(),
                          0, adc_buffers[i].Offset, 2 * sizeof(int));
       }
+
+      // shear sum
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(10), thickness);
+      ImPlot::PlotLine("ShearSum", &shear_sum_buffer.Data[0].time, &shear_sum_buffer.Data[0].value,
+                       shear_sum_buffer.Data.size(), 0, shear_sum_buffer.Offset, 2 * sizeof(int));
+
+      // pointing sum
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(11), thickness);
+      ImPlot::PlotLine("PointSum", &point_sum_buffer.Data[0].time, &point_sum_buffer.Data[0].value,
+                       point_sum_buffer.Data.size(), 0, point_sum_buffer.Offset, 2 * sizeof(int));
       ImPlot::EndPlot();
     }
   }
@@ -933,7 +1015,7 @@ void RenderUI() {
     // y axis: auto fit
     static ImPlotAxisFlags x1_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
-    static float x1_thickness = 1;
+    static float x1_thickness = 5;
   
     // plot x1, x2
     if (ImPlot::BeginPlot("##X1", ImVec2(-1, 200 * io.FontGlobalScale))) {
@@ -1079,7 +1161,7 @@ void RenderUI() {
   }  // end of x position
 
   if (ImGui::CollapsingHeader("Program settings")) {
-    ImGui::DragFloat("GUI scale", &io.FontGlobalScale, 0.005f, 0.5, 3.0, "%.2f",
+    ImGui::DragFloat("GUI scale", &io.FontGlobalScale, 0.005f, 0.5, 6.0, "%.2f",
                      ImGuiSliderFlags_AlwaysClamp);  // Scale everything
   }
   ImGui::End();
@@ -1190,8 +1272,8 @@ int main(int, char **) {
   // increase ImFontConfig::Density
   ImFontConfig config;
   config.SizePixels = 15.0f * 1.5f;
-  config.OversampleH = 3;
-  config.OversampleV = 3;
+  config.OversampleH = 1;
+  config.OversampleV = 1;
   config.PixelSnapH = true;
 
   // load Sans font
