@@ -498,11 +498,12 @@ void run_calculation() {
     // x2d = x2d_lp_filter.filter(x2d);
 
     // enqueue measurement and time
+    // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
     opdQueue.push({t, opd});
-    shear_x1Queue.push({t, shear_x1_um[0]});
-    shear_x2Queue.push({t, shear_x2_um[0]});
-    shear_y1Queue.push({t, shear_y1_um[0]});
-    shear_y2Queue.push({t, shear_y2_um[0]});
+    shear_x1Queue.push({t, shear_x1_um[0] - shear_y1_um[0]});
+    shear_x2Queue.push({t, shear_x2_um[0] - shear_y2_um[0]});
+    shear_y1Queue.push({t, shear_y1_um[0] + shear_x1_um[0]});
+    shear_y2Queue.push({t, shear_y2_um[0] + shear_x2_um[0]});
 
     // enqueue adc measurements
     static const float sampling_rate = 128e3;
@@ -1015,7 +1016,7 @@ void RenderUI() {
     // y axis: auto fit
     static ImPlotAxisFlags x1_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
-    static float x1_thickness = 5;
+    float x1_thickness = 3 * io.FontGlobalScale;
   
     // plot x1, x2
     if (ImPlot::BeginPlot("##X1", ImVec2(-1, 200 * io.FontGlobalScale))) {
