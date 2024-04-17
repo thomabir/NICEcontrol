@@ -437,7 +437,7 @@ void run_calculation() {
 
     // Convert received data to vector of 10 ints
     int receivedDataInt[16 * 10];
-    std::memcpy(receivedDataInt, buffer, sizeof(int) * 12 * 10);
+    std::memcpy(receivedDataInt, buffer, sizeof(int) * 16 * 10);
 
     static int counter[10];
     static int adc_shear1[10];
