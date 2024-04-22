@@ -41,6 +41,7 @@
 #include "MCL_NanoDrive.hpp"       // Controller for MCL OPD Stage
 #include "PI_E727_Controller.hpp"  // Controller for PI Tip/Tilt Stages
 #include "PI_E754_Controller.hpp"  // Controller for PI OPD Stage
+#include "nF_EBD_Controller.hpp"   // Controller for nanoFaktur Tip/Tilt Stages
 
 // Windows
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
@@ -256,10 +257,10 @@ class FFT_calculator {
 // iir filters
 Iir::Butterworth::LowPass<2> x1d_lp_filter, x2d_lp_filter, x1d_control_lp_filter, x2d_control_lp_filter;
 Iir::Butterworth::LowPass<2> opd_lp_filter, opd_control_lp_filter;
-const float xd_samplingrate = 6400.;
+const float xd_samplingrate = 12800.;
 const float xd_cutoff = 50.;
 const float xd_control_cutoff = 50.;
-const float opd_samplingrate = 64000.;
+const float opd_samplingrate = 12800.;
 const float opd_cutoff = 1000.;
 const float opd_control_cutoff = 100.;
 
@@ -328,15 +329,25 @@ void setupActuators() {
   // OPD stage
   opd_stage.init();
   opd_stage.move_to(0.0f);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::cout << "OPD Position: " << opd_stage.read() << std::endl;
 }
 
-static float x1d_open_loop_setpoint = 0.0f;
+static float shear_x1_ol_setpoint = 0.0f;
+static float shear_x2_ol_setpoint = 0.0f;
+static float shear_y1_ol_setpoint = 0.0f;
+static float shear_y2_ol_setpoint = 0.0f;
 
 TSQueue<Measurement> opdQueue;
 TSQueue<Measurement> shear_x1Queue;
 TSQueue<Measurement> shear_x2Queue;
 TSQueue<Measurement> shear_y1Queue;
 TSQueue<Measurement> shear_y2Queue;
+
+TSQueue<Measurement> point_x1Queue;
+TSQueue<Measurement> point_x2Queue;
+TSQueue<Measurement> point_y1Queue;
+TSQueue<Measurement> point_y2Queue;
 
 TSQueue<MeasurementT<int, int>> adc_queues[10];
 TSQueue<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
@@ -438,8 +449,8 @@ void run_calculation() {
     }
 
     // Convert received data to vector of 10 ints
-    int receivedDataInt[16 * 10];
-    std::memcpy(receivedDataInt, buffer, sizeof(int) * 16 * 10);
+    int receivedDataInt[20 * 10];
+    std::memcpy(receivedDataInt, buffer, sizeof(int) * 20 * 10);
 
     static int counter[10];
     static int adc_shear1[10];
@@ -457,26 +468,34 @@ void run_calculation() {
     static float shear_x2_um[10];
     static float shear_y1_um[10];
     static float shear_y2_um[10];
+    static float point_x1_um[10];
+    static float point_x2_um[10];
+    static float point_y1_um[10];
+    static float point_y2_um[10];
 
 
 
     for (int i = 0; i < 10; i++) {
-      counter[i] = receivedDataInt[16 * i];
-      adc_shear1[i] = receivedDataInt[16 * i + 1];
-      adc_shear2[i] = receivedDataInt[16 * i + 2];
-      adc_shear3[i] = receivedDataInt[16 * i + 3];
-      adc_shear4[i] = receivedDataInt[16 * i + 4];
-      adc_point1[i] = receivedDataInt[16 * i + 5];
-      adc_point2[i] = receivedDataInt[16 * i + 6];
-      adc_point3[i] = receivedDataInt[16 * i + 7];
-      adc_point4[i] = receivedDataInt[16 * i + 8];
-      adc_sine_ref[i] = receivedDataInt[16 * i + 9];
-      adc_opd_ref[i] = receivedDataInt[16 * i + 10];
-      opd_nm[i] = float(receivedDataInt[16 * i + 11]) / (2 * PI * 10000.) * 360.;  //* 1550.; // 0.1 mrad -> nm
-      shear_x1_um[i] = float(receivedDataInt[16 * i + 12]) / 1000.;
-      shear_x2_um[i] = float(receivedDataInt[16 * i + 13]) / 1000.;
-      shear_y1_um[i] = float(receivedDataInt[16 * i + 14]) / 1000.;
-      shear_y2_um[i] = float(receivedDataInt[16 * i + 15]) / 1000.;
+      counter[i] = receivedDataInt[20 * i];
+      adc_shear1[i] = receivedDataInt[20 * i + 1];
+      adc_shear2[i] = receivedDataInt[20 * i + 2];
+      adc_shear3[i] = receivedDataInt[20 * i + 3];
+      adc_shear4[i] = receivedDataInt[20 * i + 4];
+      adc_point1[i] = receivedDataInt[20 * i + 5];
+      adc_point2[i] = receivedDataInt[20 * i + 6];
+      adc_point3[i] = receivedDataInt[20 * i + 7];
+      adc_point4[i] = receivedDataInt[20 * i + 8];
+      adc_sine_ref[i] = receivedDataInt[20 * i + 9];
+      adc_opd_ref[i] = receivedDataInt[20 * i + 10];
+      opd_nm[i] = - float(receivedDataInt[20 * i + 11]) / (2 * PI * 10000.) * 1550.; // 0.1 mrad -> nm
+      shear_x1_um[i] = float(receivedDataInt[20 * i + 12]) / 3000.; // um
+      shear_x2_um[i] = float(receivedDataInt[20 * i + 13]) / 3000.; // um
+      shear_y1_um[i] = float(receivedDataInt[20 * i + 14]) / 3000.; // um
+      shear_y2_um[i] = float(receivedDataInt[20 * i + 15]) / 3000.; // um
+      point_x1_um[i] = float(receivedDataInt[20 * i + 16]) / 200.; // urad
+      point_x2_um[i] = float(receivedDataInt[20 * i + 17]) / 200.; // urad
+      point_y1_um[i] = float(receivedDataInt[20 * i + 18]) / 200.; // urad
+      point_y2_um[i] = float(receivedDataInt[20 * i + 19]) / 200.; // urad
     }
 
     // filter opd by piping the 10 new measurements through the filter
@@ -505,11 +524,13 @@ void run_calculation() {
     shear_y1Queue.push({t, shear_y1_um[0] + shear_x1_um[0]});
     shear_y2Queue.push({t, shear_y2_um[0] + shear_x2_um[0]});
 
+    point_x1Queue.push({t, point_x1_um[0] - point_y1_um[0]});
+    point_x2Queue.push({t, point_x2_um[0] - point_y2_um[0]});
+    point_y1Queue.push({t, point_y1_um[0] + point_x1_um[0]});
+    point_y2Queue.push({t, point_y2_um[0] + point_x2_um[0]});
+
     // enqueue adc measurements
-    static const float sampling_rate = 128e3;
     for (int i = 0; i < 10; i++) {
-      // double tnow = t + double(i) / sampling_rate;
-      // std::cout << "counter: " << counter[i] << std::endl;
       adc_queues[0].push({counter[i], adc_shear1[i]});
       adc_queues[1].push({counter[i], adc_shear2[i]});
       adc_queues[2].push({counter[i], adc_shear3[i]});
@@ -725,8 +746,8 @@ void RenderUI() {
     
 
     // plot label names
-    static const char *plot_labels[10] = {"Shear1", "Shear2", "Shear3", "Shear4",
-                                          "Point1", "Point2", "Point3", "Point4",
+    static const char *plot_labels[10] = {"Shear UP", "Shear LEFT", "Shear RIGHT", "Shear DOWN",
+                                          "Point UP", "Point LEFT", "Point RIGHT", "Point DOWN",
                                           "SineRef", "OPDRef"};
 
     // plot style
@@ -838,7 +859,7 @@ void RenderUI() {
       const static int fft_size = 1024 * 8 * 8;
       static double fft_power[fft_size / 2];
       static double fft_freq[fft_size / 2];
-      static FFT_calculator fft(fft_size, 6400., &opd_buffer, fft_power, fft_freq);
+      static FFT_calculator fft(fft_size, 12800., &opd_buffer, fft_power, fft_freq);
 
       // calculate fft
       fft.calculate();
@@ -965,7 +986,10 @@ void RenderUI() {
 
     // open loop
     if (xd_loop_select == 1) {
-      tip_tilt_stage1.move_to_x(x1d_open_loop_setpoint);
+      tip_tilt_stage1.move_to_x(shear_x1_ol_setpoint);
+      tip_tilt_stage1.move_to_y(shear_y1_ol_setpoint);
+      tip_tilt_stage2.move_to_x(shear_x2_ol_setpoint);
+      tip_tilt_stage2.move_to_y(shear_y2_ol_setpoint);
     }
 
     // real time plot
@@ -1018,7 +1042,7 @@ void RenderUI() {
 
     float x1_thickness = 3 * io.FontGlobalScale;
   
-    // plot x1, x2
+    // plot shear
     if (ImPlot::BeginPlot("##X1", ImVec2(-1, 200 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
@@ -1073,12 +1097,12 @@ void RenderUI() {
     ImGui::Text("x1d rms: %.4f", x1d_rms);
 
     // FFT
-    if (ImGui::TreeNode("FFT##X1D")) {
+    if (ImGui::TreeNode("FFT##Shear")) {
       // set up fft of x1d
       const static int fft_size = 1024 * 8 * 8;
       static double fft_power[fft_size / 2];
       static double fft_freq[fft_size / 2];
-      static FFT_calculator fft(fft_size, 6400., &shear_x1_buffer, fft_power, fft_freq);
+      static FFT_calculator fft(fft_size, 12800., &shear_x1_buffer, fft_power, fft_freq);
 
       // calculate fft
       fft.calculate();
@@ -1105,8 +1129,7 @@ void RenderUI() {
       ImGui::TreePop();
     }
 
-    // Tip/Tilt actuator (piezo)
-    if (ImGui::TreeNode("Actuator##X1D")) {
+    if (ImGui::TreeNode("Actuator##Shear")) {
       // plot for current piezo position
       static ImVec4 color = ImVec4(1, 1, 0, 1);
       static ScrollingBuffer tip_tilt_actuator_buffer;
@@ -1130,7 +1153,10 @@ void RenderUI() {
       ImGui::Text("Current measurement: %.4f", tip_tilt_actuator_measurement);
 
       // open loop setpoint µm
-      ImGui::SliderFloat("Setpoint##X1D", &x1d_open_loop_setpoint, -100.0f, 1900.0f);
+      ImGui::SliderFloat("X1 setpoint##Shear", &shear_x1_ol_setpoint, -1000.0f, 1000.0f);
+      ImGui::SliderFloat("Y1 setpoint##Shear", &shear_y1_ol_setpoint, -1000.0f, 1000.0f);
+      ImGui::SliderFloat("X2 setpoint##Shear", &shear_x2_ol_setpoint, -1000.0f, 1000.0f);
+      ImGui::SliderFloat("Y2 setpoint##Shear", &shear_y2_ol_setpoint, -1000.0f, 1000.0f);
 
       ImGui::TreePop();
     }
@@ -1161,6 +1187,79 @@ void RenderUI() {
 
   }  // end of x position
 
+    if (ImGui::CollapsingHeader("Pointing")) {
+
+
+    // real time plot
+    static ScrollingBuffer point_x1_buffer, point_x2_buffer, point_y1_buffer, point_y2_buffer;
+
+    static float t_gui_x = 0;
+
+    // if measurement is running, update gui time.
+    if (RunMeasurement.load()) {
+      t_gui_x = getTime();
+    }
+
+    // add the entire MeasurementQueue to the buffer
+    if (!point_x1Queue.isempty()) {
+      while (!point_x1Queue.isempty()) {
+        auto m = point_x1Queue.pop();
+        point_x1_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    if (!point_x2Queue.isempty()) {
+      while (!point_x2Queue.isempty()) {
+        auto m = point_x2Queue.pop();
+        point_x2_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    if (!point_y1Queue.isempty()) {
+      while (!point_y1Queue.isempty()) {
+        auto m = point_y1Queue.pop();
+        point_y1_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    if (!point_y2Queue.isempty()) {
+      while (!point_y2Queue.isempty()) {
+        auto m = point_y2Queue.pop();
+        point_y2_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    static float pointing_history_length = 10.0f;
+    ImGui::SliderFloat("History", &pointing_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
+
+    static ImPlotAxisFlags x1_xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+    static ImPlotAxisFlags x1_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+
+    float pointing_thickness = 3 * io.FontGlobalScale;
+
+    // plot
+    if (ImPlot::BeginPlot("##Pointing", ImVec2(-1, 200 * io.FontGlobalScale))) {
+      ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - pointing_history_length, t_gui_x, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), pointing_thickness);
+      ImPlot::PlotLine("Pointing X1", &point_x1_buffer.Data[0].x, &point_x1_buffer.Data[0].y, point_x1_buffer.Data.size(),
+                       0, point_x1_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), pointing_thickness);
+      ImPlot::PlotLine("Pointing X2", &point_x2_buffer.Data[0].x, &point_x2_buffer.Data[0].y, point_x2_buffer.Data.size(),
+                       0, point_x2_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), pointing_thickness);
+      ImPlot::PlotLine("Pointing Y1", &point_y1_buffer.Data[0].x, &point_y1_buffer.Data[0].y, point_y1_buffer.Data.size(),
+                       0, point_y1_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), pointing_thickness);
+      ImPlot::PlotLine("Pointing Y2", &point_y2_buffer.Data[0].x, &point_y2_buffer.Data[0].y, point_y2_buffer.Data.size(),
+                       0, point_y2_buffer.Offset, 2 * sizeof(float));
+      ImPlot::EndPlot();
+    }
+
+  }  // end of x position
+
   if (ImGui::CollapsingHeader("Program settings")) {
     ImGui::DragFloat("GUI scale", &io.FontGlobalScale, 0.005f, 0.5, 6.0, "%.2f",
                      ImGuiSliderFlags_AlwaysClamp);  // Scale everything
@@ -1170,7 +1269,7 @@ void RenderUI() {
   // demo window
   static bool show_app_metrics = true;
   // ImGui::ShowDemoWindow();
-  ImGui::ShowMetricsWindow(&show_app_metrics);
+  // ImGui::ShowMetricsWindow(&show_app_metrics);
 
   // implot demo window
   // ImPlot::ShowDemoWindow();

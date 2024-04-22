@@ -51,6 +51,10 @@ CXXFLAGS += -Ofast -Wall -Wformat #-g
 
 LIBS = -lmadlib -lfftw3 -lm -liir -lpi_pi_gcs2
 
+## nanoFaktur piezo controller
+# LIBS += -lnF_interface # nanoFaktur piezo controller
+# SOURCES += $(SRC_DIR)/nF_EBD_Controller.cpp # nanoFaktur piezo controller
+
 ##---------------------------------------------------------------------
 ## OPENGL ES
 ##---------------------------------------------------------------------
