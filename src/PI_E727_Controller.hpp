@@ -19,5 +19,5 @@ class PI_E727_Controller {
   int iD;
   char serialNumberString[1024];
   char name[1024];
-  double offset = 100.0;  // urad
+  double offset = 1000.0;  // urad
 };
