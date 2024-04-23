@@ -260,9 +260,9 @@ Iir::Butterworth::LowPass<2> opd_lp_filter, opd_control_lp_filter;
 const float xd_samplingrate = 12800.;
 const float xd_cutoff = 50.;
 const float xd_control_cutoff = 50.;
-const float opd_samplingrate = 12800.;
+const float opd_samplingrate = 128000.;
 const float opd_cutoff = 1000.;
-const float opd_control_cutoff = 100.;
+const float opd_control_cutoff = 1000.;
 
 namespace NICEcontrol {
 
@@ -272,8 +272,10 @@ std::atomic<float> opd_setpoint = 0.0f;  // setpoint used in calculation, clippe
 std::atomic<bool> RunOpdControl(false);
 std::mutex OpdControlMutex;
 std::condition_variable OpdControlCV;
-std::atomic<float> opd_p = 0.0f;
+std::atomic<float> opd_p = 0.7f;
 std::atomic<float> opd_i = 0.0f;
+std::atomic<float> opd_dither_freq = 0.0f;
+std::atomic<float> opd_dither_amp = 0.0f;
 
 // xd control
 float x1d_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
@@ -621,7 +623,7 @@ void RenderUI() {
 
   // opd control gui parameters
   static int opd_loop_select = 0;
-  static float opd_p_gui = 0.470f;
+  static float opd_p_gui = 0.700f;
   static float opd_i_gui = 0.009f;
   opd_p.store(opd_p_gui);
   opd_i.store(opd_i_gui);
@@ -947,8 +949,8 @@ void RenderUI() {
       ImGui::Text("Control loop parameters:");
 
       // sliders for p ,i
-      ImGui::SliderFloat("P##OPD", &opd_p_gui, 0.0f, 1.0f);
-      ImGui::SliderFloat("I##OPD", &opd_i_gui, 0.0f, 3e-2f);
+      ImGui::SliderFloat("P##OPD", &opd_p_gui, 1e-4f, 1e2f, "%.5f", ImGuiSliderFlags_Logarithmic);
+      ImGui::SliderFloat("I##OPD", &opd_i_gui, 1e-4f, 3e-1f, "%.5f", ImGuiSliderFlags_Logarithmic);
 
       const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
 
