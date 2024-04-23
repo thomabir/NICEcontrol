@@ -562,6 +562,7 @@ void run_calculation() {
 
     // if RunOpdControl is true, calculate the control signal
     if (RunOpdControl.load()) {
+
       // calculate error
       opd_error = opd_setpoint.load() - opd_control_measurement;
 
@@ -573,6 +574,10 @@ void run_calculation() {
 
       // calculate control signal
       opd_control_signal = opd_p.load() * opd_error + opd_error_integral;
+
+      // calculate dither signal (for characterisation of the system)
+      float dither_signal = opd_dither_amp.load() * std::sin(2 * PI * opd_dither_freq.load() * t);
+      opd_control_signal += dither_signal / 2.; // correct for double pass (retroreflector)
 
       // actuate piezo actuator
       // he lives in his own thread because he's slow
@@ -627,6 +632,10 @@ void RenderUI() {
   static float opd_i_gui = 0.009f;
   opd_p.store(opd_p_gui);
   opd_i.store(opd_i_gui);
+  static float opd_dither_freq_gui = 0.0f;
+  static float opd_dither_amp_gui = 0.0f;
+  opd_dither_freq.store(opd_dither_freq_gui);
+  opd_dither_amp.store(opd_dither_amp_gui);
 
   // x1d control gui parameters
   static int xd_loop_select = 0;
@@ -649,7 +658,7 @@ void RenderUI() {
     stopMeasurement();
   }
 
-  // header: ADC measurements
+  // ADC measurements
   if (ImGui::CollapsingHeader("ADC Measurements")) {
 
     static ScrollingBufferT<int, int> adc_buffers[10];
@@ -964,6 +973,10 @@ void RenderUI() {
 
       // set opd_setpoint
       opd_setpoint.store(opd_setpoint_gui);
+
+      // dither parameters
+      ImGui::SliderFloat("Dither frequency##OPD", &opd_dither_freq_gui, 0.1f, 1000.0f, "%.2f Hz", ImGuiSliderFlags_Logarithmic);
+      ImGui::SliderFloat("Dither amplitude##OPD", &opd_dither_amp_gui, 0.0f, 20.0f, "%.2f nm");
 
       ImGui::TreePop();
     }
