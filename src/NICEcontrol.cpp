@@ -399,10 +399,6 @@ void PI_move_to_y2(float target) {
   tip_tilt_stage2.move_to_y(target);
 }
 
-void move_to_opd(float target) {
-  opd_stage.move_to(target);
-}
-
 bool is_first_shear_x1_iteration = true;  // to check if the slow move has been executed yet
 bool is_first_shear_x2_iteration = true;
 bool is_first_shear_y1_iteration = true;
@@ -603,11 +599,7 @@ void run_calculation() {
 
       // actuate piezo actuator
       // he lives in his own thread because he's slow
-      if (is_first_opd_iteration ||
-          slow_opd_move_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-        slow_opd_move_future = std::async(std::launch::async, move_to_opd, opd_control_signal * 1e-3);
-        is_first_opd_iteration = false;
-      }
+      opd_stage.move_to(opd_control_signal * 1e-3);
     }
 
     if (RunShearControl.load()) {

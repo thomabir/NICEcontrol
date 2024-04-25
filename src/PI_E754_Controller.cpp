@@ -1,6 +1,9 @@
 #include "PI_E754_Controller.hpp"
 
 #include <cstring>
+#include <iostream>
+#include <thread>
+#include <atomic>
 
 #include "../lib/pi/AutoZeroSample.h"
 #include "../lib/pi/PI_GCS2_DLL.h"
@@ -12,6 +15,9 @@ PI_E754_Controller::PI_E754_Controller(char *serialNumberString) {
   // set name
   std::strcpy(this->name, "PI E-754 Tip/Tilt Piezo Controller S/N ");
   std::strcat(this->name, serialNumberString);
+
+  // set is_moving to false
+  is_moving = false;
 }
 
 PI_E754_Controller::~PI_E754_Controller() { close(); }
@@ -70,8 +76,21 @@ double PI_E754_Controller::read() {
 }
 
 void PI_E754_Controller::move_to(double value) {
+  if (is_moving.load()) {return;} // stage is unreachable while moving
+
+  is_moving.store(true);
+  std::thread([this, value] {
+    move_to_blocking(value);
+    is_moving.store(false);
+  }).detach();
+
+  // double dValue = value + offset;
+  // PI_MOV(iD, "1", &dValue);
+}
+
+void PI_E754_Controller::move_to_blocking(double value) {
   double dValue = value + offset;
-  PI_MOV(iD, "1", &dValue);
+  PI_MOV(iD, "1", &dValue); // PI_MOV blocks until the move is done
 }
 
 // run autozero procedure
