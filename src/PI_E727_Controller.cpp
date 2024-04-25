@@ -81,13 +81,13 @@ double PI_E727_Controller::ready() {
 }
 
 void PI_E727_Controller::move_to_x(double value) {
-  const double dValue = value + offset;
-  PI_MOV(iD, "2", &dValue);
+  const double dValue = - value + offset; // the negative sign is because of the orientation of the piezo
+  PI_MOV(iD, "1", &dValue);
 }
 
 void PI_E727_Controller::move_to_y(double value) {
   const double dValue = value + offset;
-  PI_MOV(iD, "1", &dValue);
+  PI_MOV(iD, "2", &dValue);
 }
 
 // run autozero procedure

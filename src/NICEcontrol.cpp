@@ -12,7 +12,6 @@
 #include <atomic>
 #include <boost/circular_buffer.hpp>
 #include <chrono>
-#include <condition_variable>
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -255,14 +254,15 @@ class FFT_calculator {
 };
 
 // iir filters
-Iir::Butterworth::LowPass<2> x1d_lp_filter, x2d_lp_filter, x1d_control_lp_filter, x2d_control_lp_filter;
-Iir::Butterworth::LowPass<2> opd_lp_filter, opd_control_lp_filter;
-const float xd_samplingrate = 12800.;
-const float xd_cutoff = 50.;
-const float xd_control_cutoff = 50.;
+Iir::Butterworth::LowPass<2> shear_x1_lp_filter, shear_x2_lp_filter, shear_x1_control_lp_filter, shear_x2_control_lp_filter;
+Iir::Butterworth::LowPass<2> shear_y1_control_lp_filter, shear_y2_control_lp_filter;
+Iir::Butterworth::LowPass<6> opd_lp_filter, opd_control_lp_filter;
+const float shear_samplingrate = 12800.;
+const float shear_meas_cutoff = 1000.;
+const float shear_control_cutoff = 50.;
 const float opd_samplingrate = 128000.;
-const float opd_cutoff = 1000.;
-const float opd_control_cutoff = 1000.;
+const float opd_meas_cutoff = 1000.;
+const float opd_control_cutoff = 100.;
 
 namespace NICEcontrol {
 
@@ -270,28 +270,26 @@ namespace NICEcontrol {
 float opd_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
 std::atomic<float> opd_setpoint = 0.0f;  // setpoint used in calculation, clipped to valid range
 std::atomic<bool> RunOpdControl(false);
-std::mutex OpdControlMutex;
-std::condition_variable OpdControlCV;
 std::atomic<float> opd_p = 0.7f;
 std::atomic<float> opd_i = 0.0f;
 std::atomic<float> opd_dither_freq = 0.0f;
 std::atomic<float> opd_dither_amp = 0.0f;
 
-// xd control
-float x1d_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
-std::atomic<float> x1d_setpoint = 0.0f;  // setpoint used in calculation, clipped to valid range
-float x2d_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
-std::atomic<float> x2d_setpoint = 0.0f;  // setpoint used in calculation, clipped to valid range
-std::atomic<bool> RunXdControl(false);
-std::mutex XdControlMutex;
-std::condition_variable XdControlCV;
-std::atomic<float> xd_p = 0.0f;
-std::atomic<float> xd_i = 0.0f;
+// shear control
+float shear_x1_setpoint_gui = 0.0f;
+std::atomic<float> shear_x1_setpoint = 0.0f;
+float shear_x2_setpoint_gui = 0.0f;
+std::atomic<float> shear_x2_setpoint = 0.0f;
+float shear_y1_setpoint_gui = 0.0f;
+std::atomic<float> shear_y1_setpoint = 0.0f;
+float shear_y2_setpoint_gui = 0.0f;
+std::atomic<float> shear_y2_setpoint = 0.0f;
+std::atomic<bool> RunShearControl(false);
+std::atomic<float> shear_p = 0.0f;
+std::atomic<float> shear_i = 0.0f;
 
 // variables that control the measurement thread
 std::atomic<bool> RunMeasurement(false);
-std::mutex MeasurementMutex;
-std::condition_variable MeasurementCV;
 std::ofstream outputFile;
 
 // initialise opd stage
@@ -381,7 +379,7 @@ int setup_ethernet() {
   return sockfd;
 }
 
-void move_to_x1d(float target) {
+void PI_move_to_x1(float target) {
   // a slow function (takes 1 ms, when it should be 10 us)
   // it has thus been banished to live in its own thread
 
@@ -389,18 +387,31 @@ void move_to_x1d(float target) {
   tip_tilt_stage1.move_to_x(target);
 }
 
-void move_to_opd(float target) {
-  // a slow function (takes 1 ms, when it should be 10 us)
-  // it has thus been banished to live in its own thread
+void PI_move_to_x2(float target) {
+  tip_tilt_stage2.move_to_x(target);
+}
 
-  // move opd stage to opd
-  // std ::cout << "Moving to " << target << std::endl;
+void PI_move_to_y1(float target) {
+  tip_tilt_stage1.move_to_y(target);
+}
+
+void PI_move_to_y2(float target) {
+  tip_tilt_stage2.move_to_y(target);
+}
+
+void move_to_opd(float target) {
   opd_stage.move_to(target);
 }
 
-bool is_first_x1d_iteration = true;  // to check if the slow move has been executed yet
-bool is_first_opd_iteration = true;  // to check if the slow move has been executed yet
-std::future<void> slow_x1d_move_future;
+bool is_first_shear_x1_iteration = true;  // to check if the slow move has been executed yet
+bool is_first_shear_x2_iteration = true;
+bool is_first_shear_y1_iteration = true;
+bool is_first_shear_y2_iteration = true;
+bool is_first_opd_iteration = true;
+std::future<void> slow_shear_x1_move_future;
+std::future<void> slow_shear_x2_move_future;
+std::future<void> slow_shear_y1_move_future;
+std::future<void> slow_shear_y2_move_future;
 std::future<void> slow_opd_move_future;
 
 void run_calculation() {
@@ -420,19 +431,18 @@ void run_calculation() {
   char buffer[buffer_size];
 
   // initialise filter
-  x1d_lp_filter.setup(xd_samplingrate, xd_cutoff);
-  x1d_control_lp_filter.setup(xd_samplingrate, xd_control_cutoff);
-  x2d_lp_filter.setup(xd_samplingrate, xd_cutoff);
-  x2d_control_lp_filter.setup(xd_samplingrate, xd_control_cutoff);
-  opd_lp_filter.setup(opd_samplingrate, opd_cutoff);
+  shear_x1_lp_filter.setup(shear_samplingrate, shear_meas_cutoff);
+  shear_x1_control_lp_filter.setup(shear_samplingrate, shear_control_cutoff);
+  shear_x2_lp_filter.setup(shear_samplingrate, shear_meas_cutoff);
+  shear_x2_control_lp_filter.setup(shear_samplingrate, shear_control_cutoff);
+  shear_y1_control_lp_filter.setup(shear_samplingrate, shear_control_cutoff);
+  shear_y2_control_lp_filter.setup(shear_samplingrate, shear_control_cutoff);
+  opd_lp_filter.setup(opd_samplingrate, opd_meas_cutoff);
 
   
 
   while (true) {
-    {
-      std::unique_lock<std::mutex> lock(MeasurementMutex);
-      MeasurementCV.wait(lock, [] { return RunMeasurement.load(); });
-    }
+    RunMeasurement.wait(false);
 
     // read the measurement from the ethernet connection
     count++;
@@ -494,10 +504,10 @@ void run_calculation() {
       shear_x2_um[i] = float(receivedDataInt[20 * i + 13]) / 3000.; // um
       shear_y1_um[i] = float(receivedDataInt[20 * i + 14]) / 3000.; // um
       shear_y2_um[i] = float(receivedDataInt[20 * i + 15]) / 3000.; // um
-      point_x1_um[i] = float(receivedDataInt[20 * i + 16]) / 200.; // urad
-      point_x2_um[i] = float(receivedDataInt[20 * i + 17]) / 200.; // urad
-      point_y1_um[i] = float(receivedDataInt[20 * i + 18]) / 200.; // urad
-      point_y2_um[i] = float(receivedDataInt[20 * i + 19]) / 200.; // urad
+      point_x1_um[i] = float(receivedDataInt[20 * i + 16]) / 1000.; // urad
+      point_x2_um[i] = float(receivedDataInt[20 * i + 17]) / 1000.; // urad
+      point_y1_um[i] = float(receivedDataInt[20 * i + 18]) / 1000.; // urad
+      point_y2_um[i] = float(receivedDataInt[20 * i + 19]) / 1000.; // urad
     }
 
     // filter opd by piping the 10 new measurements through the filter
@@ -511,25 +521,25 @@ void run_calculation() {
       opd_control_measurement = opd_control_lp_filter.filter(opd_nm[i]);
     }
 
-    // get and filter x1d
-    // float x1d = x1d_lp_filter.filter(adc1[0] / adc4[0] * 1.11e3 / 2.);
-    // float x1d_control_measurement = x1d_control_lp_filter.filter(adc1[0] / adc4[0] * 1.11e3 / 2.);
-
-    // float x2d = adc2[0] / adc5[0] * 1.11e3 / 2.;
-    // x2d = x2d_lp_filter.filter(x2d);
 
     // enqueue measurement and time
     // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
     opdQueue.push({t, opd});
-    shear_x1Queue.push({t, shear_x1_um[0] - shear_y1_um[0]});
-    shear_x2Queue.push({t, shear_x2_um[0] - shear_y2_um[0]});
-    shear_y1Queue.push({t, shear_y1_um[0] + shear_x1_um[0]});
-    shear_y2Queue.push({t, shear_y2_um[0] + shear_x2_um[0]});
+    shear_x1Queue.push({t, shear_y1_um[0] + shear_x1_um[0]});
+    shear_y1Queue.push({t, shear_x1_um[0] - shear_y1_um[0]});
+    shear_x2Queue.push({t, shear_y2_um[0] + shear_x2_um[0]});
+    shear_y2Queue.push({t, shear_x2_um[0] - shear_y2_um[0]});
 
-    point_x1Queue.push({t, point_x1_um[0] - point_y1_um[0]});
-    point_x2Queue.push({t, point_x2_um[0] - point_y2_um[0]});
-    point_y1Queue.push({t, point_y1_um[0] + point_x1_um[0]});
-    point_y2Queue.push({t, point_y2_um[0] + point_x2_um[0]});
+    point_x1Queue.push({t, point_y1_um[0] + point_x1_um[0]});
+    point_y1Queue.push({t, point_x1_um[0] - point_y1_um[0]});
+    point_x2Queue.push({t, point_y2_um[0] + point_x2_um[0]});
+    point_y2Queue.push({t, point_x2_um[0] - point_y2_um[0]});
+
+    // get and filter x1d
+    float shear_x1_control_measurement = shear_x1_control_lp_filter.filter(shear_y1_um[0] + shear_x1_um[0]);
+    float shear_x2_control_measurement = shear_x2_control_lp_filter.filter(shear_y2_um[0] + shear_x2_um[0]);
+    float shear_y1_control_measurement = shear_y1_control_lp_filter.filter(shear_x1_um[0] - shear_y1_um[0]);
+    float shear_y2_control_measurement = shear_y2_control_lp_filter.filter(shear_x2_um[0] - shear_y2_um[0]);
 
     // enqueue adc measurements
     for (int i = 0; i < 10; i++) {
@@ -556,10 +566,22 @@ void run_calculation() {
     static float opd_error_integral = 0.0f;
     static float opd_control_signal = 0.0f;
 
-    static float x1d_error = 0.0f;
-    static float x1d_error_integral = 0.0f;
-    static float x1d_control_signal = 0.0f;
+    static float shear_x1_error = 0.0f;
+    static float shear_x1_error_integral = 0.0f;
+    static float shear_x1_control_signal = 0.0f;
 
+    static float shear_x2_error = 0.0f;
+    static float shear_x2_error_integral = 0.0f;
+    static float shear_x2_control_signal = 0.0f;
+
+    static float shear_y1_error = 0.0f;
+    static float shear_y1_error_integral = 0.0f;
+    static float shear_y1_control_signal = 0.0f;
+
+    static float shear_y2_error = 0.0f;
+    static float shear_y2_error_integral = 0.0f;
+    static float shear_y2_control_signal = 0.0f;
+  
     // if RunOpdControl is true, calculate the control signal
     if (RunOpdControl.load()) {
 
@@ -576,8 +598,8 @@ void run_calculation() {
       opd_control_signal = opd_p.load() * opd_error + opd_error_integral;
 
       // calculate dither signal (for characterisation of the system)
-      float dither_signal = opd_dither_amp.load() * std::sin(2 * PI * opd_dither_freq.load() * t);
-      opd_control_signal += dither_signal / 2.; // correct for double pass (retroreflector)
+      // float dither_signal = opd_dither_amp.load() * std::sin(2 * PI * opd_dither_freq.load() * t);
+      // opd_control_signal += dither_signal / 2.; // correct for double pass (retroreflector)
 
       // actuate piezo actuator
       // he lives in his own thread because he's slow
@@ -588,35 +610,66 @@ void run_calculation() {
       }
     }
 
-    // if (RunXdControl.load()) {
-    //   // calculate error
-    //   x1d_error = x1d_control_measurement - x1d_setpoint.load();
+    if (RunShearControl.load()) {
+      // calculate error
+      shear_x1_error = shear_x1_setpoint.load() - shear_x1_control_measurement;
+      shear_x2_error = shear_x2_setpoint.load() - shear_x2_control_measurement;
+      shear_y1_error = shear_y1_setpoint.load() - shear_y1_control_measurement;
+      shear_y2_error = shear_y2_setpoint.load() - shear_y2_control_measurement;
 
-    //   // calculate integral
-    //   x1d_error_integral += xd_i.load() * x1d_error;
+      // calculate integral
+      shear_x1_error_integral += shear_i.load() * shear_x1_error;
+      shear_x2_error_integral += shear_i.load() * shear_x2_error;
+      shear_y1_error_integral += shear_i.load() * shear_y1_error;
+      shear_y2_error_integral += shear_i.load() * shear_y2_error;
 
-    //   // calculate derivative
-    //   // x1d_error_derivative = x1d_error - x1d_error_prev;
+      // calculate derivative
+      // x1d_error_derivative = x1d_error - x1d_error_prev;
 
-    //   // calculate control signal
-    //   x1d_control_signal = xd_p.load() * x1d_error + x1d_error_integral;
+      // calculate control signal
+      shear_x1_control_signal = shear_p.load() * shear_x1_error + shear_x1_error_integral;
+      shear_x2_control_signal = shear_p.load() * shear_x2_error + shear_x2_error_integral;
+      shear_y1_control_signal = shear_p.load() * shear_y1_error + shear_y1_error_integral;
+      shear_y2_control_signal = shear_p.load() * shear_y2_error + shear_y2_error_integral;
 
-    //   // actuate piezo actuator
-    //   // he lives in his own thread because he's slow
-    //   if (is_first_x1d_iteration || slow_x1d_move_future.wait_for(std::chrono::milliseconds(0)) ==
-    //   std::future_status::ready) {
-    //     // move_to_x(x1d_control_signal); // too slow, takes 1 ms
-    //     slow_x1d_move_future = std::async(std::launch::async, move_to_x1d, x1d_control_signal);
-    //     is_first_x1d_iteration = false;
-    //   }
-    // }
+      // actuate piezo actuator
+      // he lives in his own thread because he's slow
+      if (is_first_shear_x1_iteration || slow_shear_x1_move_future.wait_for(std::chrono::milliseconds(0)) ==
+      std::future_status::ready) {
+        // move_to_x(x1d_control_signal); // too slow, takes 1 ms
+        slow_shear_x1_move_future = std::async(std::launch::async, PI_move_to_x1, shear_x1_control_signal);
+        is_first_shear_x1_iteration = false;
+      }
+
+      if (is_first_shear_x2_iteration || slow_shear_x2_move_future.wait_for(std::chrono::milliseconds(0)) ==
+      std::future_status::ready) {
+        // move_to_x(x1d_control_signal); // too slow, takes 1 ms
+        slow_shear_x2_move_future = std::async(std::launch::async, PI_move_to_x2, shear_x2_control_signal);
+        is_first_shear_x2_iteration = false;
+      }
+
+      if (is_first_shear_y1_iteration || slow_shear_y1_move_future.wait_for(std::chrono::milliseconds(0)) ==
+      std::future_status::ready) {
+        // move_to_x(x1d_control_signal); // too slow, takes 1 ms
+        slow_shear_y1_move_future = std::async(std::launch::async, PI_move_to_y1, shear_y1_control_signal);
+        is_first_shear_y1_iteration = false;
+      }
+
+      if (is_first_shear_y2_iteration || slow_shear_y2_move_future.wait_for(std::chrono::milliseconds(0)) ==
+      std::future_status::ready) {
+        // move_to_x(x1d_control_signal); // too slow, takes 1 ms
+        slow_shear_y2_move_future = std::async(std::launch::async, PI_move_to_y2, shear_y2_control_signal);
+        is_first_shear_y2_iteration = false;
+      }
+      
+    }
   }
 }
 
-// Presenter
+
 void startMeasurement() {
   RunMeasurement.store(true);
-  MeasurementCV.notify_one();
+  RunMeasurement.notify_all();
 }
 
 void stopMeasurement() { RunMeasurement.store(false); }
@@ -641,8 +694,8 @@ void RenderUI() {
   static int xd_loop_select = 0;
   static float xd_p_gui = 0.4f;
   static float xd_i_gui = 0.007f;
-  xd_p.store(xd_p_gui);
-  xd_i.store(xd_i_gui);
+  shear_p.store(xd_p_gui);
+  shear_i.store(xd_i_gui);
 
   static auto current_measurement = 0.f;
   if (!opdQueue.isempty()) {
@@ -994,13 +1047,14 @@ void RenderUI() {
 
     // run control if "Closed loop" is selected
     if (xd_loop_select == 2) {
-      RunXdControl.store(true);
+      RunShearControl.store(true);
     } else {
-      RunXdControl.store(false);
+      RunShearControl.store(false);
     }
 
     // open loop
     if (xd_loop_select == 1) {
+      // actuators are rotated 90 degrees, hence the x/y swap
       tip_tilt_stage1.move_to_x(shear_x1_ol_setpoint);
       tip_tilt_stage1.move_to_y(shear_y1_ol_setpoint);
       tip_tilt_stage2.move_to_x(shear_x2_ol_setpoint);
@@ -1067,11 +1121,11 @@ void RenderUI() {
       ImPlot::PlotLine("Shear X1", &shear_x1_buffer.Data[0].x, &shear_x1_buffer.Data[0].y, shear_x1_buffer.Data.size(),
                        0, shear_x1_buffer.Offset, 2 * sizeof(float));
       ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), x1_thickness);
-      ImPlot::PlotLine("Shear X2", &shear_x2_buffer.Data[0].x, &shear_x2_buffer.Data[0].y, shear_x2_buffer.Data.size(),
-                       0, shear_x2_buffer.Offset, 2 * sizeof(float));
-      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), x1_thickness);
       ImPlot::PlotLine("Shear Y1", &shear_y1_buffer.Data[0].x, &shear_y1_buffer.Data[0].y, shear_y1_buffer.Data.size(),
                        0, shear_y1_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), x1_thickness);
+      ImPlot::PlotLine("Shear X2", &shear_x2_buffer.Data[0].x, &shear_x2_buffer.Data[0].y, shear_x2_buffer.Data.size(),
+                       0, shear_x2_buffer.Offset, 2 * sizeof(float));
       ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), x1_thickness);
       ImPlot::PlotLine("Shear Y2", &shear_y2_buffer.Data[0].x, &shear_y2_buffer.Data[0].y, shear_y2_buffer.Data.size(),
                        0, shear_y2_buffer.Offset, 2 * sizeof(float));
@@ -1184,18 +1238,18 @@ void RenderUI() {
       ImGui::SliderFloat("P##X1D", &xd_p_gui, 0.0f, 1.0f);
       ImGui::SliderFloat("I##X1D", &xd_i_gui, 0.0f, 0.05f);
 
-      const float x1d_setpoint_min = -100.0f, x1d_setpoint_max = 100.0f;
+      const float x1d_setpoint_min = -200.0f, x1d_setpoint_max = 200.0f;
 
       // x1d input: drag
-      ImGui::SliderFloat("(Drag or double-click to adjust)", &x1d_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
+      ImGui::SliderFloat("(Drag or double-click to adjust)", &shear_x1_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
                          "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
 
-      // clamp x1d_setpoint_gui to min/max
-      if (x1d_setpoint_gui < x1d_setpoint_min) x1d_setpoint_gui = x1d_setpoint_min;
-      if (x1d_setpoint_gui > x1d_setpoint_max) x1d_setpoint_gui = x1d_setpoint_max;
+      // clamp shear_x1_setpoint_gui to min/max
+      if (shear_x1_setpoint_gui < x1d_setpoint_min) shear_x1_setpoint_gui = x1d_setpoint_min;
+      if (shear_x1_setpoint_gui > x1d_setpoint_max) shear_x1_setpoint_gui = x1d_setpoint_max;
 
-      // set x1d_setpoint
-      x1d_setpoint.store(x1d_setpoint_gui);
+      // set shear_x1_setpoint
+      shear_x1_setpoint.store(shear_x1_setpoint_gui);
 
       ImGui::TreePop();
     }
@@ -1262,11 +1316,11 @@ void RenderUI() {
       ImPlot::PlotLine("Pointing X1", &point_x1_buffer.Data[0].x, &point_x1_buffer.Data[0].y, point_x1_buffer.Data.size(),
                        0, point_x1_buffer.Offset, 2 * sizeof(float));
       ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), pointing_thickness);
-      ImPlot::PlotLine("Pointing X2", &point_x2_buffer.Data[0].x, &point_x2_buffer.Data[0].y, point_x2_buffer.Data.size(),
-                       0, point_x2_buffer.Offset, 2 * sizeof(float));
-      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), pointing_thickness);
       ImPlot::PlotLine("Pointing Y1", &point_y1_buffer.Data[0].x, &point_y1_buffer.Data[0].y, point_y1_buffer.Data.size(),
                        0, point_y1_buffer.Offset, 2 * sizeof(float));
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), pointing_thickness);
+      ImPlot::PlotLine("Pointing X2", &point_x2_buffer.Data[0].x, &point_x2_buffer.Data[0].y, point_x2_buffer.Data.size(),
+                       0, point_x2_buffer.Offset, 2 * sizeof(float));
       ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), pointing_thickness);
       ImPlot::PlotLine("Pointing Y2", &point_y2_buffer.Data[0].x, &point_y2_buffer.Data[0].y, point_y2_buffer.Data.size(),
                        0, point_y2_buffer.Offset, 2 * sizeof(float));
@@ -1468,7 +1522,6 @@ int main(int, char **) {
 
   // Stop the compute thread
   {
-    std::lock_guard<std::mutex> lock(NICEcontrol::MeasurementMutex);
     NICEcontrol::RunMeasurement.store(false);
   }
   computeThread.join();
