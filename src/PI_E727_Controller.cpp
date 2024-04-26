@@ -1,6 +1,9 @@
 #include "PI_E727_Controller.hpp"
 
 #include <cstring>
+#include <iostream>
+#include <thread>
+#include <atomic>
 
 #include "../lib/pi/AutoZeroSample.h"
 #include "../lib/pi/PI_GCS2_DLL.h"
@@ -12,6 +15,10 @@ PI_E727_Controller::PI_E727_Controller(char *serialNumberString) {
   // set name
   std::strcpy(this->name, "PI E-727 Tip/Tilt Piezo Controller S/N ");
   std::strcat(this->name, serialNumberString);
+
+  // set is_moving to false
+  is_moving_x = false;
+  is_moving_y = false;
 }
 
 PI_E727_Controller::~PI_E727_Controller() { close(); }
@@ -81,11 +88,33 @@ double PI_E727_Controller::ready() {
 }
 
 void PI_E727_Controller::move_to_x(double value) {
+  if (is_moving_x.load()) {return;} // stage is unreachable while moving
+
+  is_moving_x.store(true);
+  std::thread([this, value] {
+    move_to_x_blocking(value);
+    is_moving_x.store(false);
+  }).detach();
+
+}
+
+void PI_E727_Controller::move_to_y(double value) {
+  if (is_moving_y.load()) {return;} // stage is unreachable while moving
+
+  is_moving_y.store(true);
+  std::thread([this, value] {
+    move_to_y_blocking(value);
+    is_moving_y.store(false);
+  }).detach();
+
+}
+
+void PI_E727_Controller::move_to_x_blocking(double value) {
   const double dValue = - value + offset; // the negative sign is because of the orientation of the piezo
   PI_MOV(iD, "1", &dValue);
 }
 
-void PI_E727_Controller::move_to_y(double value) {
+void PI_E727_Controller::move_to_y_blocking(double value) {
   const double dValue = value + offset;
   PI_MOV(iD, "2", &dValue);
 }

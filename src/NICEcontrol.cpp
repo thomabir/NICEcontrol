@@ -352,9 +352,6 @@ TSQueue<Measurement> point_y2Queue;
 TSQueue<MeasurementT<int, int>> adc_queues[10];
 TSQueue<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
 
-
-
-
 int setup_ethernet() {
   // setup ethernet connection
   // Create a UDP socket
@@ -378,37 +375,6 @@ int setup_ethernet() {
 
   return sockfd;
 }
-
-void PI_move_to_x1(float target) {
-  // a slow function (takes 1 ms, when it should be 10 us)
-  // it has thus been banished to live in its own thread
-
-  // move tip/tilt stage 1 to x1d
-  tip_tilt_stage1.move_to_x(target);
-}
-
-void PI_move_to_x2(float target) {
-  tip_tilt_stage2.move_to_x(target);
-}
-
-void PI_move_to_y1(float target) {
-  tip_tilt_stage1.move_to_y(target);
-}
-
-void PI_move_to_y2(float target) {
-  tip_tilt_stage2.move_to_y(target);
-}
-
-bool is_first_shear_x1_iteration = true;  // to check if the slow move has been executed yet
-bool is_first_shear_x2_iteration = true;
-bool is_first_shear_y1_iteration = true;
-bool is_first_shear_y2_iteration = true;
-bool is_first_opd_iteration = true;
-std::future<void> slow_shear_x1_move_future;
-std::future<void> slow_shear_x2_move_future;
-std::future<void> slow_shear_y1_move_future;
-std::future<void> slow_shear_y2_move_future;
-std::future<void> slow_opd_move_future;
 
 void run_calculation() {
   int sockfd = setup_ethernet();
@@ -598,7 +564,6 @@ void run_calculation() {
       // opd_control_signal += dither_signal / 2.; // correct for double pass (retroreflector)
 
       // actuate piezo actuator
-      // he lives in his own thread because he's slow
       opd_stage.move_to(opd_control_signal * 1e-3);
     }
 
@@ -625,35 +590,10 @@ void run_calculation() {
       shear_y2_control_signal = shear_p.load() * shear_y2_error + shear_y2_error_integral;
 
       // actuate piezo actuator
-      // he lives in his own thread because he's slow
-      if (is_first_shear_x1_iteration || slow_shear_x1_move_future.wait_for(std::chrono::milliseconds(0)) ==
-      std::future_status::ready) {
-        // move_to_x(x1d_control_signal); // too slow, takes 1 ms
-        slow_shear_x1_move_future = std::async(std::launch::async, PI_move_to_x1, shear_x1_control_signal);
-        is_first_shear_x1_iteration = false;
-      }
-
-      if (is_first_shear_x2_iteration || slow_shear_x2_move_future.wait_for(std::chrono::milliseconds(0)) ==
-      std::future_status::ready) {
-        // move_to_x(x1d_control_signal); // too slow, takes 1 ms
-        slow_shear_x2_move_future = std::async(std::launch::async, PI_move_to_x2, shear_x2_control_signal);
-        is_first_shear_x2_iteration = false;
-      }
-
-      if (is_first_shear_y1_iteration || slow_shear_y1_move_future.wait_for(std::chrono::milliseconds(0)) ==
-      std::future_status::ready) {
-        // move_to_x(x1d_control_signal); // too slow, takes 1 ms
-        slow_shear_y1_move_future = std::async(std::launch::async, PI_move_to_y1, shear_y1_control_signal);
-        is_first_shear_y1_iteration = false;
-      }
-
-      if (is_first_shear_y2_iteration || slow_shear_y2_move_future.wait_for(std::chrono::milliseconds(0)) ==
-      std::future_status::ready) {
-        // move_to_x(x1d_control_signal); // too slow, takes 1 ms
-        slow_shear_y2_move_future = std::async(std::launch::async, PI_move_to_y2, shear_y2_control_signal);
-        is_first_shear_y2_iteration = false;
-      }
-      
+      tip_tilt_stage1.move_to_x(shear_x1_control_signal);
+      tip_tilt_stage2.move_to_x(shear_x2_control_signal);
+      tip_tilt_stage1.move_to_y(shear_y1_control_signal);
+      tip_tilt_stage2.move_to_y(shear_y2_control_signal);
     }
   }
 }
