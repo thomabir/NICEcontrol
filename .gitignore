@@ -77,3 +77,4 @@ Temporary Items
 .apdisk
 lib/pi/AutoZeroSample.h
 lib/pi/PI_GCS2_DLL.h
+nf_cli
