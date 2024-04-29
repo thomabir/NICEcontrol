@@ -22,15 +22,17 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
   * Locate `libnF_interface.so` and install it as a library. By default:
 
     ```bash
-    sudo cp ~/Downloads/EBx-120\ Support/software/lib/linux/libnF_interface.so /usr/local/lib/
+    sudo cp ~/Downloads/EBx-120\ Support/software/lib/linux/libnF_interface_x64.so /usr/local/lib/
     sudo ldconfig
      ```
 
   * Copy the header files (`nF_common.h`, `nF_error.h`, `nF_interface.h`) to the lib directory:
 
     ```bash
-    cp ~/Downloads/EBx-120\ Support/software/programming_examples/C++/demoCpp/nF_Interface/include/* ~/code/NICEcontrol/lib/nF/
+    cp ~/Downloads/EBx-120\ Support/software/programming_examples/c-testLinuxLib/include/* ~/code/NICEcontrol/lib/nF/
     ```
+
+    In `nF_interface.h`, add the line `#define LINUX` at the beginning
 
 * Install [iir1](https://github.com/berndporr/iir1)
 

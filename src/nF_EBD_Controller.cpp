@@ -1,37 +1,89 @@
 #include "nF_EBD_Controller.hpp"
 
-#include <cstring>
-#include <cstdlib>
-#include <sstream>
 #include <thread>
 #include <iostream>
 #include <atomic>
+#include <cstring>
 
-// #include "../lib/nF/nF_interface.h"
+#include "../lib/nF/nF_interface.h"
 
-nF_EBD_Controller::nF_EBD_Controller() {
+nF_EBD_Controller::nF_EBD_Controller(char *com_name) {
+  // set com_name
+  std::strcpy(this->com_name, com_name);
+
+  // set name: nF EBD Controller + com port
+  std::strcpy(this->name, "nF EBD Controller ");
+  std::strcat(this->name, com_name);
+
+  // set is_moving to false
   is_moving = false;
 }
 
-void nF_EBD_Controller::move_to(double x1_target, double y1_target, double x2_target, double y2_target) {
+void nF_EBD_Controller::init() {
+  // connect to the controller
+  int fd = nF_intf_connect_tty(this->com_name);
+  if (fd < 0) {
+    std::cout << this->name << ": Connection failed" << std::endl;
+    return;
+  }
+  this->fd = fd;
+
+  // activate servo mode
+  int status;
+  int axis0 = 0;
+  int axis1 = 1;
+  nF_set_dev_axis_svo_m(this->fd, 1, &axis0, &status);
+  nF_set_dev_axis_svo_m(this->fd, 1, &axis1, &status);
+
+  // check if both axes servo modes are enabled. Print error if at least one is not enabled.
+  int servo_mode;
+  nF_get_dev_axis_svo_m(this->fd, 1, &axis0, &servo_mode);
+  if (servo_mode != 1) {
+    std::cout << this->name << ": Error: Servo mode not enabled for axis 0" << std::endl;
+  }
+  nF_get_dev_axis_svo_m(this->fd, 1, &axis1, &servo_mode);
+  if (servo_mode != 1) {
+    std::cout << this->name << ": Error: Servo mode not enabled for axis 1" << std::endl;
+  }
+}
+
+void nF_EBD_Controller::move_to(double x_target, double y_target) {
   if (is_moving.load()) {return;} // stage is unreachable while moving
 
   // recalculate target positions: rotate 45 degrees
-  double x1_target_r = + x1_target + y1_target;
-  double y1_target_r = + y1_target - x1_target;
-  double x2_target_r = + x2_target + y2_target;
-  double y2_target_r = + y2_target - x2_target;
+  double x_target_r = + x_target + y_target;
+  double y_target_r = + y_target - x_target;
 
   is_moving.store(true);
-  std::thread([this, x1_target_r, y1_target_r, x2_target_r, y2_target_r] {
-    move_to_blocking(x1_target_r, y1_target_r, x2_target_r, y2_target_r);
+  std::thread([this, x_target_r, y_target_r] {
+    move_to_blocking(x_target_r, y_target_r);
     is_moving.store(false);
   }).detach();
-
 }
 
-void nF_EBD_Controller::move_to_blocking(double x1_target, double y1_target, double x2_target, double y2_target) {
-  std::stringstream nF_move_command;
-  nF_move_command << "./nf_cli " << x1_target + offset << " " << y1_target + offset << " " << x2_target + offset << " " << y2_target + offset;
-  std::system(nF_move_command.str().c_str()); // Convert the stringstream to string and then to C-style string
+double nF_EBD_Controller::read_x() {
+  int axis0 = 0;
+  float position;
+  nF_get_dev_axis_position_m(this->fd, 1, &axis0, &position);
+  return position - this->offset;
+}
+
+double nF_EBD_Controller::read_y() {
+  int axis1 = 1;
+  float position;
+  nF_get_dev_axis_position_m(this->fd, 1, &axis1, &position);
+  return position - this->offset;
+}
+
+void nF_EBD_Controller::move_to_blocking(float x_target, float y_target) {
+  int axis0 = 0;
+  int axis1 = 1;
+  x_target = x_target + this->offset;
+  y_target = y_target + this->offset;
+  nF_set_dev_axis_target_m(this->fd, 1, 1, &axis0, &x_target);
+  nF_set_dev_axis_target_m(this->fd, 1, 1, &axis1, &y_target);
+}
+
+void nF_EBD_Controller::close() {
+  nF_intf_disconnect(this->fd);
 }

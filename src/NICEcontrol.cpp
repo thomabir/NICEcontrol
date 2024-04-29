@@ -339,7 +339,8 @@ PI_E727_Controller tip_tilt_stage1(serial_number1);
 char serial_number2[1024] = "0122042007";
 PI_E727_Controller tip_tilt_stage2(serial_number2);
 
-nF_EBD_Controller nF_stage;
+nF_EBD_Controller nF_stage_1("/dev/ttyUSB0");
+nF_EBD_Controller nF_stage_2("/dev/ttyUSB1");
 
 void setupActuators() {
   // connect and intialise all piezo stages
@@ -362,14 +363,23 @@ void setupActuators() {
   std::cout << "x Position: " << tip_tilt_stage2.readx() << std::endl;
   std::cout << "y Position: " << tip_tilt_stage2.ready() << std::endl;
 
+  // nF tip/tilt stages
+  nF_stage_1.init();
+  nF_stage_1.move_to(0.0, 0.0);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::cout << "nF Stage 1 Position: " << nF_stage_1.read_x() << ", " << nF_stage_1.read_y() << std::endl;
+
+  nF_stage_2.init();
+  nF_stage_2.move_to(0.0, 0.0);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  std::cout << "nF Stage 2 Position: " << nF_stage_2.read_x() << ", " << nF_stage_2.read_y() << std::endl;
+
   // OPD stage
   opd_stage.init();
   opd_stage.move_to(0.0f);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
   std::cout << "OPD Position: " << opd_stage.read() << std::endl;
 
-  // nF stage
-  nF_stage.move_to(0.0, 0.0, 0.0, 0.0);
 }
 
 static float shear_x1_ol_setpoint = 0.0f;
@@ -708,7 +718,8 @@ void run_calculation() {
       pointing_y2_control_signal = pointing_p.load() * pointing_y2_error + pointing_y2_error_integral;
 
       // actuate piezo actuator
-      nF_stage.move_to(pointing_x1_control_signal, pointing_y1_control_signal, pointing_x2_control_signal, pointing_y2_control_signal);
+      nF_stage_1.move_to(pointing_x1_control_signal, pointing_y1_control_signal);
+      nF_stage_2.move_to(pointing_x2_control_signal, pointing_y2_control_signal);
     }
     else {
       pointing_x1_error_integral = 0.0f;
@@ -1564,7 +1575,8 @@ void RenderUI() {
 
     // open loop
     if (pointing_loop_select == 1) {
-       nF_stage.move_to(pointing_x1_ol_setpoint, pointing_y1_ol_setpoint, pointing_x2_ol_setpoint, pointing_y2_ol_setpoint);
+      nF_stage_1.move_to(pointing_x1_ol_setpoint, pointing_y1_ol_setpoint);
+      nF_stage_2.move_to(pointing_x2_ol_setpoint, pointing_y2_ol_setpoint);
     }
 
 

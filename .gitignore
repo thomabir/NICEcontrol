@@ -78,3 +78,6 @@ Temporary Items
 lib/pi/AutoZeroSample.h
 lib/pi/PI_GCS2_DLL.h
 nf_cli
+lib/nF/nF_common.h
+lib/nF/nF_error.h
+lib/nF/nF_interface.h
