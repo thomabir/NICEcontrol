@@ -19,6 +19,7 @@
 #include <queue>
 #include <random>
 #include <thread>
+#include <filesystem>
 
 // ethernet
 #include <arpa/inet.h>
@@ -42,6 +43,12 @@
 #include "PI_E754_Controller.hpp"  // Controller for PI OPD Stage
 #include "nF_EBD_Controller.hpp"   // Controller for nanoFaktur Tip/Tilt Stages
 
+// white noise for dithering
+#include <random>
+
+// format datetime for logging
+#include <ctime>
+
 // Windows
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
@@ -60,6 +67,16 @@ double getTime() {
   auto tnow = std::chrono::system_clock::now();
   double t_since_start = std::chrono::duration_cast<std::chrono::microseconds>(tnow - t0).count() / 1.0e6;
   return t_since_start;
+}
+
+std::string get_iso_datestring() {
+  time_t now;
+  time(&now);
+  char buf[sizeof "2011-10-08T07:07:09Z"];
+  strftime(buf, sizeof buf, "%FT%TZ", gmtime(&now));
+  // this will work too, if your compiler doesn't support %F or %T:
+  //strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
+  return buf;
 }
 
 struct Measurement {
@@ -267,6 +284,9 @@ const float opd_control_cutoff = 100.;
 
 namespace NICEcontrol {
 
+// general
+std::atomic<bool> gui_control(true);
+
 // OPD control
 float opd_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
 std::atomic<float> opd_setpoint = 0.0f;  // setpoint used in calculation, clipped to valid range
@@ -375,6 +395,9 @@ TSQueue<Measurement> point_y2Queue;
 
 TSQueue<MeasurementT<int, int>> adc_queues[10];
 TSQueue<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
+
+TSQueue<Measurement> opd_dith_queue;
+TSQueue<MeasurementT<double, double>> opd_setpoint_queue;
 
 int setup_ethernet() {
   // setup ethernet connection
@@ -593,8 +616,10 @@ void run_calculation() {
     // if RunOpdControl is true, calculate the control signal
     if (RunOpdControl.load()) {
 
+      double setpoint = opd_setpoint.load();
+
       // calculate error
-      opd_error = opd_setpoint.load() - opd_control_measurement;
+      opd_error = setpoint - opd_control_measurement;
 
       // calculate integral
       opd_error_integral += opd_i.load() * opd_error;
@@ -605,12 +630,23 @@ void run_calculation() {
       // calculate control signal
       opd_control_signal = opd_p.load() * opd_error + opd_error_integral;
 
-      // calculate dither signal (for characterisation of the system)
-      // float dither_signal = opd_dither_amp.load() * std::sin(2 * PI * opd_dither_freq.load() * t);
-      // opd_control_signal += dither_signal / 2.; // correct for double pass (retroreflector)
+      // calculate dither signal: sine
+      float dither_signal = opd_dither_amp.load() * std::sin(2 * PI * opd_dither_freq.load() * t);
+
+      // calculate dither signal: white noise
+      // std::default_random_engine opd_dith_gen(std::random_device{}());
+      // std::normal_distribution<double> dist(0.0, opd_dither_amp.load());
+      // float dither_signal = dist(opd_dith_gen);
+
+      // apply dither signal
+      opd_control_signal += dither_signal / 2.; // correct for double pass (retroreflector)
+
+      // enqueue signals
+      opd_dith_queue.push({t, dither_signal});
+      opd_setpoint_queue.push({t, setpoint});
 
       // actuate piezo actuator
-      opd_stage.move_to(opd_control_signal * 1e-3);
+      opd_stage.move_to(opd_control_signal * 1e-3); // convert nm to um
     }
     else {
       opd_error_integral = 0.0f;
@@ -683,6 +719,165 @@ void run_calculation() {
   }
 }
 
+void char_opd() {
+  std::cout << "Starting OPD characterisation" << std::endl;
+
+  // goal: perform measurements, write them to disk. Analysis later in Python
+
+  // dither frequencies
+  std::vector<float> dither_freqs = {0.1, 0.5, 1.0, 5.0, 10.0, 50.0}; // Hz
+
+  // dither amplitudes: all 20 nm
+  std::vector<float> dither_amps(dither_freqs.size(), 10.0); // nm
+
+  float settling_time = 1.0; // s
+  float recording_time = 1.0; // s
+
+  // set control parameters
+  opd_setpoint.store(0.0);
+  opd_p.store(0.7);
+  opd_i.store(0.009);
+
+  // directory to store files in: dire name is opd_date_time (e.g. measurements/opd_2021-09-01_12:00:00)
+  auto datetime_string = get_iso_datestring();
+  std::string dirname = "measurements/opd_" + datetime_string;
+  std::filesystem::create_directory(dirname);
+
+  // OPEN LOOP CHARACTERISATION
+  std::cout << "\t OPD open loop" << std::endl;
+  // storage file
+  std::string filename = dirname + "/opd_open_loop.csv";
+  std::ofstream
+  file(filename);
+  file << "Time (s),OPD (nm)\n";
+
+  // make sure control loop is off
+  RunOpdControl.store(false);
+  
+  // wait settling time
+  std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+
+  // flush OPD queue
+  while (!opdQueue.isempty()) {
+    opdQueue.pop();
+  }
+
+  // record for recording time: every 10 ms, flush opd queue and write contents to file
+  auto t_start = std::chrono::high_resolution_clock::now();
+  while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_time) {
+
+    // wait 10 ms
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    // write to file
+    if (!opdQueue.isempty()) {
+      int N = opdQueue.size();
+      for (int i = 0; i < N; i++) {
+        auto m = opdQueue.pop();
+        // format: 6 decimals for time, 3 decimals for OPD
+        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.value << "\n";
+      }
+    }
+  }
+
+  // CLOSE LOOP CHARACTERISATION
+  std::cout << "\t OPD closed loop" << std::endl;
+  // storage file
+  filename = dirname + "/opd_closed_loop.csv";
+  file.open(filename);
+  file << "Time (s),OPD (nm)\n";
+
+  // make sure control loop is on
+  RunOpdControl.store(true);
+
+  // wait settling time
+  std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+
+  // flush OPD queue
+  while (!opdQueue.isempty()) {
+    opdQueue.pop();
+  }
+
+  // record for recording time: every 10 ms, flush opd queue and write contents to file
+  t_start = std::chrono::high_resolution_clock::now();
+  while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_time) {
+
+    // wait 10 ms
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    // write to file
+    if (!opdQueue.isempty()) {
+      int N = opdQueue.size();
+      for (int i = 0; i < N; i++) {
+        auto m = opdQueue.pop();
+        // format: 6 decimals for time, 3 decimals for OPD
+        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.value << "\n";
+      }
+    }
+  }
+  file.close();
+
+
+  // // IMPULSE RESPONSE CHARACTERISATION
+  // std::cout << "\t OPD impulse response" << std::endl;
+  // // storage file
+  // filename = dirname + "/opd_impulse_response.csv";
+  // file.open(filename);
+  // file << "Time (s),OPD (nm),Setpoint (nm)\n";
+
+  // // settle control loop
+  // RunOpdControl.store(true);
+  // std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+  // opd_setpoint.store(0.0);
+
+  // // flush OPD queue and setpoint queue
+  // while (!opdQueue.isempty()) {
+  //   opdQueue.pop();
+  // }
+
+  // while (!opd_setpoint_queue.isempty()) {
+  //   opd_setpoint_queue.pop();
+  // }
+
+  // // record for recording time: every 100 ms, flush opd queue and write contents to file. Also, toggle the setpoint between 0 and 100
+  // t_start = std::chrono::high_resolution_clock::now();
+  // bool setpoint_high = false;
+  // while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_time) {
+
+  //   // wait 100 ms
+  //   std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  //   // toggle setpoint
+  //   if (setpoint_high) {
+  //     opd_setpoint.store(0.0);
+  //   } else {
+  //     opd_setpoint.store(100.0);
+  //   }
+
+  //   // write to file
+  //   if (!opdQueue.isempty()) {
+  //     int N = opdQueue.size();
+  //     for (int i = 0; i < N; i++) {
+  //       auto m = opdQueue.pop();
+  //       // format: 6 decimals for time, 3 decimals for OPD
+
+  //       //
+  //       // TODO: get setpoint from buffer
+  //       //
+
+
+  //     }
+  //   }
+  // }
+
+  
+  // FREQUENCY CHARACTERISATION
+  // for all dither frequencies and amplitudes, run the control loop for a while and record dither and opd measurments
+  // TODO implement
+
+  gui_control.store(true);
+  std::cout << "Finished OPD characterisation" << std::endl;
+}
 
 void startMeasurement() {
   RunMeasurement.store(true);
@@ -697,15 +892,11 @@ void RenderUI() {
   ImGuiIO &io = ImGui::GetIO();
 
   // opd control gui parameters
-  static int opd_loop_select = 0;
+  static int gui_opd_loop_select = 0;
   static float opd_p_gui = 0.700f;
   static float opd_i_gui = 0.009f;
-  opd_p.store(opd_p_gui);
-  opd_i.store(opd_i_gui);
   static float opd_dither_freq_gui = 0.0f;
   static float opd_dither_amp_gui = 0.0f;
-  opd_dither_freq.store(opd_dither_freq_gui);
-  opd_dither_amp.store(opd_dither_amp_gui);
 
   // shear control gui parameters
   static int shear_loop_select = 0;
@@ -869,29 +1060,52 @@ void RenderUI() {
 
 
   if (ImGui::CollapsingHeader("OPD")) {
+    // characterise button: launch characterisation of OPD thread and deactivate gui control
+    static bool opd_char_button = false;
+    
+    ImGui::Checkbox("Characterise OPD", &opd_char_button);
+
+    // print status of gui_control
+    ImGui::Text("GUI control: %s", gui_control.load() ? "true" : "false");
+
+    if (opd_char_button) {
+      gui_control.store(false);
+      opd_char_button = false;
+      // std::jthread char_opd_thread(char_opd);
+      char_opd();
+    }
+
     // control mode selector
     ImGui::Text("Control mode:");
     ImGui::SameLine();
-    ImGui::RadioButton("Off##OPD", &opd_loop_select, 0);
+    ImGui::RadioButton("Off##OPD", &gui_opd_loop_select, 0);
     ImGui::SameLine();
-    ImGui::RadioButton("Open loop##OPD", &opd_loop_select, 1);
+    ImGui::RadioButton("Open loop##OPD", &gui_opd_loop_select, 1);
     ImGui::SameLine();
-    ImGui::RadioButton("Closed loop##OPD", &opd_loop_select, 2);
+    ImGui::RadioButton("Closed loop##OPD", &gui_opd_loop_select, 2);
 
-    // run control if "Closed loop" is selected
-    if (opd_loop_select == 2) {
-      RunOpdControl.store(true);
-    } else {
-      RunOpdControl.store(false);
+    
+    if (gui_control.load()) {
+      // run control if "Closed loop" is selected
+      if (gui_opd_loop_select == 2) {RunOpdControl.store(true);}
+      else {RunOpdControl.store(false);}
+
+      // move stage to open loop setpoint if "Open loop" is selected
+      if (gui_opd_loop_select == 1) {opd_stage.move_to(opd_open_loop_setpoint);}
+
+      // store control loop parameters
+      opd_setpoint.store(opd_setpoint_gui);
+      opd_p.store(opd_p_gui);
+      opd_i.store(opd_i_gui);
+      opd_dither_freq.store(opd_dither_freq_gui);
+      opd_dither_amp.store(opd_dither_amp_gui);
     }
 
-    // move stage to open loop setpoint if "Open loop" is selected
-    if (opd_loop_select == 1) {
-      opd_stage.move_to(opd_open_loop_setpoint);
-    }
+    
 
     // real time plot
     static ScrollingBuffer opd_buffer, setpoint_buffer;
+    static ScrollingBuffer opd_dith_buffer;
 
     static float t_gui = 0;
 
@@ -908,7 +1122,23 @@ void RenderUI() {
       }
     }
 
-    setpoint_buffer.AddPoint(t_gui, opd_setpoint.load());
+    // add the DitherQueue to the buffer
+    if (!opd_dith_queue.isempty()) {
+      int N = opd_dith_queue.size();
+      for (int j = 0; j < N; j++) {
+        auto m = opd_dith_queue.pop();
+        opd_dith_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    // add the setpoint queue to the buffer
+    if (!opd_setpoint_queue.isempty()) {
+      int N = opd_setpoint_queue.size();
+      for (int j = 0; j < N; j++) {
+        auto m = opd_setpoint_queue.pop();
+        setpoint_buffer.AddPoint(m.time, m.value);
+      }
+    }
 
     static bool plot_setpoint = false;
     ImGui::Checkbox("Plot setpoint", &plot_setpoint);
@@ -942,6 +1172,18 @@ void RenderUI() {
       ImPlot::EndPlot();
     }
 
+    // plot for dither signal
+    if (ImPlot::BeginPlot("Dither##OPD", ImVec2(-1, 150 * io.FontGlobalScale))) {
+      ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - opd_history_length, t_gui, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, -opd_dither_amp.load(), opd_dither_amp.load());
+      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(fft_color, thickness);
+      ImPlot::PlotLine("Dither signal", &opd_dith_buffer.Data[0].x, &opd_dith_buffer.Data[0].y,
+                        opd_dith_buffer.Data.size(), 0, opd_dith_buffer.Offset, 2 * sizeof(float));
+      ImPlot::EndPlot();
+    }
+
     if (ImGui::TreeNode("FFT##OPD")) {
       // set up fft
       const static int fft_size = 1024 * 8 * 8;
@@ -952,18 +1194,44 @@ void RenderUI() {
       // calculate fft
       fft.calculate();
 
+      // calculate dither fft
+      static double fft_power_dith[fft_size / 2];
+      static double fft_freq_dith[fft_size / 2];
+      static FFT_calculator dither_fft(fft_size, 12800., &opd_dith_buffer, fft_power_dith, fft_freq_dith);
+      dither_fft.calculate();
+
       // plot fft_power vs fft_freq, with log scale on x and y axis
       static float fft_thickness = 3;
       static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
       static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None;  // ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-      if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 500 * io.FontGlobalScale))) {
+      if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 400 * io.FontGlobalScale))) {
         ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
         ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
         ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
         ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 10, 1e13);
         ImPlot::SetNextLineStyle(fft_color, fft_thickness);
-        ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size / 2);
+        ImPlot::PlotLine("OPD FFT", &fft_freq_dith[0], &fft_power[0], fft_size / 2);
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), fft_thickness);
+        ImPlot::PlotLine("Dither FFT", &fft_freq_dith[0], &fft_power_dith[0], fft_size / 2);
+        ImPlot::EndPlot();
+      }
+
+      // plot the ratio of the two ffts
+      static double fft_ratio[fft_size / 2];
+      for (int i = 0; i < fft_size / 2; i++) {
+        fft_ratio[i] = fft_power_dith[i] / fft_power[i];
+      }
+
+
+      if (ImPlot::BeginPlot("##FFT Ratio", ImVec2(-1, 400 * io.FontGlobalScale))) {
+        ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
+        ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+        ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+        ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 100);
+        ImPlot::SetNextLineStyle(fft_color, thickness);
+        ImPlot::PlotLine("FFT Ratio", &fft_freq_dith[0], &fft_ratio[0], fft_size / 2);
         ImPlot::EndPlot();
       }
 
@@ -1048,12 +1316,9 @@ void RenderUI() {
       if (opd_setpoint_gui < opd_setpoint_min) opd_setpoint_gui = opd_setpoint_min;
       if (opd_setpoint_gui > opd_setpoint_max) opd_setpoint_gui = opd_setpoint_max;
 
-      // set opd_setpoint
-      opd_setpoint.store(opd_setpoint_gui);
-
       // dither parameters
       ImGui::SliderFloat("Dither frequency##OPD", &opd_dither_freq_gui, 0.1f, 1000.0f, "%.2f Hz", ImGuiSliderFlags_Logarithmic);
-      ImGui::SliderFloat("Dither amplitude##OPD", &opd_dither_amp_gui, 0.0f, 20.0f, "%.2f nm");
+      ImGui::SliderFloat("Dither amplitude##OPD", &opd_dither_amp_gui, 0.0f, 100.0f, "%.2f nm");
 
       ImGui::TreePop();
     }
@@ -1414,7 +1679,7 @@ void RenderUI() {
   ImGui::End();
 
   // demo window
-  static bool show_app_metrics = true;
+  // static bool show_app_metrics = true;
   // ImGui::ShowDemoWindow();
   // ImGui::ShowMetricsWindow(&show_app_metrics);
 
