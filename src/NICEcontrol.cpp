@@ -101,44 +101,47 @@ struct MeasurementT {
   U value;
 };
 
-// thread-safe queue
+// thread-safe circular buffer
 template <typename T>
-class TSQueue {
+class TSCircularBuffer {
  private:
-  std::queue<T> m_queue;
+  boost::circular_buffer<T> m_buffer;
   std::mutex m_mutex;
 
  public:
-  uint size() {
-    std::unique_lock<std::mutex> lock(m_mutex);
-    return m_queue.size();
-  }
+  TSCircularBuffer() : m_buffer(1000000) {} // default size: 1e6
+  TSCircularBuffer(int size) : m_buffer(size) {} // custom size
 
   void push(T item) {
     std::unique_lock<std::mutex> lock(m_mutex);
-    m_queue.push(item);
+    m_buffer.push_back(item);
   }
 
   T front() {
     std::unique_lock<std::mutex> lock(m_mutex);
-    return m_queue.front();
+    return m_buffer.front();
   }
 
   T back() {
     std::unique_lock<std::mutex> lock(m_mutex);
-    return m_queue.back();
+    return m_buffer.back();
   }
 
   T pop() {
     std::unique_lock<std::mutex> lock(m_mutex);
-    T item = m_queue.front();
-    m_queue.pop();
+    T item = m_buffer.front();
+    m_buffer.pop_front();
     return item;
   }
 
   bool isempty() {
     std::unique_lock<std::mutex> lock(m_mutex);
-    return m_queue.empty();
+    return m_buffer.empty();
+  }
+
+  int size() {
+    std::unique_lock<std::mutex> lock(m_mutex);
+    return m_buffer.size();
   }
 };
 
@@ -403,21 +406,21 @@ static float pointing_x2_ol_setpoint = 0.0f;
 static float pointing_y1_ol_setpoint = 0.0f;
 static float pointing_y2_ol_setpoint = 0.0f;
 
-TSQueue<Measurement> opdQueue;
-TSQueue<Measurement> shear_x1Queue;
-TSQueue<Measurement> shear_x2Queue;
-TSQueue<Measurement> shear_y1Queue;
-TSQueue<Measurement> shear_y2Queue;
+TSCircularBuffer<Measurement> opdQueue;
+TSCircularBuffer<Measurement> shear_x1Queue;
+TSCircularBuffer<Measurement> shear_x2Queue;
+TSCircularBuffer<Measurement> shear_y1Queue;
+TSCircularBuffer<Measurement> shear_y2Queue;
 
-TSQueue<Measurement> point_x1Queue;
-TSQueue<Measurement> point_x2Queue;
-TSQueue<Measurement> point_y1Queue;
-TSQueue<Measurement> point_y2Queue;
+TSCircularBuffer<Measurement> point_x1Queue;
+TSCircularBuffer<Measurement> point_x2Queue;
+TSCircularBuffer<Measurement> point_y1Queue;
+TSCircularBuffer<Measurement> point_y2Queue;
 
-TSQueue<MeasurementT<int, int>> adc_queues[10];
-TSQueue<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
+TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
+TSCircularBuffer<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
 
-TSQueue<ControlData> opd_controlData_queue;
+TSCircularBuffer<ControlData> opd_controlData_queue;
 
 int setup_ethernet() {
   // setup ethernet connection
