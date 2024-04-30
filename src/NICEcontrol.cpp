@@ -97,6 +97,19 @@ struct ControlData {
   float actuator_command;
 };
 
+struct SensorData {
+  double time;
+  float opd;
+  float shear_x1;
+  float shear_x2;
+  float shear_y1;
+  float shear_y2;
+  float point_x1;
+  float point_x2;
+  float point_y1;
+  float point_y2;
+};
+
 
 template <typename T, typename U>
 struct MeasurementT {
@@ -287,17 +300,14 @@ class FFT_calculator {
   }
 };
 
-// iir filters
-Iir::Butterworth::LowPass<2> shear_x1_lp_filter, shear_x2_lp_filter;
-Iir::Butterworth::LowPass<2> shear_x1_control_lp_filter, shear_x2_control_lp_filter, shear_y1_control_lp_filter, shear_y2_control_lp_filter;
-Iir::Butterworth::LowPass<2> pointing_x1_control_lp_filter, pointing_x2_control_lp_filter, pointing_y1_control_lp_filter, pointing_y2_control_lp_filter;
-Iir::Butterworth::LowPass<6> opd_lp_filter, opd_control_lp_filter;
+// Filters for sensor data
+Iir::Butterworth::LowPass<2> shear_x1_lpfilt, shear_x2_lpfilt, shear_y1_lpfilt, shear_y2_lpfilt;
+Iir::Butterworth::LowPass<2> point_x1_lpfilt, point_x2_lpfilt, point_y1_lpfilt, point_y2_lpfilt;
+Iir::Butterworth::LowPass<2> opd_lp_filter;
 const float shear_samplingrate = 12800.;
-const float shear_meas_cutoff = 1000.;
-const float shear_control_cutoff = 50.;
+const float shear_lpfilt_cutoff = 1000.;
 const float opd_samplingrate = 128000.;
-const float opd_meas_cutoff = 1000.;
-const float opd_control_cutoff = 100.;
+const float opd_lpfilt_cutoff = 10000.;
 
 namespace NICEcontrol {
 
@@ -409,16 +419,7 @@ static float pointing_x2_ol_setpoint = 0.0f;
 static float pointing_y1_ol_setpoint = 0.0f;
 static float pointing_y2_ol_setpoint = 0.0f;
 
-TSCircularBuffer<Measurement> opdQueue;
-TSCircularBuffer<Measurement> shear_x1Queue;
-TSCircularBuffer<Measurement> shear_x2Queue;
-TSCircularBuffer<Measurement> shear_y1Queue;
-TSCircularBuffer<Measurement> shear_y2Queue;
-
-TSCircularBuffer<Measurement> point_x1Queue;
-TSCircularBuffer<Measurement> point_x2Queue;
-TSCircularBuffer<Measurement> point_y1Queue;
-TSCircularBuffer<Measurement> point_y2Queue;
+TSCircularBuffer<SensorData> sensorDataQueue;
 
 TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
 TSCircularBuffer<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
@@ -452,30 +453,111 @@ int setup_ethernet() {
   return sockfd;
 }
 
+class ControlLoop {
+  public:
+    ControlLoop(std::atomic<int> &control_mode, std::atomic<float> &setpoint, std::atomic<float> &p, std::atomic<float> &i,
+                std::atomic<float> &dither_freq, std::atomic<float> &dither_amp, PIController &controller,
+                PI_E754_Controller &stage, TSCircularBuffer<ControlData> &controlDataQueue)
+        : control_mode(control_mode),
+          setpoint(setpoint),
+          p(p),
+          i(i),
+          dither_freq(dither_freq),
+          dither_amp(dither_amp),
+          controller(controller),
+          stage(stage),
+          controlDataQueue(controlDataQueue) {}
+
+    void control(double t, float measurement) {
+      // OPD control
+      static float controller_input = 0.0f;
+      static float controller_output = 0.0f;
+      static float actuator_command = 0.0f;
+
+      // calculate dither signal
+      float dither_signal = this->dither_amp.load() * std::sin(2 * PI * this->dither_freq.load() * t);
+
+      // get control parameters
+      float setpoint = this->setpoint.load();
+      this->controller.setPI(this->p.load(), this->i.load());
+      int cm = this->control_mode.load();
+
+      // if control_mode has changed, reset the controller
+      static int prev_cm = cm;
+      if (cm != prev_cm) {
+        this->controller.reset_state();
+      }
+      prev_cm = cm;
+
+      switch(cm) {
+          case 0: // do nothing
+              break;
+          case 1: // P
+              actuator_command = (setpoint + dither_signal); // convert nm to um
+              this->stage.move_to(actuator_command * 1e-3); // convert nm to um
+              break;
+          case 2: // C
+              controller_input = dither_signal;
+              controller_output = this->controller.step(controller_input);
+              break;
+          case 3: // CP open
+              controller_input = dither_signal;
+              controller_output = this->controller.step(controller_input);
+              actuator_command = controller_output;
+              this->stage.move_to(actuator_command * 1e-3);
+              break;
+          case 4: // CP closed, dither plant
+              controller_input = setpoint - measurement;
+              controller_output = this->controller.step(controller_input);
+              actuator_command = controller_output + dither_signal;
+              this->stage.move_to(actuator_command * 1e-3); // convert nm to um
+              break;
+          case 5: // CP closed, dither setpoint
+              controller_input = setpoint + dither_signal - measurement;
+              controller_output = this->controller.step(controller_input);
+              actuator_command = controller_output;
+              this->stage.move_to(actuator_command * 1e-3); // convert nm to um
+              break;
+          default:
+              // don't
+              break;
+      }
+    
+      this->controlDataQueue.push({t, measurement, setpoint, dither_signal, controller_input, controller_output, actuator_command});
+    }
+
+  private:
+    std::atomic<int> &control_mode;
+    std::atomic<float> &setpoint;
+    std::atomic<float> &p;
+    std::atomic<float> &i;
+    std::atomic<float> &dither_freq;
+    std::atomic<float> &dither_amp;
+    PIController &controller;
+    PI_E754_Controller &stage;
+    TSCircularBuffer<ControlData> &controlDataQueue;
+};
+
+
 void run_calculation() {
   int sockfd = setup_ethernet();
-
-  // Open the output file
-  std::ofstream outputFile("data.csv");
-  if (!outputFile) {
-    std::cerr << "Failed to open output file." << std::endl;
-  }
-
-  // Write header of the CSV file
-  outputFile << "Time (s),OPD (nm)\n";
 
   int count = 0;
   int buffer_size = 1024;
   char buffer[buffer_size];
 
-  // initialise filters
-  shear_x1_lp_filter.setup(shear_samplingrate, shear_meas_cutoff);
-  shear_x1_control_lp_filter.setup(shear_samplingrate, shear_control_cutoff);
-  shear_x2_lp_filter.setup(shear_samplingrate, shear_meas_cutoff);
-  shear_x2_control_lp_filter.setup(shear_samplingrate, shear_control_cutoff);
-  shear_y1_control_lp_filter.setup(shear_samplingrate, shear_control_cutoff);
-  shear_y2_control_lp_filter.setup(shear_samplingrate, shear_control_cutoff);
-  opd_lp_filter.setup(opd_samplingrate, opd_meas_cutoff);
+  // setup filters
+  shear_x1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
+  shear_x2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
+  shear_y1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
+  shear_y2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
+
+  point_x1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
+  point_x2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
+  point_y1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
+  point_y2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
+
+  opd_lp_filter.setup(opd_samplingrate, opd_lpfilt_cutoff);
 
   
 
@@ -548,42 +630,25 @@ void run_calculation() {
       point_y2_um[i] = float(receivedDataInt[20 * i + 19]) / 1000.; // urad
     }
 
-    // filter opd by piping the 10 new measurements through the filter
-    float opd;
+    // filter signals
+    float opd_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f;
     for (int i = 0; i < 10; i++) {
-      opd = opd_lp_filter.filter(opd_nm[i]);
+      opd_f = opd_lp_filter.filter(opd_nm[i]);
+
+      // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
+      shear_x1_f = shear_x1_lpfilt.filter(shear_y1_um[i] + shear_x1_um[i]);
+      shear_x2_f = shear_x2_lpfilt.filter(shear_y2_um[i] + shear_x2_um[i]);
+      shear_y1_f = shear_y1_lpfilt.filter(shear_x1_um[i] - shear_y1_um[i]);
+      shear_y2_f = shear_y2_lpfilt.filter(shear_x2_um[i] - shear_y2_um[i]);
+
+      point_x1_f = point_x1_lpfilt.filter(point_y1_um[i] + point_x1_um[i]);
+      point_x2_f = point_x2_lpfilt.filter(point_y2_um[i] + point_x2_um[i]);
+      point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
+      point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
     }
 
-    float opd_control_measurement;
-    for (int i = 0; i < 10; i++) {
-      opd_control_measurement = opd_control_lp_filter.filter(opd_nm[i]);
-    }
-
-
-    // enqueue measurement and time
-    // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
-    opdQueue.push({t, opd});
-    shear_x1Queue.push({t, shear_y1_um[0] + shear_x1_um[0]});
-    shear_y1Queue.push({t, shear_x1_um[0] - shear_y1_um[0]});
-    shear_x2Queue.push({t, shear_y2_um[0] + shear_x2_um[0]});
-    shear_y2Queue.push({t, shear_x2_um[0] - shear_y2_um[0]});
-
-    point_x1Queue.push({t, point_y1_um[0] + point_x1_um[0]});
-    point_y1Queue.push({t, point_x1_um[0] - point_y1_um[0]});
-    point_x2Queue.push({t, point_y2_um[0] + point_x2_um[0]});
-    point_y2Queue.push({t, point_x2_um[0] - point_y2_um[0]});
-
-    // get and filter shear
-    float shear_x1_control_measurement = shear_x1_control_lp_filter.filter(shear_y1_um[0] + shear_x1_um[0]);
-    float shear_x2_control_measurement = shear_x2_control_lp_filter.filter(shear_y2_um[0] + shear_x2_um[0]);
-    float shear_y1_control_measurement = shear_y1_control_lp_filter.filter(shear_x1_um[0] - shear_y1_um[0]);
-    float shear_y2_control_measurement = shear_y2_control_lp_filter.filter(shear_x2_um[0] - shear_y2_um[0]);
-
-    // get and filter pointing
-    float pointing_x1_control_measurement = pointing_x1_control_lp_filter.filter(point_y1_um[0] + point_x1_um[0]);
-    float pointing_x2_control_measurement = pointing_x2_control_lp_filter.filter(point_y2_um[0] + point_x2_um[0]);
-    float pointing_y1_control_measurement = pointing_y1_control_lp_filter.filter(point_x1_um[0] - point_y1_um[0]);
-    float pointing_y2_control_measurement = pointing_y2_control_lp_filter.filter(point_x2_um[0] - point_y2_um[0]);
+    // enqueue sensor data
+    sensorDataQueue.push({t, opd_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
 
     // enqueue adc measurements
     for (int i = 0; i < 10; i++) {
@@ -601,12 +666,7 @@ void run_calculation() {
       point_sum_queue.push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
     }
 
-
-    // write to file
-    // outputFile << t << "," << opd << "\n";
-
     // variables for control
-
     static float shear_x1_error = 0.0f;
     static float shear_x1_error_integral = 0.0f;
     static float shear_x1_control_signal = 0.0f;
@@ -639,73 +699,18 @@ void run_calculation() {
     static float pointing_y2_error_integral = 0.0f;
     static float pointing_y2_control_signal = 0.0f;
 
+
     // OPD control
-    static float controller_input = 0.0f;
-    static float controller_output = 0.0f;
-    static float actuator_command = 0.0f;
-
-    // calculate dither signal
-    float dither_signal = opd_dither_amp.load() * std::sin(2 * PI * opd_dither_freq.load() * t);
-
-    // get control parameters
-    float setpoint = opd_setpoint.load();
-    opd_controller.setPI(opd_p.load(), opd_i.load());
-    int cm = opd_control_mode.load();
-
-    // TODO: if control_mode has changed, reset the controller
-    static int prev_cm = cm;
-    if (cm != prev_cm) {
-      opd_controller.reset_state();
-    }
-    prev_cm = cm;
-
-    // update control parameters
-
-
-    switch(cm) {
-        case 0: // do nothing
-            break;
-        case 1: // P
-            actuator_command = (setpoint + dither_signal); // convert nm to um
-            opd_stage.move_to(actuator_command * 1e-3); // convert nm to um
-            break;
-        case 2: // C
-            controller_input = dither_signal;
-            controller_output = opd_controller.step(controller_input);
-            break;
-        case 3: // CP open
-            controller_input = dither_signal;
-            controller_output = opd_controller.step(controller_input);
-            actuator_command = controller_output;
-            opd_stage.move_to(actuator_command * 1e-3);
-            break;
-        case 4: // CP closed, dither plant
-            controller_input = setpoint - opd_control_measurement;
-            controller_output = opd_controller.step(controller_input);
-            actuator_command = controller_output + dither_signal;
-            opd_stage.move_to(actuator_command * 1e-3); // convert nm to um
-            break;
-        case 5: // CP closed, dither setpoint
-            controller_input = setpoint + dither_signal - opd_control_measurement;
-            controller_output = opd_controller.step(controller_input);
-            actuator_command = controller_output;
-            opd_stage.move_to(actuator_command * 1e-3); // convert nm to um
-            break;
-        default:
-            // don't
-            break;
-    }
-
-    opd_controlData_queue.push({t, opd_control_measurement, setpoint, dither_signal, controller_input, controller_output, actuator_command});
-  
+    static ControlLoop opd_control_loop(opd_control_mode, opd_setpoint, opd_p, opd_i, opd_dither_freq, opd_dither_amp, opd_controller, opd_stage, opd_controlData_queue);
+    opd_control_loop.control(t, opd_f);
     
     // Shear control
     if (RunShearControl.load()) {
       // calculate error
-      shear_x1_error = shear_x1_setpoint.load() - shear_x1_control_measurement;
-      shear_x2_error = shear_x2_setpoint.load() - shear_x2_control_measurement;
-      shear_y1_error = shear_y1_setpoint.load() - shear_y1_control_measurement;
-      shear_y2_error = shear_y2_setpoint.load() - shear_y2_control_measurement;
+      shear_x1_error = shear_x1_setpoint.load() - shear_x1_f;
+      shear_x2_error = shear_x2_setpoint.load() - shear_x2_f;
+      shear_y1_error = shear_y1_setpoint.load() - shear_y1_f;
+      shear_y2_error = shear_y2_setpoint.load() - shear_y2_f;
 
       // calculate integral
       shear_x1_error_integral += shear_i.load() * shear_x1_error;
@@ -738,10 +743,10 @@ void run_calculation() {
     if (RunPointingControl.load()){
 
       // calculate error
-      pointing_x1_error = pointing_x1_setpoint.load() - pointing_x1_control_measurement;
-      pointing_x2_error = pointing_x2_setpoint.load() - pointing_x2_control_measurement;
-      pointing_y1_error = pointing_y1_setpoint.load() - pointing_y1_control_measurement;
-      pointing_y2_error = pointing_y2_setpoint.load() - pointing_y2_control_measurement;
+      pointing_x1_error = pointing_x1_setpoint.load() - point_x1_f;
+      pointing_x2_error = pointing_x2_setpoint.load() - point_x2_f;
+      pointing_y1_error = pointing_y1_setpoint.load() - point_y1_f;
+      pointing_y2_error = pointing_y2_setpoint.load() - point_y2_f;
 
       // calculate integral
       pointing_x1_error_integral += pointing_i.load() * pointing_x1_error;
@@ -782,7 +787,7 @@ void char_opd() {
   // set control parameters
   opd_setpoint.store(0.0);
   opd_p.store(0.7);
-  opd_i.store(0.009);
+  opd_i.store(0.01);
 
   // directory to store files in: dire name is opd_date_time (e.g. measurements/opd_2021-09-01_12:00:00)
   auto datetime_string = get_iso_datestring();
@@ -799,13 +804,16 @@ void char_opd() {
 
   // make sure control loop is off
   opd_control_mode.store(0);
+
+  // reset controller
+  opd_controller.reset_state();
   
   // wait settling time
   std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
 
   // flush OPD queue
-  while (!opdQueue.isempty()) {
-    opdQueue.pop();
+  while (!sensorDataQueue.isempty()) {
+    sensorDataQueue.pop();
   }
 
   // record for recording time: every 10 ms, flush opd queue and write contents to file
@@ -816,12 +824,12 @@ void char_opd() {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     // write to file
-    if (!opdQueue.isempty()) {
-      int N = opdQueue.size();
+    if (!sensorDataQueue.isempty()) {
+      int N = sensorDataQueue.size();
       for (int i = 0; i < N; i++) {
-        auto m = opdQueue.pop();
+        auto m = sensorDataQueue.pop();
         // format: 6 decimals for time, 3 decimals for OPD
-        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.value << "\n";
+        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd << "\n";
       }
     }
   }
@@ -837,12 +845,15 @@ void char_opd() {
   // make sure control loop is on
   opd_control_mode.store(4);
 
+  // reset controller
+  opd_controller.reset_state();
+
   // wait settling time
   std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
 
   // flush OPD queue
-  while (!opdQueue.isempty()) {
-    opdQueue.pop();
+  while (!sensorDataQueue.isempty()) {
+    sensorDataQueue.pop();
   }
 
   // record for recording time: every 10 ms, write contents to file
@@ -853,12 +864,12 @@ void char_opd() {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     // write to file
-    if (!opdQueue.isempty()) {
-      int N = opdQueue.size();
+    if (!sensorDataQueue.isempty()) {
+      int N = sensorDataQueue.size();
       for (int i = 0; i < N; i++) {
-        auto m = opdQueue.pop();
+        auto m = sensorDataQueue.pop();
         // format: 6 decimals for time, 3 decimals for OPD
-        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.value << "\n";
+        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd << "\n";
       }
     }
   }
@@ -871,6 +882,15 @@ void char_opd() {
   file.open(filename);
   file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output (nm),Actuator command (nm)\n";
 
+  // file 2
+  std::string filename3 = dirname + "/impulse_response_sensor.csv";
+  std::ofstream
+  file3(filename3);
+  file3 << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 (urad),Pointing y1 (urad),Pointing y2 (urad)\n";
+
+  // reset controller
+  opd_controller.reset_state();
+
   // settle control loop
   opd_control_mode.store(4);
   std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
@@ -879,6 +899,9 @@ void char_opd() {
   // flush data queues
   while (!opd_controlData_queue.isempty()) {
     opd_controlData_queue.pop();
+  }
+  while (!sensorDataQueue.isempty()) {
+    sensorDataQueue.pop();
   }
 
   // record for 10 s: every 100 ms, toggle setpoint and record data
@@ -907,6 +930,17 @@ void char_opd() {
       }
     }
 
+    // write to file 2
+    if (!sensorDataQueue.isempty()) {
+      int N = sensorDataQueue.size();
+      for (int i = 0; i < N; i++) {
+        auto m = sensorDataQueue.pop();
+        // format: 6 decimals for time, 3 decimals for OPD
+        file3 << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd << "," << std::fixed << std::setprecision(3) << m.shear_x1 << "," << std::fixed << std::setprecision(3) << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1 << "," << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3) << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
+      }
+    }
+
+
   }
   file.close();
 
@@ -919,9 +953,9 @@ void char_opd() {
   std::vector<float> dither_freqs = {0.1, 0.5}; // low frequencies take long, so only a few
 
   // append logarithmic freqs from 1 to 500 Hz
-  float logf1 = std::log10(1);
-  float logf2 = std::log10(500.0);
-  int fsteps = 100;
+  float logf1 = std::log10(1.0);
+  float logf2 = std::log10(1000.0);
+  int fsteps = 150;
   for (int i = 0; i < fsteps; i++) {
     dither_freqs.push_back(std::pow(10, logf1 + i * (logf2 - logf1) / (fsteps - 1)));
   }
@@ -932,7 +966,7 @@ void char_opd() {
 
   // for low frequencies, increase dither amplitude to 100 nm
   for (int i = 0; i < dither_freqs.size(); i++) {
-    if (dither_freqs[i] < 2.0) {
+    if (dither_freqs[i] < 20.0) {
       dither_amps[i] = 100.0;
     }
   }
@@ -962,6 +996,9 @@ void char_opd() {
     // set dither loop parameters
     opd_dither_freq.store(dither_freqs[i]);
     opd_dither_amp.store(dither_amps[i]);
+
+    // reset controller
+    opd_controller.reset_state();
 
     // settle control loop
     opd_control_mode.store(2);
@@ -1008,9 +1045,14 @@ void char_opd() {
   for (int i = 0; i < dither_freqs.size(); i++) {
     std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
     // storage file: frequency in format 1.2345e67
-    filename = subdir1 + "/" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    filename = subdir1 + "/control_" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
     file << "Time (s),Measurement (nm),Actuator command (nm)\n";
+
+    // second file: all sensor data
+    std::string filename2 = subdir1 + "/sensor_" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    std::ofstream file2(filename2);
+    file2 << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 (urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
     // set control parameters
     opd_setpoint.store(0.0);
@@ -1018,6 +1060,9 @@ void char_opd() {
     // set dither loop parameters
     opd_dither_freq.store(dither_freqs[i]);
     opd_dither_amp.store(dither_amps[i]);
+
+    // reset controller
+    opd_controller.reset_state();
 
     // settle control loop
     opd_control_mode.store(1);
@@ -1028,6 +1073,10 @@ void char_opd() {
       opd_controlData_queue.pop();
     }
 
+    while (!sensorDataQueue.isempty()) {
+      sensorDataQueue.pop();
+    }
+
     // record for recording time: every 100 ms, flush opd queue and write contents to file.
     t_start = std::chrono::high_resolution_clock::now();
     while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_times[i]) {
@@ -1035,7 +1084,7 @@ void char_opd() {
       // wait 100 ms
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-      // write to file
+      // write to file 1
       if (!opd_controlData_queue.isempty()) {
         int N = opd_controlData_queue.size();
         for (int i = 0; i < N; i++) {
@@ -1044,8 +1093,20 @@ void char_opd() {
           file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.measurement << "," << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
         }
       }
+
+      // write to file 2
+      if (!sensorDataQueue.isempty()) {
+        int N = sensorDataQueue.size();
+        for (int i = 0; i < N; i++) {
+          auto m = sensorDataQueue.pop();
+          // format: 6 decimals for time, 3 decimals for OPD
+          file2 << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd << "," << std::fixed << std::setprecision(3) << m.shear_x1 << "," << std::fixed << std::setprecision(3) << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1 << "," << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3) << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
+        }
+      }
+
     }
     file.close();
+    file2.close();
   }
 
   
@@ -1059,9 +1120,15 @@ void char_opd() {
   for (int i = 0; i < dither_freqs.size(); i++) {
     std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
     // storage file: frequency in format 1.2345e67
-    filename = subdir2 + "/" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    filename = subdir2 + "/control_" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
     file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output (nm),Actuator command (nm)\n";
+
+    // file2
+    std::string filename2 = subdir2 + "/sensor_" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    std::ofstream file2(filename2);
+    file2 << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 (urad),Pointing y1 (urad),Pointing y2 (urad)\n";
+
 
     // set control parameters
     opd_setpoint.store(0.0);
@@ -1069,6 +1136,9 @@ void char_opd() {
     // set dither loop parameters
     opd_dither_freq.store(dither_freqs[i]);
     opd_dither_amp.store(dither_amps[i]);
+
+    // reset controller
+    opd_controller.reset_state();
 
     // settle control loop
     opd_control_mode.store(4);
@@ -1078,6 +1148,10 @@ void char_opd() {
     // flush data queues
     while (!opd_controlData_queue.isempty()) {
       opd_controlData_queue.pop();
+    }
+
+    while (!sensorDataQueue.isempty()) {
+      sensorDataQueue.pop();
     }
 
     // record for recording time: every 100 ms, flush opd queue and write contents to file.
@@ -1097,8 +1171,19 @@ void char_opd() {
         }
       }
 
+      // write to file 2
+      if (!sensorDataQueue.isempty()) {
+        int N = sensorDataQueue.size();
+        for (int i = 0; i < N; i++) {
+          auto m = sensorDataQueue.pop();
+          // format: 6 decimals for time, 3 decimals for OPD
+          file2 << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd << "," << std::fixed << std::setprecision(3) << m.shear_x1 << "," << std::fixed << std::setprecision(3) << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1 << "," << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3) << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
+        }
+      }
+
     }
     file.close();
+    file2.close();
   }
 
   // FREQUENCY CHARACTERISATION CLOSED LOOP DITHER SETPOINT
@@ -1111,9 +1196,14 @@ void char_opd() {
   for (int i = 0; i < dither_freqs.size(); i++) {
     std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
     // storage file: frequency in format 1.2345e67
-    filename = subdir3 + "/" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    filename = subdir3 + "/control_" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
     file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output (nm),Actuator command (nm)\n";
+
+    // file2
+    std::string filename2 = subdir3 + "/sensor_" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    std::ofstream file2(filename2);
+    file2 << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 (urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
     // set control parameters
     opd_setpoint.store(0.0);
@@ -1122,6 +1212,9 @@ void char_opd() {
     opd_dither_freq.store(dither_freqs[i]);
     opd_dither_amp.store(dither_amps[i]);
 
+    // reset controller
+    opd_controller.reset_state();
+
     // settle control loop
     opd_control_mode.store(5);
     std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
@@ -1129,6 +1222,10 @@ void char_opd() {
     // flush data queues
     while (!opd_controlData_queue.isempty()) {
       opd_controlData_queue.pop();
+    }
+
+    while (!sensorDataQueue.isempty()) {
+      sensorDataQueue.pop();
     }
 
     // record for recording time: every 100 ms, flush opd queue and write contents to file.
@@ -1148,8 +1245,19 @@ void char_opd() {
                 << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << "," << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
         }
       }
+
+      // write to file 2
+      if (!sensorDataQueue.isempty()) {
+        int N = sensorDataQueue.size();
+        for (int i = 0; i < N; i++) {
+          auto m = sensorDataQueue.pop();
+          // format: 6 decimals for time, 3 decimals for OPD
+          file2 << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd << "," << std::fixed << std::setprecision(3) << m.shear_x1 << "," << std::fixed << std::setprecision(3) << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1 << "," << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3) << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
+        }
+      }
     }
     file.close();
+    file2.close();
   }
 
 
@@ -1193,8 +1301,27 @@ void RenderUI() {
   pointing_i.store(pointing_i_gui);
 
   static auto current_measurement = 0.f;
-  if (!opdQueue.isempty()) {
-    current_measurement = opdQueue.back().value;
+  if (!sensorDataQueue.isempty()) {
+    current_measurement = sensorDataQueue.back().opd;
+  }
+
+  static ScrollingBuffer opd_buffer, shear_x1_buffer, shear_x2_buffer, shear_y1_buffer, shear_y2_buffer, point_x1_buffer, point_x2_buffer, point_y1_buffer, point_y2_buffer;
+
+  // add the enture sensor data queue to the plot buffers
+  if (!sensorDataQueue.isempty()) {
+    int N = sensorDataQueue.size();
+    for (int i = 0; i < N; i++) {
+      auto m = sensorDataQueue.pop();
+      opd_buffer.AddPoint(m.time, m.opd);
+      shear_x1_buffer.AddPoint(m.time, m.shear_x1);
+      shear_x2_buffer.AddPoint(m.time, m.shear_x2);
+      shear_y1_buffer.AddPoint(m.time, m.shear_y1);
+      shear_y2_buffer.AddPoint(m.time, m.shear_y2);
+      point_x1_buffer.AddPoint(m.time, m.point_x1);
+      point_x2_buffer.AddPoint(m.time, m.point_x2);
+      point_y1_buffer.AddPoint(m.time, m.point_y1);
+      point_y2_buffer.AddPoint(m.time, m.point_y2);
+    }
   }
 
   // Start measurement
@@ -1384,23 +1511,14 @@ void RenderUI() {
 
     
 
-    // real time plot
-    static ScrollingBuffer opd_buffer, setpoint_buffer;
-    static ScrollingBuffer opd_dith_buffer;
+    // real time plot 
+    static ScrollingBuffer opd_dith_buffer, setpoint_buffer;
 
     static float t_gui = 0;
 
     // if measurement is running, update gui time.
     if (RunMeasurement.load()) {
       t_gui = getTime();
-    }
-
-    // add the entire MeasurementQueue to the buffer
-    if (!opdQueue.isempty()) {
-      while (!opdQueue.isempty()) {
-        auto m = opdQueue.pop();
-        opd_buffer.AddPoint(m.time, m.value);
-      }
     }
 
     // get control signals
@@ -1622,8 +1740,7 @@ void RenderUI() {
       tip_tilt_stage2.move_to_y(shear_y2_ol_setpoint);
     }
 
-    // real time plot
-    static ScrollingBuffer shear_x1_buffer, shear_x2_buffer, shear_y1_buffer, shear_y2_buffer;
+
 
     static float t_gui_x = 0;
 
@@ -1632,34 +1749,6 @@ void RenderUI() {
       t_gui_x = getTime();
     }
 
-    // add the entire MeasurementQueue to the buffer
-    if (!shear_x1Queue.isempty()) {
-      while (!shear_x1Queue.isempty()) {
-        auto m = shear_x1Queue.pop();
-        shear_x1_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
-    if (!shear_x2Queue.isempty()) {
-      while (!shear_x2Queue.isempty()) {
-        auto m = shear_x2Queue.pop();
-        shear_x2_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
-    if (!shear_y1Queue.isempty()) {
-      while (!shear_y1Queue.isempty()) {
-        auto m = shear_y1Queue.pop();
-        shear_y1_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
-    if (!shear_y2Queue.isempty()) {
-      while (!shear_y2Queue.isempty()) {
-        auto m = shear_y2Queue.pop();
-        shear_y2_buffer.AddPoint(m.time, m.value);
-      }
-    }
 
     static float x1_history_length = 10.0f;
     ImGui::SliderFloat("History", &x1_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
@@ -1840,46 +1929,11 @@ void RenderUI() {
       nF_stage_2.move_to(pointing_x2_ol_setpoint, pointing_y2_ol_setpoint);
     }
 
-
-
-
-    // real time plot
-    static ScrollingBuffer point_x1_buffer, point_x2_buffer, point_y1_buffer, point_y2_buffer;
-
     static float t_gui_x = 0;
 
     // if measurement is running, update gui time.
     if (RunMeasurement.load()) {
       t_gui_x = getTime();
-    }
-
-    // add the entire MeasurementQueue to the buffer
-    if (!point_x1Queue.isempty()) {
-      while (!point_x1Queue.isempty()) {
-        auto m = point_x1Queue.pop();
-        point_x1_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
-    if (!point_x2Queue.isempty()) {
-      while (!point_x2Queue.isempty()) {
-        auto m = point_x2Queue.pop();
-        point_x2_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
-    if (!point_y1Queue.isempty()) {
-      while (!point_y1Queue.isempty()) {
-        auto m = point_y1Queue.pop();
-        point_y1_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
-    if (!point_y2Queue.isempty()) {
-      while (!point_y2Queue.isempty()) {
-        auto m = point_y2Queue.pop();
-        point_y2_buffer.AddPoint(m.time, m.value);
-      }
     }
 
     static float pointing_history_length = 10.0f;

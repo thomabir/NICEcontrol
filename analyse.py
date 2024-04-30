@@ -58,7 +58,7 @@ def freq_analysis_full(filenames_arr, input_signal_str, output_signal_str):
 
     return freqs, gains
 
-measurement_dir = 'measurements/2024-04-30T15:19:25Z_opd'
+measurement_dir = 'measurements/2024-04-30T21:07:26Z_opd'
 
 ## Controller frequency response analysis
 filenames = glob.glob(f'{measurement_dir}/freq_controller/*_hz.csv')
@@ -66,17 +66,17 @@ f_con, gg_con = freq_analysis_full(filenames, 'Controller input (nm)', 'Controll
 g_con, ph_con = complex_gain_to_mag_phase(gg_con)
 
 ## Plant frequency response analysis
-filenames = glob.glob(f'{measurement_dir}/freq_plant/*_hz.csv')
+filenames = glob.glob(f'{measurement_dir}/freq_plant/control_*_hz.csv')
 f_plant, gg_plant = freq_analysis_full(filenames, 'Actuator command (nm)', 'Measurement (nm)')
 g_plant, ph_plant = complex_gain_to_mag_phase(gg_plant)
 
 ## Closed loop dither plant frequency response analysis
-filenames = glob.glob(f'{measurement_dir}/freq_closed_loop_dither_plant/*_hz.csv')
+filenames = glob.glob(f'{measurement_dir}/freq_closed_loop_dither_plant/control_*_hz.csv')
 f_clp, gg_clp = freq_analysis_full(filenames, 'Measurement (nm)', 'Dither signal (nm)')
 g_clp, ph_clp = complex_gain_to_mag_phase(gg_clp)
 
 ## Closed loop dither setpoint frequency response analysis
-filenames = glob.glob(f'{measurement_dir}/freq_closed_loop_dither_setpoint/*_hz.csv')
+filenames = glob.glob(f'{measurement_dir}/freq_closed_loop_dither_setpoint/control_*_hz.csv')
 f_cls, gg_cls = freq_analysis_full(filenames, 'Dither signal (nm)', 'Measurement (nm)')
 g_cls, ph_cls = complex_gain_to_mag_phase(gg_cls)
 
@@ -100,6 +100,18 @@ ax[1].semilogx(f_plant, ph_plant, label='Plant')
 # ax[1].semilogx(f_clp, ph_clp, label='Closed loop, dither plant')
 ax[1].semilogx(f_cls, ph_cls, label='Closed loop, dither setpoint')
 ax[1].semilogx(f_plant, ph_cl_sim, label='Closed loop (simulated)')
+ax[1].set_ylabel('Phase')
+ax[1].set_xlabel('Frequency (Hz)')
+plt.legend()
+plt.show()
+
+# bode plot of plant dither
+fig, ax = plt.subplots(2, 1, figsize=(6, 8), sharex=True)
+ax[0].loglog(f_plant, g_plant, label='Plant')
+ax[0].loglog(f_clp, g_clp, label='Closed loop, dither plant')
+ax[0].set_ylabel('Gain')
+ax[1].semilogx(f_plant, ph_plant, label='Plant')
+ax[1].semilogx(f_clp, ph_clp, label='Closed loop, dither plant')
 ax[1].set_ylabel('Phase')
 ax[1].set_xlabel('Frequency (Hz)')
 plt.legend()
