@@ -84,6 +84,17 @@ struct Measurement {
   float value;
 };
 
+struct ControlData {
+  double time;
+  float setpoint;
+  float measurement;
+  // float error = setpoint - measurement;
+  float control_signal;
+  float dither_signal;
+  // float dithered_control_signal = control_signal + dither_signal;
+};
+
+
 template <typename T, typename U>
 struct MeasurementT {
   T time;
@@ -406,8 +417,7 @@ TSQueue<Measurement> point_y2Queue;
 TSQueue<MeasurementT<int, int>> adc_queues[10];
 TSQueue<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
 
-TSQueue<Measurement> opd_dith_queue;
-TSQueue<MeasurementT<double, double>> opd_setpoint_queue;
+TSQueue<ControlData> opd_controlData_queue;
 
 int setup_ethernet() {
   // setup ethernet connection
@@ -626,7 +636,7 @@ void run_calculation() {
     // if RunOpdControl is true, calculate the control signal
     if (RunOpdControl.load()) {
 
-      double setpoint = opd_setpoint.load();
+      float setpoint = opd_setpoint.load();
 
       // calculate error
       opd_error = setpoint - opd_control_measurement;
@@ -641,22 +651,18 @@ void run_calculation() {
       opd_control_signal = opd_p.load() * opd_error + opd_error_integral;
 
       // calculate dither signal: sine
-      float dither_signal = opd_dither_amp.load() * std::sin(2 * PI * opd_dither_freq.load() * t);
+      float dither_signal = opd_dither_amp.load() * std::sin(2 * PI * opd_dither_freq.load() * t) / 2.; // correct for double pass (retroreflector)
 
       // calculate dither signal: white noise
       // std::default_random_engine opd_dith_gen(std::random_device{}());
       // std::normal_distribution<double> dist(0.0, opd_dither_amp.load());
       // float dither_signal = dist(opd_dith_gen);
-
-      // apply dither signal
-      opd_control_signal += dither_signal / 2.; // correct for double pass (retroreflector)
-
-      // enqueue signals
-      opd_dith_queue.push({t, dither_signal});
-      opd_setpoint_queue.push({t, setpoint});
+      
+      // units: s, nm * 4
+      opd_controlData_queue.push({t, setpoint, opd_control_measurement, opd_control_signal, dither_signal});
 
       // actuate piezo actuator
-      opd_stage.move_to(opd_control_signal * 1e-3); // convert nm to um
+      opd_stage.move_to((opd_control_signal + dither_signal) * 1e-3); // convert nm to um
     }
     else {
       opd_error_integral = 0.0f;
@@ -733,14 +739,6 @@ void run_calculation() {
 void char_opd() {
   std::cout << "Starting OPD characterisation" << std::endl;
 
-  // goal: perform measurements, write them to disk. Analysis later in Python
-
-  // dither frequencies
-  std::vector<float> dither_freqs = {0.1, 0.5, 1.0, 5.0, 10.0, 50.0}; // Hz
-
-  // dither amplitudes: all 20 nm
-  std::vector<float> dither_amps(dither_freqs.size(), 10.0); // nm
-
   float settling_time = 1.0; // s
   float recording_time = 1.0; // s
 
@@ -790,8 +788,9 @@ void char_opd() {
       }
     }
   }
+  file.close();
 
-  // CLOSE LOOP CHARACTERISATION
+  // CLOSED LOOP CHARACTERISATION
   std::cout << "\t OPD closed loop" << std::endl;
   // storage file
   filename = dirname + "/opd_closed_loop.csv";
@@ -829,63 +828,130 @@ void char_opd() {
   file.close();
 
 
-  // // IMPULSE RESPONSE CHARACTERISATION
-  // std::cout << "\t OPD impulse response" << std::endl;
-  // // storage file
-  // filename = dirname + "/opd_impulse_response.csv";
-  // file.open(filename);
-  // file << "Time (s),OPD (nm),Setpoint (nm)\n";
+  // IMPULSE RESPONSE CHARACTERISATION
+  std::cout << "\t OPD impulse response" << std::endl;
+  // storage file
+  filename = dirname + "/opd_impulse_response.csv";
+  file.open(filename);
+  file << "Time (s),Setpoint (nm),Measurement (nm),Control signal (nm),Dither signal (nm)\n";
 
-  // // settle control loop
-  // RunOpdControl.store(true);
-  // std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
-  // opd_setpoint.store(0.0);
+  // settle control loop
+  RunOpdControl.store(true);
+  std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+  opd_setpoint.store(0.0);
 
-  // // flush OPD queue and setpoint queue
-  // while (!opdQueue.isempty()) {
-  //   opdQueue.pop();
-  // }
+  // flush data queues
+  while (!opd_controlData_queue.isempty()) {
+    opd_controlData_queue.pop();
+  }
 
-  // while (!opd_setpoint_queue.isempty()) {
-  //   opd_setpoint_queue.pop();
-  // }
+  // record for recording time: every 100 ms, flush opd queue and write contents to file. Also, toggle the setpoint between 0 and 100
+  t_start = std::chrono::high_resolution_clock::now();
+  bool setpoint_high = false;
+  while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_time) {
 
-  // // record for recording time: every 100 ms, flush opd queue and write contents to file. Also, toggle the setpoint between 0 and 100
-  // t_start = std::chrono::high_resolution_clock::now();
-  // bool setpoint_high = false;
-  // while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_time) {
+    // wait 100 ms
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-  //   // wait 100 ms
-  //   std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // toggle setpoint
+    if (setpoint_high) {
+      opd_setpoint.store(0.0);
+    } else {
+      opd_setpoint.store(100.0);
+    }
+    setpoint_high = !setpoint_high;
 
-  //   // toggle setpoint
-  //   if (setpoint_high) {
-  //     opd_setpoint.store(0.0);
-  //   } else {
-  //     opd_setpoint.store(100.0);
-  //   }
+    // write to file
+    if (!opd_controlData_queue.isempty()) {
+      int N = opd_controlData_queue.size();
+      for (int i = 0; i < N; i++) {
+        auto m = opd_controlData_queue.pop();
+        // format: 6 decimals for time, 3 decimals for OPD
+        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed << std::setprecision(3) << m.measurement << "," << std::fixed << std::setprecision(3) << m.control_signal << "," << std::fixed << std::setprecision(3) << m.dither_signal << "\n";
+      }
+    }
 
-  //   // write to file
-  //   if (!opdQueue.isempty()) {
-  //     int N = opdQueue.size();
-  //     for (int i = 0; i < N; i++) {
-  //       auto m = opdQueue.pop();
-  //       // format: 6 decimals for time, 3 decimals for OPD
-
-  //       //
-  //       // TODO: get setpoint from buffer
-  //       //
+  }
+  file.close();
 
 
-  //     }
-  //   }
-  // }
 
   
   // FREQUENCY CHARACTERISATION
   // for all dither frequencies and amplitudes, run the control loop for a while and record dither and opd measurments
-  // TODO implement
+  std::cout << "\t OPD frequency characterisation" << std::endl;
 
+    // dither frequencies
+  std::vector<float> dither_freqs = {0.1, 0.5, 1.0, 5.0, 10.0}; // Hz
+
+  // add logscaled frequencies: 100 entries from 10 Hz to 1 kHz
+  for (int i = 1; i < 100; i++) {
+    dither_freqs.push_back(10.0 * std::pow(10, i / 100.0));
+  }
+
+  // dither amplitudes: all 20 nm
+  std::vector<float> dither_amps(dither_freqs.size(), 20.0); // nm
+
+  // for 0.1 Hz and 1 Hz, use 100 nm
+  // dither_amps[0] = 100.0;
+  // dither_amps[1] = 100.0;
+
+  // recording time: at least 1 s, at most 10/freq
+  std::vector<float> recording_times(dither_freqs.size(), 0.0); // s
+  for (int i = 0; i < dither_freqs.size(); i++) {
+    recording_times[i] = std::max(1.0, 10.0 / dither_freqs[i]);
+  }
+
+  // seperate storage file for each frequency
+
+  for (int i = 0; i < dither_freqs.size(); i++) {
+    std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
+    // storage file: frequency in format 1.2345e67
+    filename = dirname + "/opd_freq_" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    file.open(filename);
+    file << "Time (s),Setpoint (nm),Measurement (nm),Control signal (nm),Dither signal (nm)\n";
+
+    // set control parameters
+    opd_setpoint.store(0.0);
+
+    // set dither loop parameters
+    opd_dither_freq.store(dither_freqs[i]);
+    opd_dither_amp.store(dither_amps[i]);
+
+    // settle control loop
+    RunOpdControl.store(true);
+    std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+    
+
+    // flush data queues
+    while (!opd_controlData_queue.isempty()) {
+      opd_controlData_queue.pop();
+    }
+
+    // record for recording time: every 100 ms, flush opd queue and write contents to file.
+    t_start = std::chrono::high_resolution_clock::now();
+    while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_times[i]) {
+
+      // wait 100 ms
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+      // write to file
+      if (!opd_controlData_queue.isempty()) {
+        int N = opd_controlData_queue.size();
+        for (int i = 0; i < N; i++) {
+          auto m = opd_controlData_queue.pop();
+          // format: 6 decimals for time, 3 decimals for OPD
+          file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed << std::setprecision(3) << m.measurement << "," << std::fixed << std::setprecision(3) << m.control_signal << "," << std::fixed << std::setprecision(3) << m.dither_signal << "\n";
+        }
+      }
+
+    }
+    file.close();
+  }
+
+
+
+  // DONE
   gui_control.store(true);
   std::cout << "Finished OPD characterisation" << std::endl;
 }
@@ -1133,21 +1199,12 @@ void RenderUI() {
       }
     }
 
-    // add the DitherQueue to the buffer
-    if (!opd_dith_queue.isempty()) {
-      int N = opd_dith_queue.size();
-      for (int j = 0; j < N; j++) {
-        auto m = opd_dith_queue.pop();
-        opd_dith_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
-    // add the setpoint queue to the buffer
-    if (!opd_setpoint_queue.isempty()) {
-      int N = opd_setpoint_queue.size();
-      for (int j = 0; j < N; j++) {
-        auto m = opd_setpoint_queue.pop();
-        setpoint_buffer.AddPoint(m.time, m.value);
+    // get control signals
+    if (!opd_controlData_queue.isempty()) {
+      while (!opd_controlData_queue.isempty()) {
+        auto m = opd_controlData_queue.pop();
+        setpoint_buffer.AddPoint(m.time, m.setpoint);
+        opd_dith_buffer.AddPoint(m.time, m.dither_signal);
       }
     }
 
