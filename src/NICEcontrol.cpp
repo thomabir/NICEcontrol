@@ -43,6 +43,9 @@
 #include "PI_E754_Controller.hpp"  // Controller for PI OPD Stage
 #include "nF_EBD_Controller.hpp"   // Controller for nanoFaktur Tip/Tilt Stages
 
+// Controllers (PID etc.)
+#include "Controllers.hpp"
+
 // white noise for dithering
 #include <random>
 
@@ -86,12 +89,12 @@ struct Measurement {
 
 struct ControlData {
   double time;
-  float setpoint;
   float measurement;
-  // float error = setpoint - measurement;
-  float control_signal;
+  float setpoint;
   float dither_signal;
-  // float dithered_control_signal = control_signal + dither_signal;
+  float controller_input;
+  float controller_output;
+  float actuator_command;
 };
 
 
@@ -304,7 +307,7 @@ std::atomic<bool> gui_control(true);
 // OPD control
 float opd_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
 std::atomic<float> opd_setpoint = 0.0f;  // setpoint used in calculation, clipped to valid range
-std::atomic<bool> RunOpdControl(false);
+std::atomic<int> opd_control_mode = 0;
 std::atomic<float> opd_p = 0.7f;
 std::atomic<float> opd_i = 0.0f;
 std::atomic<float> opd_dither_freq = 0.0f;
@@ -421,6 +424,9 @@ TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
 TSCircularBuffer<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
 
 TSCircularBuffer<ControlData> opd_controlData_queue;
+
+// controllers
+PIController opd_controller;
 
 int setup_ethernet() {
   // setup ethernet connection
@@ -600,9 +606,6 @@ void run_calculation() {
     // outputFile << t << "," << opd << "\n";
 
     // variables for control
-    static float opd_error = 0.0f;
-    static float opd_error_integral = 0.0f;
-    static float opd_control_signal = 0.0f;
 
     static float shear_x1_error = 0.0f;
     static float shear_x1_error_integral = 0.0f;
@@ -635,42 +638,68 @@ void run_calculation() {
     static float pointing_y2_error = 0.0f;
     static float pointing_y2_error_integral = 0.0f;
     static float pointing_y2_control_signal = 0.0f;
+
+    // OPD control
+    static float controller_input = 0.0f;
+    static float controller_output = 0.0f;
+    static float actuator_command = 0.0f;
+
+    // calculate dither signal
+    float dither_signal = opd_dither_amp.load() * std::sin(2 * PI * opd_dither_freq.load() * t);
+
+    // get control parameters
+    float setpoint = opd_setpoint.load();
+    opd_controller.setPI(opd_p.load(), opd_i.load());
+    int cm = opd_control_mode.load();
+
+    // TODO: if control_mode has changed, reset the controller
+    static int prev_cm = cm;
+    if (cm != prev_cm) {
+      opd_controller.reset_state();
+    }
+    prev_cm = cm;
+
+    // update control parameters
+
+
+    switch(cm) {
+        case 0: // do nothing
+            break;
+        case 1: // P
+            actuator_command = (setpoint + dither_signal); // convert nm to um
+            opd_stage.move_to(actuator_command * 1e-3); // convert nm to um
+            break;
+        case 2: // C
+            controller_input = dither_signal;
+            controller_output = opd_controller.step(controller_input);
+            break;
+        case 3: // CP open
+            controller_input = dither_signal;
+            controller_output = opd_controller.step(controller_input);
+            actuator_command = controller_output;
+            opd_stage.move_to(actuator_command * 1e-3);
+            break;
+        case 4: // CP closed, dither plant
+            controller_input = setpoint - opd_control_measurement;
+            controller_output = opd_controller.step(controller_input);
+            actuator_command = controller_output + dither_signal;
+            opd_stage.move_to(actuator_command * 1e-3); // convert nm to um
+            break;
+        case 5: // CP closed, dither setpoint
+            controller_input = setpoint + dither_signal - opd_control_measurement;
+            controller_output = opd_controller.step(controller_input);
+            actuator_command = controller_output;
+            opd_stage.move_to(actuator_command * 1e-3); // convert nm to um
+            break;
+        default:
+            // don't
+            break;
+    }
+
+    opd_controlData_queue.push({t, opd_control_measurement, setpoint, dither_signal, controller_input, controller_output, actuator_command});
   
-    // if RunOpdControl is true, calculate the control signal
-    if (RunOpdControl.load()) {
-
-      float setpoint = opd_setpoint.load();
-
-      // calculate error
-      opd_error = setpoint - opd_control_measurement;
-
-      // calculate integral
-      opd_error_integral += opd_i.load() * opd_error;
-
-      // calculate derivative
-      // opd_error_derivative = opd_error - opd_error_prev;
-
-      // calculate control signal
-      opd_control_signal = opd_p.load() * opd_error + opd_error_integral;
-
-      // calculate dither signal: sine
-      float dither_signal = opd_dither_amp.load() * std::sin(2 * PI * opd_dither_freq.load() * t) / 2.; // correct for double pass (retroreflector)
-
-      // calculate dither signal: white noise
-      // std::default_random_engine opd_dith_gen(std::random_device{}());
-      // std::normal_distribution<double> dist(0.0, opd_dither_amp.load());
-      // float dither_signal = dist(opd_dith_gen);
-      
-      // units: s, nm * 4
-      opd_controlData_queue.push({t, setpoint, opd_control_measurement, opd_control_signal, dither_signal});
-
-      // actuate piezo actuator
-      opd_stage.move_to((opd_control_signal + dither_signal) * 1e-3); // convert nm to um
-    }
-    else {
-      opd_error_integral = 0.0f;
-    }
-
+    
+    // Shear control
     if (RunShearControl.load()) {
       // calculate error
       shear_x1_error = shear_x1_setpoint.load() - shear_x1_control_measurement;
@@ -764,7 +793,7 @@ void char_opd() {
   file << "Time (s),OPD (nm)\n";
 
   // make sure control loop is off
-  RunOpdControl.store(false);
+  opd_control_mode.store(0);
   
   // wait settling time
   std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
@@ -801,7 +830,7 @@ void char_opd() {
   file << "Time (s),OPD (nm)\n";
 
   // make sure control loop is on
-  RunOpdControl.store(true);
+  opd_control_mode.store(4);
 
   // wait settling time
   std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
@@ -836,10 +865,10 @@ void char_opd() {
   // storage file
   filename = dirname + "/opd_impulse_response.csv";
   file.open(filename);
-  file << "Time (s),Setpoint (nm),Measurement (nm),Control signal (nm),Dither signal (nm)\n";
+  file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output (nm),Actuator command (nm)\n";
 
   // settle control loop
-  RunOpdControl.store(true);
+  opd_control_mode.store(4);
   std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
   opd_setpoint.store(0.0);
 
@@ -870,7 +899,7 @@ void char_opd() {
       for (int i = 0; i < N; i++) {
         auto m = opd_controlData_queue.pop();
         // format: 6 decimals for time, 3 decimals for OPD
-        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed << std::setprecision(3) << m.measurement << "," << std::fixed << std::setprecision(3) << m.control_signal << "," << std::fixed << std::setprecision(3) << m.dither_signal << "\n";
+        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.measurement << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed << std::setprecision(3) << m.dither_signal << "," << std::fixed << std::setprecision(3) << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << "," << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
       }
     }
 
@@ -885,12 +914,12 @@ void char_opd() {
   std::cout << "\t OPD frequency characterisation" << std::endl;
 
     // dither frequencies
-  std::vector<float> dither_freqs = {0.1, 0.5, 1.0, 5.0, 10.0}; // Hz
+  std::vector<float> dither_freqs = {5.0, 10.0, 50.0}; // Hz
 
   // add logscaled frequencies: 100 entries from 10 Hz to 1 kHz
-  for (int i = 1; i < 100; i++) {
-    dither_freqs.push_back(10.0 * std::pow(10, i / 100.0));
-  }
+  // for (int i = 1; i < 100; i++) {
+  //   dither_freqs.push_back(10.0 * std::pow(10, i / 100.0));
+  // }
 
   // dither amplitudes: all 20 nm
   std::vector<float> dither_amps(dither_freqs.size(), 20.0); // nm
@@ -912,7 +941,7 @@ void char_opd() {
     // storage file: frequency in format 1.2345e67
     filename = dirname + "/opd_freq_" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
-    file << "Time (s),Setpoint (nm),Measurement (nm),Control signal (nm),Dither signal (nm)\n";
+    file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output (nm),Actuator command (nm)\n";
 
     // set control parameters
     opd_setpoint.store(0.0);
@@ -922,7 +951,7 @@ void char_opd() {
     opd_dither_amp.store(dither_amps[i]);
 
     // settle control loop
-    RunOpdControl.store(true);
+    opd_control_mode.store(4);
     std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
     
 
@@ -944,7 +973,7 @@ void char_opd() {
         for (int i = 0; i < N; i++) {
           auto m = opd_controlData_queue.pop();
           // format: 6 decimals for time, 3 decimals for OPD
-          file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed << std::setprecision(3) << m.measurement << "," << std::fixed << std::setprecision(3) << m.control_signal << "," << std::fixed << std::setprecision(3) << m.dither_signal << "\n";
+          file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.measurement << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed << std::setprecision(3) << m.dither_signal << "," << std::fixed << std::setprecision(3) << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << "," << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
         }
       }
 
@@ -1167,11 +1196,12 @@ void RenderUI() {
     
     if (gui_control.load()) {
       // run control if "Closed loop" is selected
-      if (gui_opd_loop_select == 2) {RunOpdControl.store(true);}
-      else {RunOpdControl.store(false);}
+      if (gui_opd_loop_select == 2) {opd_control_mode.store(4);}
+      else if (gui_opd_loop_select == 1) {opd_control_mode.store(1);}
+      else {opd_control_mode.store(0);}
 
       // move stage to open loop setpoint if "Open loop" is selected
-      if (gui_opd_loop_select == 1) {opd_stage.move_to(opd_open_loop_setpoint);}
+      
 
       // store control loop parameters
       opd_setpoint.store(opd_setpoint_gui);

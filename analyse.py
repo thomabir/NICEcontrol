@@ -3,9 +3,36 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import glob
 
+measurement_dir = 'measurements/opd_2024-04-30T13:12:20Z/'
+
+## Impulse response analysis
+filename = f'{measurement_dir}opd_impulse_response.csv'
+
+# read data from the file
+data = pd.read_csv(filename)
+t = data['Time (s)']
+measurement = data['Measurement (nm)']
+setpoint = data['Setpoint (nm)']
+dither_signal = data['Dither signal (nm)']
+controller_input = data['Controller input (nm)']
+controller_output = data['Controller output (nm)']
+actuator_command = data['Actuator command (nm)']
+
+# plot
+# fig, ax = plt.subplots()
+# ax.plot(t, measurement, label='Measurement')
+# ax.plot(t, setpoint, label='Setpoint')
+# ax.set_xlabel('Time (s)')
+# ax.set_ylabel('Position (nm)')
+# ax.legend()
+# plt.show()
+
+
+
+## Frequency response analysis
 
 # find all files with name that contains 'measurements/opd_freq_*_hz.csv', and get their filenames into an array
-filenames = glob.glob(f'measurements/opd_2024-04-30T09:44:44Z/opd_freq_*_hz.csv')
+filenames = glob.glob(f'{measurement_dir}opd_freq_*_hz.csv')
 
 # initialise arrays to store Bode plot data
 freqs = np.zeros(len(filenames))
@@ -20,21 +47,14 @@ for i, filename in enumerate(filenames):
     # read data from the file
     data = pd.read_csv(filename)
 
+    # Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output (nm),Actuator command (nm)
     t = data['Time (s)']
-    setpoint = data['Setpoint (nm)']
     measurement = data['Measurement (nm)']
-    control_signal = data['Control signal (nm)']
+    setpoint = data['Setpoint (nm)']
     dither_signal = data['Dither signal (nm)']
-
-    # plot the measurement and dither signal
-    # fig, ax = plt.subplots()
-    # ax.plot(t, measurement, label='Measurement')
-    # ax.plot(t, dither_signal, label='Dither signal')
-    # ax.set_xlabel('Time (s)')
-    # ax.set_ylabel('OPD (nm)')
-    # ax.legend()
-    # plt.show()
-
+    controller_input = data['Controller input (nm)']
+    controller_output = data['Controller output (nm)']
+    actuator_command = data['Actuator command (nm)']
 
     # find the power of the dither signal and the measurement signal at frequency `freq`
     # using the single-point discrete Fourier transform

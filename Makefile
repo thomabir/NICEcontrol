@@ -55,6 +55,9 @@ LIBS = -lmadlib -lfftw3 -lm -liir -lpi_pi_gcs2
 LIBS += -lnF_interface_x64 # nanoFaktur piezo controller
 SOURCES += $(SRC_DIR)/nF_EBD_Controller.cpp # nanoFaktur piezo controller
 
+## general classes for controllers (as in, proportional-integral-derivative controllers etc.)
+SOURCES += $(SRC_DIR)/Controllers.cpp
+
 ##---------------------------------------------------------------------
 ## OPENGL ES
 ##---------------------------------------------------------------------
