@@ -771,8 +771,13 @@ void run_calculation() {
 void char_opd() {
   std::cout << "Starting OPD characterisation" << std::endl;
 
+  // wait for one minute (leave the room)
+  std::cout << "Waiting for one minute" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(60));
+  std::cout << "Done waiting" << std::endl;
+
   float settling_time = 1.0; // s
-  float recording_time = 1.0; // s
+  float recording_time = 200.0; // s
 
   // set control parameters
   opd_setpoint.store(0.0);
@@ -781,13 +786,13 @@ void char_opd() {
 
   // directory to store files in: dire name is opd_date_time (e.g. measurements/opd_2021-09-01_12:00:00)
   auto datetime_string = get_iso_datestring();
-  std::string dirname = "measurements/opd_" + datetime_string;
+  std::string dirname = "measurements/" + datetime_string + "_opd";
   std::filesystem::create_directory(dirname);
 
   // OPEN LOOP CHARACTERISATION
   std::cout << "\t OPD open loop" << std::endl;
   // storage file
-  std::string filename = dirname + "/opd_open_loop.csv";
+  std::string filename = dirname + "/open_loop.csv";
   std::ofstream
   file(filename);
   file << "Time (s),OPD (nm)\n";
@@ -825,7 +830,7 @@ void char_opd() {
   // CLOSED LOOP CHARACTERISATION
   std::cout << "\t OPD closed loop" << std::endl;
   // storage file
-  filename = dirname + "/opd_closed_loop.csv";
+  filename = dirname + "/closed_loop.csv";
   file.open(filename);
   file << "Time (s),OPD (nm)\n";
 
@@ -840,7 +845,7 @@ void char_opd() {
     opdQueue.pop();
   }
 
-  // record for recording time: every 10 ms, flush opd queue and write contents to file
+  // record for recording time: every 10 ms, write contents to file
   t_start = std::chrono::high_resolution_clock::now();
   while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_time) {
 
@@ -859,11 +864,10 @@ void char_opd() {
   }
   file.close();
 
-
-  // IMPULSE RESPONSE CHARACTERISATION
+   // IMPULSE RESPONSE CHARACTERISATION
   std::cout << "\t OPD impulse response" << std::endl;
   // storage file
-  filename = dirname + "/opd_impulse_response.csv";
+  filename = dirname + "/impulse_response.csv";
   file.open(filename);
   file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output (nm),Actuator command (nm)\n";
 
@@ -877,10 +881,10 @@ void char_opd() {
     opd_controlData_queue.pop();
   }
 
-  // record for recording time: every 100 ms, flush opd queue and write contents to file. Also, toggle the setpoint between 0 and 100
+  // record for 10 s: every 100 ms, toggle setpoint and record data
   t_start = std::chrono::high_resolution_clock::now();
   bool setpoint_high = false;
-  while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_time) {
+  while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < 10.0) {
 
     // wait 100 ms
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -908,38 +912,154 @@ void char_opd() {
 
 
 
-  
-  // FREQUENCY CHARACTERISATION
-  // for all dither frequencies and amplitudes, run the control loop for a while and record dither and opd measurments
-  std::cout << "\t OPD frequency characterisation" << std::endl;
+  // CONTROL LAW FREQUENCY CHARACTERISATION
+  std::cout << "\t OPD control law frequency characterisation" << std::endl;
 
-    // dither frequencies
-  std::vector<float> dither_freqs = {5.0, 10.0, 50.0}; // Hz
+  // dither frequencies
+  std::vector<float> dither_freqs = {0.1, 0.5}; // low frequencies take long, so only a few
 
-  // add logscaled frequencies: 100 entries from 10 Hz to 1 kHz
-  // for (int i = 1; i < 100; i++) {
-  //   dither_freqs.push_back(10.0 * std::pow(10, i / 100.0));
-  // }
+  // append logarithmic freqs from 1 to 500 Hz
+  float logf1 = std::log10(1);
+  float logf2 = std::log10(500.0);
+  int fsteps = 100;
+  for (int i = 0; i < fsteps; i++) {
+    dither_freqs.push_back(std::pow(10, logf1 + i * (logf2 - logf1) / (fsteps - 1)));
+  }
 
   // dither amplitudes: all 20 nm
   std::vector<float> dither_amps(dither_freqs.size(), 20.0); // nm
 
-  // for 0.1 Hz and 1 Hz, use 100 nm
-  // dither_amps[0] = 100.0;
-  // dither_amps[1] = 100.0;
+
+  // for low frequencies, increase dither amplitude to 100 nm
+  for (int i = 0; i < dither_freqs.size(); i++) {
+    if (dither_freqs[i] < 2.0) {
+      dither_amps[i] = 100.0;
+    }
+  }
 
   // recording time: at least 1 s, at most 10/freq
   std::vector<float> recording_times(dither_freqs.size(), 0.0); // s
+
   for (int i = 0; i < dither_freqs.size(); i++) {
     recording_times[i] = std::max(1.0, 10.0 / dither_freqs[i]);
   }
+
+  // make subdir: opd_controller_freq
+  std::string subdir = dirname + "/freq_controller";
+  std::filesystem::create_directory(subdir);
+
+  // seperate storage file for each frequency
+  for (int i = 0; i < dither_freqs.size(); i++) {
+    std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
+    // storage file: frequency in format 1.2345e67
+    filename = subdir + "/" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    file.open(filename);
+    file << "Time (s),Controller input (nm),Controller output (nm)\n";
+
+    // set control parameters
+    opd_setpoint.store(0.0);
+
+    // set dither loop parameters
+    opd_dither_freq.store(dither_freqs[i]);
+    opd_dither_amp.store(dither_amps[i]);
+
+    // settle control loop
+    opd_control_mode.store(2);
+    std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+
+    // flush data queues
+    while (!opd_controlData_queue.isempty()) {
+      opd_controlData_queue.pop();
+    }
+
+    // record for recording time: every 10 ms, flush opd queue and write contents to file
+    t_start = std::chrono::high_resolution_clock::now();
+    while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_times[i]) {
+
+      // wait 10 ms
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+      // write to file
+      if (!opd_controlData_queue.isempty()) {
+        int N = opd_controlData_queue.size();
+        for (int i = 0; i < N; i++) {
+          auto m = opd_controlData_queue.pop();
+          // format: 6 decimals for time, 3 decimals for OPD
+          file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << "\n";
+        }
+      }
+    }
+
+    file.close();
+  }
+
+ 
+
+
+  // FREQUENCY CHARACTERISATION PLANT
+  std::cout << "\t Plant frequency characterisation" << std::endl;
+
+  // make subdir: opd_plant_freq
+  std::string subdir1 = dirname + "/freq_plant";
+  std::filesystem::create_directory(subdir1);
 
   // seperate storage file for each frequency
 
   for (int i = 0; i < dither_freqs.size(); i++) {
     std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
     // storage file: frequency in format 1.2345e67
-    filename = dirname + "/opd_freq_" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    filename = subdir1 + "/" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    file.open(filename);
+    file << "Time (s),Measurement (nm),Actuator command (nm)\n";
+
+    // set control parameters
+    opd_setpoint.store(0.0);
+
+    // set dither loop parameters
+    opd_dither_freq.store(dither_freqs[i]);
+    opd_dither_amp.store(dither_amps[i]);
+
+    // settle control loop
+    opd_control_mode.store(1);
+    std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+
+    // flush data queues
+    while (!opd_controlData_queue.isempty()) {
+      opd_controlData_queue.pop();
+    }
+
+    // record for recording time: every 100 ms, flush opd queue and write contents to file.
+    t_start = std::chrono::high_resolution_clock::now();
+    while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_times[i]) {
+
+      // wait 100 ms
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+      // write to file
+      if (!opd_controlData_queue.isempty()) {
+        int N = opd_controlData_queue.size();
+        for (int i = 0; i < N; i++) {
+          auto m = opd_controlData_queue.pop();
+          // format: 6 decimals for time, 3 decimals for OPD
+          file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.measurement << "," << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
+        }
+      }
+    }
+    file.close();
+  }
+
+  
+  // FREQUENCY CHARACTERISATION CLOSED LOOP DITHER PLANT
+  // for all dither frequencies and amplitudes, run the control loop for a while and record dither and opd measurments
+  std::cout << "\t OPD closed loop dither plant" << std::endl;
+
+  std::string subdir2 = dirname + "/freq_closed_loop_dither_plant";
+  std::filesystem::create_directory(subdir2);
+
+  for (int i = 0; i < dither_freqs.size(); i++) {
+    std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
+    // storage file: frequency in format 1.2345e67
+    filename = subdir2 + "/" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
     file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output (nm),Actuator command (nm)\n";
 
@@ -977,6 +1097,57 @@ void char_opd() {
         }
       }
 
+    }
+    file.close();
+  }
+
+  // FREQUENCY CHARACTERISATION CLOSED LOOP DITHER SETPOINT
+  // for all dither frequencies and amplitudes, run the control loop for a while and record dither and opd measurments
+  std::cout << "\t OPD frequency closed loop dither setpoint" << std::endl;
+
+  std::string subdir3 = dirname + "/freq_closed_loop_dither_setpoint";
+  std::filesystem::create_directory(subdir3);
+
+  for (int i = 0; i < dither_freqs.size(); i++) {
+    std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
+    // storage file: frequency in format 1.2345e67
+    filename = subdir3 + "/" + std::to_string(dither_freqs[i]) + "_hz.csv";
+    file.open(filename);
+    file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output (nm),Actuator command (nm)\n";
+
+    // set control parameters
+    opd_setpoint.store(0.0);
+
+    // set dither loop parameters
+    opd_dither_freq.store(dither_freqs[i]);
+    opd_dither_amp.store(dither_amps[i]);
+
+    // settle control loop
+    opd_control_mode.store(5);
+    std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+
+    // flush data queues
+    while (!opd_controlData_queue.isempty()) {
+      opd_controlData_queue.pop();
+    }
+
+    // record for recording time: every 100 ms, flush opd queue and write contents to file.
+    t_start = std::chrono::high_resolution_clock::now();
+    while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() < recording_times[i]) {
+
+      // wait 100 ms
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+      // write to file
+      if (!opd_controlData_queue.isempty()) {
+        int N = opd_controlData_queue.size();
+        for (int i = 0; i < N; i++) {
+          auto m = opd_controlData_queue.pop();
+          // format: 6 decimals for time, 3 decimals for OPD
+          file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.measurement << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed << std::setprecision(3) << m.dither_signal << "," << std::fixed << std::setprecision(3)
+                << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << "," << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
+        }
+      }
     }
     file.close();
   }
