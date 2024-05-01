@@ -2018,9 +2018,9 @@ void RenderUI() {
     if (opd_char_button) {
       gui_control.store(false);
       opd_char_button = false;
-      characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_final_test");
-      characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 200.0, 0.1, 100.0, 50, 30.0, "shear_x1_final_test");
-      characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01, 0.4, 0.007, 1.0, 200.0, "joint_final_test");
+      characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_no_box_overnight");
+      characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 200.0, 0.1, 100.0, 50, 30.0, "shear_x1_no_box_overnight");
+      characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01, 0.4, 0.007, 1.0, 200.0, "joint_no_box_overnight");
     }
 
     // control mode selector
