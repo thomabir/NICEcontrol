@@ -314,12 +314,7 @@ namespace NICEcontrol {
 std::atomic<bool> gui_control(true);
 
 // OPD control
-float opd_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
-std::atomic<float> opd_setpoint = 0.0f;  // setpoint used in calculation, clipped to valid range
-std::atomic<float> opd_p = 0.7f;
-std::atomic<float> opd_i = 0.0f;
-std::atomic<float> opd_dither_freq = 0.0f;
-std::atomic<float> opd_dither_amp = 0.0f;
+float opd_setpoint_gui = 0.0f;  // setpoint entered in GUI, may be out of range
 
 // shear control
 float shear_x1_setpoint_gui = 0.0f;
@@ -349,7 +344,6 @@ std::atomic<float> pointing_i = 0.0f;
 
 // variables that control the measurement thread
 std::atomic<bool> RunMeasurement(false);
-std::ofstream outputFile;
 
 // initialise opd stage
 // MCL_OPDStage opd_stage;
@@ -421,8 +415,6 @@ TSCircularBuffer<SensorData> sensorDataQueue;
 TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
 TSCircularBuffer<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
 
-TSCircularBuffer<ControlData> opd_controlData_queue;
-
 // controllers
 PIController opd_controller;
 
@@ -453,19 +445,7 @@ int setup_ethernet() {
 class ControlLoop {
  public:
   // control mode is 0 by default
-  ControlLoop(std::atomic<float> &setpoint, std::atomic<float> &p, std::atomic<float> &i,
-              std::atomic<float> &dither_freq, std::atomic<float> &dither_amp, PIController &controller,
-              PI_E754_Controller &stage, TSCircularBuffer<ControlData> &controlDataQueue)
-      : setpoint(setpoint),
-        p(p),
-        i(i),
-        dither_freq(dither_freq),
-        dither_amp(dither_amp),
-        controller(controller),
-        stage(stage),
-        controlDataQueue(controlDataQueue) {}
-
-  void set_control_mode(int mode) { control_mode.store(mode); }
+  ControlLoop(PIController &controller, PI_E754_Controller &stage) : controller(controller), stage(stage) {}
 
   void control(double t, float measurement) {
     // OPD control
@@ -522,24 +502,22 @@ class ControlLoop {
         break;
     }
 
-    this->controlDataQueue.push(
+    this->controlDataBuffer.push(
         {t, measurement, setpoint, dither_signal, controller_input, controller_output, actuator_command});
   }
 
- private:
   std::atomic<int> control_mode = 0;
-  std::atomic<float> &setpoint;
-  std::atomic<float> &p;
-  std::atomic<float> &i;
-  std::atomic<float> &dither_freq;
-  std::atomic<float> &dither_amp;
+  std::atomic<float> setpoint = 0.0f;
+  std::atomic<float> p = 0.0f;
+  std::atomic<float> i = 0.0f;
+  std::atomic<float> dither_freq = 0.0f;
+  std::atomic<float> dither_amp = 0.0f;
   PIController &controller;
   PI_E754_Controller &stage;
-  TSCircularBuffer<ControlData> &controlDataQueue;
+  TSCircularBuffer<ControlData> controlDataBuffer;
 };
 
-ControlLoop opd_control_loop(opd_setpoint, opd_p, opd_i, opd_dither_freq, opd_dither_amp, opd_controller, opd_stage,
-                             opd_controlData_queue);
+ControlLoop opd_loop(opd_controller, opd_stage);
 
 void run_calculation() {
   int sockfd = setup_ethernet();
@@ -699,7 +677,7 @@ void run_calculation() {
     static float pointing_y2_control_signal = 0.0f;
 
     // OPD control
-    opd_control_loop.control(t, opd_f);
+    opd_loop.control(t, opd_f);
 
     // Shear control
     if (RunShearControl.load()) {
@@ -781,9 +759,9 @@ void char_opd() {
   float recording_time = 200.0;  // s
 
   // set control parameters
-  opd_setpoint.store(0.0);
-  opd_p.store(0.7);
-  opd_i.store(0.01);
+  opd_loop.setpoint.store(0.0);
+  opd_loop.p.store(0.7);
+  opd_loop.i.store(0.01);
 
   // directory to store files in: dire name is opd_date_time (e.g. measurements/opd_2021-09-01_12:00:00)
   auto datetime_string = get_iso_datestring();
@@ -801,7 +779,7 @@ void char_opd() {
   file << "Time (s),OPD (nm)\n";
 
   // make sure control loop is off
-  opd_control_loop.set_control_mode(0);
+  opd_loop.control_mode.store(0);
 
   // reset controller
   opd_controller.reset_state();
@@ -842,7 +820,7 @@ void char_opd() {
   file << "Time (s),OPD (nm)\n";
 
   // make sure control loop is on
-  opd_control_loop.set_control_mode(4);
+  opd_loop.control_mode.store(4);
 
   // reset controller
   opd_controller.reset_state();
@@ -893,13 +871,13 @@ void char_opd() {
   opd_controller.reset_state();
 
   // settle control loop
-  opd_control_loop.set_control_mode(4);
+  opd_loop.control_mode.store(4);
   std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
-  opd_setpoint.store(0.0);
+  opd_loop.setpoint.store(0.0);
 
   // flush data queues
-  while (!opd_controlData_queue.isempty()) {
-    opd_controlData_queue.pop();
+  while (!opd_loop.controlDataBuffer.isempty()) {
+    opd_loop.controlDataBuffer.pop();
   }
   while (!sensorDataQueue.isempty()) {
     sensorDataQueue.pop();
@@ -915,17 +893,17 @@ void char_opd() {
 
     // toggle setpoint
     if (setpoint_high) {
-      opd_setpoint.store(0.0);
+      opd_loop.setpoint.store(0.0);
     } else {
-      opd_setpoint.store(100.0);
+      opd_loop.setpoint.store(100.0);
     }
     setpoint_high = !setpoint_high;
 
     // write to file
-    if (!opd_controlData_queue.isempty()) {
-      int N = opd_controlData_queue.size();
+    if (!opd_loop.controlDataBuffer.isempty()) {
+      int N = opd_loop.controlDataBuffer.size();
       for (int i = 0; i < N; i++) {
-        auto m = opd_controlData_queue.pop();
+        auto m = opd_loop.controlDataBuffer.pop();
         // format: 6 decimals for time, 3 decimals for OPD
         file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3)
              << m.measurement << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed
@@ -996,22 +974,22 @@ void char_opd() {
     file << "Time (s),Controller input (nm),Controller output (nm)\n";
 
     // set control parameters
-    opd_setpoint.store(0.0);
+    opd_loop.setpoint.store(0.0);
 
     // set dither loop parameters
-    opd_dither_freq.store(dither_freqs[i]);
-    opd_dither_amp.store(dither_amps[i]);
+    opd_loop.dither_freq.store(dither_freqs[i]);
+    opd_loop.dither_amp.store(dither_amps[i]);
 
     // reset controller
     opd_controller.reset_state();
 
     // settle control loop
-    opd_control_loop.set_control_mode(2);
+    opd_loop.control_mode.store(2);
     std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
 
     // flush data queues
-    while (!opd_controlData_queue.isempty()) {
-      opd_controlData_queue.pop();
+    while (!opd_loop.controlDataBuffer.isempty()) {
+      opd_loop.controlDataBuffer.pop();
     }
 
     // record for recording time: every 10 ms, flush opd queue and write contents to file
@@ -1023,10 +1001,10 @@ void char_opd() {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
       // write to file
-      if (!opd_controlData_queue.isempty()) {
-        int N = opd_controlData_queue.size();
+      if (!opd_loop.controlDataBuffer.isempty()) {
+        int N = opd_loop.controlDataBuffer.size();
         for (int i = 0; i < N; i++) {
-          auto m = opd_controlData_queue.pop();
+          auto m = opd_loop.controlDataBuffer.pop();
           // format: 6 decimals for time, 3 decimals for OPD
           file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3)
                << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << "\n";
@@ -1060,22 +1038,22 @@ void char_opd() {
              "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
     // set control parameters
-    opd_setpoint.store(0.0);
+    opd_loop.setpoint.store(0.0);
 
     // set dither loop parameters
-    opd_dither_freq.store(dither_freqs[i]);
-    opd_dither_amp.store(dither_amps[i]);
+    opd_loop.dither_freq.store(dither_freqs[i]);
+    opd_loop.dither_amp.store(dither_amps[i]);
 
     // reset controller
     opd_controller.reset_state();
 
     // settle control loop
-    opd_control_loop.set_control_mode(1);
+    opd_loop.control_mode.store(1);
     std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
 
     // flush data queues
-    while (!opd_controlData_queue.isempty()) {
-      opd_controlData_queue.pop();
+    while (!opd_loop.controlDataBuffer.isempty()) {
+      opd_loop.controlDataBuffer.pop();
     }
 
     while (!sensorDataQueue.isempty()) {
@@ -1091,10 +1069,10 @@ void char_opd() {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
       // write to file 1
-      if (!opd_controlData_queue.isempty()) {
-        int N = opd_controlData_queue.size();
+      if (!opd_loop.controlDataBuffer.isempty()) {
+        int N = opd_loop.controlDataBuffer.size();
         for (int i = 0; i < N; i++) {
-          auto m = opd_controlData_queue.pop();
+          auto m = opd_loop.controlDataBuffer.pop();
           // format: 6 decimals for time, 3 decimals for OPD
           file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3)
                << m.measurement << "," << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
@@ -1142,22 +1120,22 @@ void char_opd() {
              "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
     // set control parameters
-    opd_setpoint.store(0.0);
+    opd_loop.setpoint.store(0.0);
 
     // set dither loop parameters
-    opd_dither_freq.store(dither_freqs[i]);
-    opd_dither_amp.store(dither_amps[i]);
+    opd_loop.dither_freq.store(dither_freqs[i]);
+    opd_loop.dither_amp.store(dither_amps[i]);
 
     // reset controller
     opd_controller.reset_state();
 
     // settle control loop
-    opd_control_loop.set_control_mode(4);
+    opd_loop.control_mode.store(4);
     std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
 
     // flush data queues
-    while (!opd_controlData_queue.isempty()) {
-      opd_controlData_queue.pop();
+    while (!opd_loop.controlDataBuffer.isempty()) {
+      opd_loop.controlDataBuffer.pop();
     }
 
     while (!sensorDataQueue.isempty()) {
@@ -1173,10 +1151,10 @@ void char_opd() {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
       // write to file
-      if (!opd_controlData_queue.isempty()) {
-        int N = opd_controlData_queue.size();
+      if (!opd_loop.controlDataBuffer.isempty()) {
+        int N = opd_loop.controlDataBuffer.size();
         for (int i = 0; i < N; i++) {
-          auto m = opd_controlData_queue.pop();
+          auto m = opd_loop.controlDataBuffer.pop();
           // format: 6 decimals for time, 3 decimals for OPD
           file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3)
                << m.measurement << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed
@@ -1227,22 +1205,22 @@ void char_opd() {
              "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
     // set control parameters
-    opd_setpoint.store(0.0);
+    opd_loop.setpoint.store(0.0);
 
     // set dither loop parameters
-    opd_dither_freq.store(dither_freqs[i]);
-    opd_dither_amp.store(dither_amps[i]);
+    opd_loop.dither_freq.store(dither_freqs[i]);
+    opd_loop.dither_amp.store(dither_amps[i]);
 
     // reset controller
     opd_controller.reset_state();
 
     // settle control loop
-    opd_control_loop.set_control_mode(5);
+    opd_loop.control_mode.store(5);
     std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
 
     // flush data queues
-    while (!opd_controlData_queue.isempty()) {
-      opd_controlData_queue.pop();
+    while (!opd_loop.controlDataBuffer.isempty()) {
+      opd_loop.controlDataBuffer.pop();
     }
 
     while (!sensorDataQueue.isempty()) {
@@ -1258,10 +1236,10 @@ void char_opd() {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
       // write to file
-      if (!opd_controlData_queue.isempty()) {
-        int N = opd_controlData_queue.size();
+      if (!opd_loop.controlDataBuffer.isempty()) {
+        int N = opd_loop.controlDataBuffer.size();
         for (int i = 0; i < N; i++) {
-          auto m = opd_controlData_queue.pop();
+          auto m = opd_loop.controlDataBuffer.pop();
           // format: 6 decimals for time, 3 decimals for OPD
           file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3)
                << m.measurement << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed
@@ -1516,21 +1494,21 @@ void RenderUI() {
     if (gui_control.load()) {
       // run control if "Closed loop" is selected
       if (gui_opd_loop_select == 2) {
-        opd_control_loop.set_control_mode(4);
+        opd_loop.control_mode.store(4);
       } else if (gui_opd_loop_select == 1) {
-        opd_control_loop.set_control_mode(1);
+        opd_loop.control_mode.store(1);
       } else {
-        opd_control_loop.set_control_mode(0);
+        opd_loop.control_mode.store(0);
       }
 
       // move stage to open loop setpoint if "Open loop" is selected
 
       // store control loop parameters
-      opd_setpoint.store(opd_setpoint_gui);
-      opd_p.store(opd_p_gui);
-      opd_i.store(opd_i_gui);
-      opd_dither_freq.store(opd_dither_freq_gui);
-      opd_dither_amp.store(opd_dither_amp_gui);
+      opd_loop.setpoint.store(opd_setpoint_gui);
+      opd_loop.p.store(opd_p_gui);
+      opd_loop.i.store(opd_i_gui);
+      opd_loop.dither_freq.store(opd_dither_freq_gui);
+      opd_loop.dither_amp.store(opd_dither_amp_gui);
     }
 
     // real time plot
@@ -1544,9 +1522,9 @@ void RenderUI() {
     }
 
     // get control signals
-    if (!opd_controlData_queue.isempty()) {
-      while (!opd_controlData_queue.isempty()) {
-        auto m = opd_controlData_queue.pop();
+    if (!opd_loop.controlDataBuffer.isempty()) {
+      while (!opd_loop.controlDataBuffer.isempty()) {
+        auto m = opd_loop.controlDataBuffer.pop();
         setpoint_buffer.AddPoint(m.time, m.setpoint);
         opd_dith_buffer.AddPoint(m.time, m.dither_signal);
       }
@@ -1588,7 +1566,7 @@ void RenderUI() {
     if (ImPlot::BeginPlot("Dither##OPD", ImVec2(-1, 150 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - opd_history_length, t_gui, ImGuiCond_Always);
-      ImPlot::SetupAxisLimits(ImAxis_Y1, -opd_dither_amp.load(), opd_dither_amp.load());
+      ImPlot::SetupAxisLimits(ImAxis_Y1, -opd_loop.dither_amp.load(), opd_loop.dither_amp.load());
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       ImPlot::SetNextLineStyle(fft_color, thickness);
       ImPlot::PlotLine("Dither signal", &opd_dith_buffer.Data[0].x, &opd_dith_buffer.Data[0].y,
