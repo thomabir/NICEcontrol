@@ -317,7 +317,6 @@ std::atomic<bool> gui_control(true);
 // OPD control
 float opd_setpoint_gui = 0.0f;           // setpoint entered in GUI, may be out of range
 std::atomic<float> opd_setpoint = 0.0f;  // setpoint used in calculation, clipped to valid range
-std::atomic<int> opd_control_mode = 0;
 std::atomic<float> opd_p = 0.7f;
 std::atomic<float> opd_i = 0.0f;
 std::atomic<float> opd_dither_freq = 0.0f;
@@ -424,6 +423,8 @@ TSCircularBuffer<SensorData> sensorDataQueue;
 TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
 TSCircularBuffer<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
 
+
+
 TSCircularBuffer<ControlData> opd_controlData_queue;
 
 // controllers
@@ -455,18 +456,15 @@ int setup_ethernet() {
 
 class ControlLoop {
   public:
-    ControlLoop(std::atomic<int> &control_mode, std::atomic<float> &setpoint, std::atomic<float> &p, std::atomic<float> &i,
+    // control mode is 0 by default
+    ControlLoop(std::atomic<float> &setpoint, std::atomic<float> &p, std::atomic<float> &i,
                 std::atomic<float> &dither_freq, std::atomic<float> &dither_amp, PIController &controller,
-                PI_E754_Controller &stage, TSCircularBuffer<ControlData> &controlDataQueue)
-        : control_mode(control_mode),
-          setpoint(setpoint),
-          p(p),
-          i(i),
-          dither_freq(dither_freq),
-          dither_amp(dither_amp),
-          controller(controller),
-          stage(stage),
-          controlDataQueue(controlDataQueue) {}
+                PI_E754_Controller &stage, TSCircularBuffer<ControlData> &controlDataQueue) 
+                : setpoint(setpoint), p(p), i(i), dither_freq(dither_freq), dither_amp(dither_amp), controller(controller), stage(stage), controlDataQueue(controlDataQueue) {}
+
+    void set_control_mode(int mode) {
+      control_mode.store(mode);
+    }
 
     void control(double t, float measurement) {
       // OPD control
@@ -527,7 +525,7 @@ class ControlLoop {
     }
 
   private:
-    std::atomic<int> &control_mode;
+    std::atomic<int> control_mode = 0;
     std::atomic<float> &setpoint;
     std::atomic<float> &p;
     std::atomic<float> &i;
@@ -538,6 +536,7 @@ class ControlLoop {
     TSCircularBuffer<ControlData> &controlDataQueue;
 };
 
+ControlLoop opd_control_loop(opd_setpoint, opd_p, opd_i, opd_dither_freq, opd_dither_amp, opd_controller, opd_stage, opd_controlData_queue);
 
 void run_calculation() {
   int sockfd = setup_ethernet();
@@ -701,7 +700,6 @@ void run_calculation() {
 
 
     // OPD control
-    static ControlLoop opd_control_loop(opd_control_mode, opd_setpoint, opd_p, opd_i, opd_dither_freq, opd_dither_amp, opd_controller, opd_stage, opd_controlData_queue);
     opd_control_loop.control(t, opd_f);
     
     // Shear control
@@ -773,13 +771,15 @@ void run_calculation() {
   }
 }
 
+// void char_open_loop
+
 void char_opd() {
   std::cout << "Starting OPD characterisation" << std::endl;
 
   // wait for one minute (leave the room)
-  std::cout << "Waiting for one minute" << std::endl;
-  std::this_thread::sleep_for(std::chrono::seconds(60));
-  std::cout << "Done waiting" << std::endl;
+  // std::cout << "Waiting for one minute" << std::endl;
+  // std::this_thread::sleep_for(std::chrono::seconds(60));
+  // std::cout << "Done waiting" << std::endl;
 
   float settling_time = 1.0; // s
   float recording_time = 200.0; // s
@@ -798,12 +798,15 @@ void char_opd() {
   std::cout << "\t OPD open loop" << std::endl;
   // storage file
   std::string filename = dirname + "/open_loop.csv";
+
+  // char_open_loop(&filename, settling_time, recording_time, &controller, &sensorDataQueue);
+
   std::ofstream
   file(filename);
   file << "Time (s),OPD (nm)\n";
 
   // make sure control loop is off
-  opd_control_mode.store(0);
+  opd_control_loop.set_control_mode(0);
 
   // reset controller
   opd_controller.reset_state();
@@ -843,7 +846,7 @@ void char_opd() {
   file << "Time (s),OPD (nm)\n";
 
   // make sure control loop is on
-  opd_control_mode.store(4);
+  opd_control_loop.set_control_mode(4);
 
   // reset controller
   opd_controller.reset_state();
@@ -892,7 +895,7 @@ void char_opd() {
   opd_controller.reset_state();
 
   // settle control loop
-  opd_control_mode.store(4);
+  opd_control_loop.set_control_mode(4);
   std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
   opd_setpoint.store(0.0);
 
@@ -1001,7 +1004,7 @@ void char_opd() {
     opd_controller.reset_state();
 
     // settle control loop
-    opd_control_mode.store(2);
+    opd_control_loop.set_control_mode(2);
     std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
 
     // flush data queues
@@ -1065,7 +1068,7 @@ void char_opd() {
     opd_controller.reset_state();
 
     // settle control loop
-    opd_control_mode.store(1);
+    opd_control_loop.set_control_mode(1);
     std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
 
     // flush data queues
@@ -1141,7 +1144,7 @@ void char_opd() {
     opd_controller.reset_state();
 
     // settle control loop
-    opd_control_mode.store(4);
+    opd_control_loop.set_control_mode(4);
     std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
     
 
@@ -1216,7 +1219,7 @@ void char_opd() {
     opd_controller.reset_state();
 
     // settle control loop
-    opd_control_mode.store(5);
+    opd_control_loop.set_control_mode(5);
     std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
 
     // flush data queues
@@ -1494,9 +1497,9 @@ void RenderUI() {
     
     if (gui_control.load()) {
       // run control if "Closed loop" is selected
-      if (gui_opd_loop_select == 2) {opd_control_mode.store(4);}
-      else if (gui_opd_loop_select == 1) {opd_control_mode.store(1);}
-      else {opd_control_mode.store(0);}
+      if (gui_opd_loop_select == 2) {opd_control_loop.set_control_mode(4);}
+      else if (gui_opd_loop_select == 1) {opd_control_loop.set_control_mode(1);}
+      else {opd_control_loop.set_control_mode(0);}
 
       // move stage to open loop setpoint if "Open loop" is selected
       
