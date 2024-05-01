@@ -10,6 +10,7 @@ class PI_E727_Controller {
   void init();
   double readx();
   double ready();
+  void move_to_axis(int axis, double value);
   void move_to_x(double value);
   void move_to_y(double value);
   void close();

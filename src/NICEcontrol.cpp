@@ -87,27 +87,277 @@ struct Measurement {
   float value;
 };
 
-struct ControlData {
-  double time;
-  float measurement;
-  float setpoint;
-  float dither_signal;
-  float controller_input;
-  float controller_output;
-  float actuator_command;
+class ControlData {
+  public:
+    double time;
+    float measurement;
+    float setpoint;
+    float dither_signal;
+    float controller_input;
+    float controller_output;
+    float actuator_command;
+
+    ControlData(double time, float measurement, float setpoint, float dither_signal, float controller_input, float controller_output, float actuator_command) {
+      this->time = time;
+      this->measurement = measurement;
+      this->setpoint = setpoint;
+      this->dither_signal = dither_signal;
+      this->controller_input = controller_input;
+      this->controller_output = controller_output;
+      this->actuator_command = actuator_command;
+    }
+
+    ControlData() {
+      this->time = 0.0;
+      this->measurement = 0.0;
+      this->setpoint = 0.0;
+      this->dither_signal = 0.0;
+      this->controller_input = 0.0;
+      this->controller_output = 0.0;
+      this->actuator_command = 0.0;
+    }
+
+    ControlData(const ControlData &other) {
+      this->time = other.time;
+      this->measurement = other.measurement;
+      this->setpoint = other.setpoint;
+      this->dither_signal = other.dither_signal;
+      this->controller_input = other.controller_input;
+      this->controller_output = other.controller_output;
+      this->actuator_command = other.actuator_command;
+    }
+
+    ControlData &operator=(const ControlData &other) {
+      this->time = other.time;
+      this->measurement = other.measurement;
+      this->setpoint = other.setpoint;
+      this->dither_signal = other.dither_signal;
+      this->controller_input = other.controller_input;
+      this->controller_output = other.controller_output;
+      this->actuator_command = other.actuator_command;
+      return *this;
+    }
 };
 
-struct SensorData {
-  double time;
-  float opd;
-  float shear_x1;
-  float shear_x2;
-  float shear_y1;
-  float shear_y2;
-  float point_x1;
-  float point_x2;
-  float point_y1;
-  float point_y2;
+
+template <int N>
+class ControlDataN {
+ public:
+  ControlData data[N];
+
+  // default: all zeros
+  ControlDataN() {
+    for (int i = 0; i < N; i++) {
+      data[i] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    }
+  }
+
+  ControlDataN(const ControlDataN<N> &other) {
+    for (int i = 0; i < N; i++) {
+      data[i] = other.data[i];
+    }
+  }
+
+  ControlDataN<N> &operator=(const ControlDataN<N> &other) {
+    for (int i = 0; i < N; i++) {
+      data[i] = other.data[i];
+    }
+    return *this;
+  }
+
+  ControlData &operator[](int i) { return data[i]; }
+};
+
+class SensorData {
+  public:
+    double time;
+    float opd;
+    float shear_x1;
+    float shear_x2;
+    float shear_y1;
+    float shear_y2;
+    float point_x1;
+    float point_x2;
+    float point_y1;
+    float point_y2;
+
+    SensorData(double time, float opd, float shear_x1, float shear_x2, float shear_y1, float shear_y2, float point_x1, float point_x2, float point_y1, float point_y2) {
+      this->time = time;
+      this->opd = opd;
+      this->shear_x1 = shear_x1;
+      this->shear_x2 = shear_x2;
+      this->shear_y1 = shear_y1;
+      this->shear_y2 = shear_y2;
+      this->point_x1 = point_x1;
+      this->point_x2 = point_x2;
+      this->point_y1 = point_y1;
+      this->point_y2 = point_y2;
+    }
+
+    SensorData() {
+      this->time = 0.0;
+      this->opd = 0.0;
+      this->shear_x1 = 0.0;
+      this->shear_x2 = 0.0;
+      this->shear_y1 = 0.0;
+      this->shear_y2 = 0.0;
+      this->point_x1 = 0.0;
+      this->point_x2 = 0.0;
+      this->point_y1 = 0.0;
+      this->point_y2 = 0.0;
+    }
+
+    SensorData(const SensorData &other) {
+      this->time = other.time;
+      this->opd = other.opd;
+      this->shear_x1 = other.shear_x1;
+      this->shear_x2 = other.shear_x2;
+      this->shear_y1 = other.shear_y1;
+      this->shear_y2 = other.shear_y2;
+      this->point_x1 = other.point_x1;
+      this->point_x2 = other.point_x2;
+      this->point_y1 = other.point_y1;
+      this->point_y2 = other.point_y2;
+    }
+
+    SensorData &operator=(const SensorData &other) {
+      this->time = other.time;
+      this->opd = other.opd;
+      this->shear_x1 = other.shear_x1;
+      this->shear_x2 = other.shear_x2;
+      this->shear_y1 = other.shear_y1;
+      this->shear_y2 = other.shear_y2;
+      this->point_x1 = other.point_x1;
+      this->point_x2 = other.point_x2;
+      this->point_y1 = other.point_y1;
+      this->point_y2 = other.point_y2;
+      return *this;
+    }
+
+    // acces by index
+    float &operator[](int i) {
+      switch (i) {
+        case 0:
+          return opd;
+        case 1:
+          return shear_x1;
+        case 2:
+          return shear_x2;
+        case 3:
+          return shear_y1;
+        case 4:
+          return shear_y2;
+        case 5:
+          return point_x1;
+        case 6:
+          return point_x2;
+        case 7:
+          return point_y1;
+        case 8:
+          return point_y2;
+        default:
+          return opd;
+      }
+    }
+};
+
+template <int N>
+class VecN {
+ public:
+  float data[N];
+
+  VecN() { // default: fill with zeros
+    for (int i = 0; i < N; i++) {
+      data[i] = 0.0f;
+    }
+  }
+
+  // VecN<3> output = {0.0f, 0.0f, 0.0f};
+  VecN(std::initializer_list<float> list) {
+    int i = 0;
+    for (auto it = list.begin(); it != list.end(); ++it) {
+      data[i] = *it;
+      i++;
+    }
+  }
+
+  // VecN<3> output = other_vec3;
+  VecN(const VecN<N> &other) {
+    for (int i = 0; i < N; i++) {
+      data[i] = other.data[i];
+    }
+  }
+
+  // VecN<3> output;
+  // output = other_vec3;
+  VecN<N> &operator=(const VecN<N> &other) {
+    for (int i = 0; i < N; i++) {
+      data[i] = other.data[i];
+    }
+    return *this;
+  }
+
+  VecN<N> operator+(const VecN<N> &other) {
+    VecN<N> result;
+    for (int i = 0; i < N; i++) {
+      result.data[i] = data[i] + other.data[i];
+    }
+    return result;
+  }
+
+  VecN<N> operator-(const VecN<N> &other) {
+    VecN<N> result;
+    for (int i = 0; i < N; i++) {
+      result.data[i] = data[i] - other.data[i];
+    }
+    return result;
+  }
+
+  VecN<N> operator*(const float &scalar) {
+    VecN<N> result;
+    for (int i = 0; i < N; i++) {
+      result.data[i] = data[i] * scalar;
+    }
+    return result;
+  }
+
+  VecN<N> operator/(const float &scalar) {
+    VecN<N> result;
+    for (int i = 0; i < N; i++) {
+      result.data[i] = data[i] / scalar;
+    }
+    return result;
+  }
+
+  VecN<N> operator+=(const VecN<N> &other) {
+    for (int i = 0; i < N; i++) {
+      data[i] += other.data[i];
+    }
+    return *this;
+  }
+
+  VecN<N> operator-=(const VecN<N> &other) {
+    for (int i = 0; i < N; i++) {
+      data[i] -= other.data[i];
+    }
+    return *this;
+  }
+
+  VecN<N> operator*=(const float &scalar) {
+    for (int i = 0; i < N; i++) {
+      data[i] *= scalar;
+    }
+    return *this;
+  }
+
+  VecN<N> operator/=(const float &scalar) {
+    for (int i = 0; i < N; i++) {
+      data[i] /= scalar;
+    }
+    return *this;
+  }
+
+  float &operator[](int i) { return data[i]; }
 };
 
 template <typename T, typename U>
@@ -318,16 +568,9 @@ float opd_setpoint_gui = 0.0f;  // setpoint entered in GUI, may be out of range
 
 // shear control
 float shear_x1_setpoint_gui = 0.0f;
-std::atomic<float> shear_x1_setpoint = 0.0f;
 float shear_x2_setpoint_gui = 0.0f;
-std::atomic<float> shear_x2_setpoint = 0.0f;
 float shear_y1_setpoint_gui = 0.0f;
-std::atomic<float> shear_y1_setpoint = 0.0f;
 float shear_y2_setpoint_gui = 0.0f;
-std::atomic<float> shear_y2_setpoint = 0.0f;
-std::atomic<bool> RunShearControl(false);
-std::atomic<float> shear_p = 0.0f;
-std::atomic<float> shear_i = 0.0f;
 
 // pointing control
 float pointing_x1_setpoint_gui = 0.0f;
@@ -415,8 +658,7 @@ TSCircularBuffer<SensorData> sensorDataQueue;
 TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
 TSCircularBuffer<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
 
-// controllers
-PIController opd_controller;
+
 
 int setup_ethernet() {
   // setup ethernet connection
@@ -442,48 +684,211 @@ int setup_ethernet() {
   return sockfd;
 }
 
-// class MIMOControlLoop {
-//  public:
-//   // control mode is 0 by default
-//   MIMOControlLoop(Controller &controller, Actuator &actuator) : controller(controller), actuator(actuator) {}
+// a class for a new actuator, which includes both the opd stage and one of the tip/tilt stages
+class CombinedActuator {
+ public:
+  CombinedActuator(PI_E754_Controller &opd_stage, PI_E727_Controller &tip_tilt_stage)
+      : opd_stage(opd_stage), tip_tilt_stage(tip_tilt_stage) {}
 
-//   void control(SensorData &sensor_data) {
-//     // OPD control
-//     static float [9] controller_input = {0.0f};
-//     static float [9] controller_output = {0.0f};
-//     static float [9] actuator_command = {0.0f};
+  void move_to_axis(int axis, float position) {
+    switch (axis) {
+      case 0:
+        opd_stage.move_to(position);
+        break;
+      case 1:
+        tip_tilt_stage.move_to_x(position);
+        break;
+      case 2:
+        tip_tilt_stage.move_to_y(position);
+        break;
+      default:
+        break;
+    }
+  }
 
-//     // calculate dither signal
-//     float dither_signal = this->dither_amp.load() * std::sin(2 * PI * this->dither_freq.load() * t);
+ private:
+  PI_E754_Controller &opd_stage;
+  PI_E727_Controller &tip_tilt_stage;
+};
 
-//     // get control parameters
-//     float setpoint[9];
-//     for (int i = 0; i < 9; i++) {
-//       setpoint[i] = this->setpoint[i].load();
-//     }
+// a combined PI controller, which consists of an arbitrary number of PI controllers, held as pointers
+template <int N>
+class CombinedPIController {
+ public:
+  // example initialisation: CombinedPIController<2> shear1_pi_controller({shear_x1_pi, shear_y1_pi});
+  CombinedPIController(std::array<PIController *, N> controllers) : controllers(controllers) {}
 
 
 
-//   }
 
-//   std::atomic<int> control_mode[9] = {0};
-//   std::atomic<float> setpoint[9] = {0.0f};
-//   std::atomic<float> p[9] = {0.0f};
-//   std::atomic<float> i[9] = {0.0f};
-//   std::atomic<float> dither_freq = 0.0f;
-//   std::atomic<float> dither_amp = 0.0f;
-//   std::atomic<int> dither_axis = 0;
+  // set the P and I gains for the i-th controller
+  void setPI(int i, float P, float I) {
+    controllers[i]->setPI(P, I);
+  }
 
-//   Actuator &actuator;
-//   Controller &controller;
+  // reset the state of all controllers
+  void reset_state() {
+    for (int i = 0; i < N; i++) {
+      controllers[i]->reset_state();
+    }
+  }
 
-// }
+  // step the i-th controller with input
+  VecN<N> step(VecN<N> input) {
+    VecN<N> output;
+    for (int i = 0; i < N; i++) {
+      output[i] = controllers[i]->step(input[i]);
+    }
+    return output;
+  }
 
-template <class T>
+  private:
+    std::array<PIController *, N> controllers;
+
+};
+
+template <int N, class C, class A> // N x N MIMO control loop
+class MIMOControlLoop {
+ public:
+  // control mode is 0 by default
+  MIMOControlLoop(C &controller, A &actuator) : controller(controller), actuator(actuator) {}
+
+  void control(double t, SensorData &sensor_data) {
+    // OPD control: arrays with N elements
+    static VecN<N> controller_input = {0.0f};
+    static VecN<N> controller_output = {0.0f};
+    static float actuator_command[N] = {0.0f};
+
+    // calculate dither signal: zero
+    float dither_signal[N] = {0.0f};
+
+    float dither_signal_scalar = this->dither_amp.load() * std::sin(2 * PI * this->dither_freq.load() * t);
+
+    for (int i = 0; i < N; i++) {
+      if (this->dither_axis.load() == i) {
+        dither_signal[i] = dither_signal_scalar;
+      }
+    }
+
+    // get control parameters
+    float setpoint[N];
+    for (int i = 0; i < N; i++) {
+      setpoint[i] = this->setpoint[i].load();
+    }
+
+    // controller: set p and i
+    for (int i = 0; i < N; i++) {
+      this->controller.setPI(i, this->Ps[i].load(), this->Is[i].load());
+    }
+
+    // TODO: reset controller if control mode has changed
+    // int cm[N];
+    // for (int i = 0; i < N; i++) {
+    //   cm[i] = this->control_mode[i].load();
+    // }
+
+    // // if control_mode has changed, reset the controller
+    // static int prev_cm[N] = {0};
+    // for (int i = 0; i < N; i++) {
+    //   if (cm[i] != prev_cm[i]) {
+    //     this->controller.reset_state();
+    //   }
+    // }
+    // for (int i = 0; i < N; i++) {
+    //   prev_cm[i] = cm[i];
+    // }
+
+    // get dither mode, store in dm
+    int dm[N];
+    for (int i = 0; i < N; i++) {
+      dm[i] = this->dither_mode[i].load();
+    }
+
+    // assemble controller input
+    for (int i = 0; i < N; i++) {
+      // TODO: figure out what to do in each case
+      switch (this->controller_input[i].load()) {
+        case 0:  // 0 as input
+          controller_input[i] = 0.0f;
+          break;
+        case 1:  // setpoint - measurement as input
+          controller_input[i] = setpoint[i] - sensor_data[i];
+          break;
+        default:
+          // don't
+          break;
+      }
+      if (dm[i] == 1) {
+        controller_input[i] += dither_signal[i];
+      }
+    }
+
+    // calculate controller output
+    controller_output = this->controller.step(controller_input);
+
+    // calculate actuator command
+    for (int i = 0; i < N; i++) {
+      switch (this->plant_input[i].load()) {
+        case 0:  // off
+          break;
+        case 1:  // plant gets setpoint
+          actuator_command[i] = setpoint[i];
+          break;
+        case 2:  // plant gets controller output
+          actuator_command[i] = controller_output[i];
+          break;
+        default:
+          // don't
+          break;
+      }
+      if (dm[i] == 2) {
+        actuator_command[i] += dither_signal[i];
+      }
+    }
+
+    // move actuator
+    for (int i = 0; i < N; i++) {
+      this->actuator.move_axis(i, actuator_command[i]);
+    }
+
+    // prepare data to be pushed to the buffer
+    // make an array of N controldata objects
+    ControlData control_data[N];
+    
+    // fill the array with data
+    for (int i = 0; i < N; i++) {
+      control_data[i] = {t, sensor_data[i], setpoint[i], dither_signal[i], controller_input[i], controller_output[i], actuator_command[i]};
+    }
+
+    // push the data to the buffer
+    this->controlDataBuffer.push(control_data);
+
+  }
+ 
+  std::atomic<float> setpoint[N] = {0.0f};
+  std::atomic<float> Ps[N] = {0.0f};
+  std::atomic<float> Is[N] = {0.0f};
+  std::atomic<float> dither_freq = 0.0f;
+  std::atomic<float> dither_amp = 0.0f;
+  std::atomic<int> dither_axis = 0;
+  std::atomic<int> dither_mode[N] = {0}; // 0 = off, 1 = dither controller, 2 = dither plant
+  std::atomic<int> plant_input[N] = {0}; // 0 = off, 1 = plant gets setpoint, 2 = plant gets controller output
+  std::atomic<int> controller_input[N] = {0}; // 0 = 0 as input, 1 = setpoint - measurement as input
+
+  A &actuator;
+  C &controller;
+
+  // data buffer: 1 + N x 6 columns
+  // time, 6x(sensor_data, setpoint, dither_signal, controller_input, controller_output, actuator_command)
+  TSCircularBuffer<ControlDataN<N>> controlDataBuffer;
+
+};
+
+template <class C, class A> // SISO control loop
 class SISOControlLoop {
  public:
   // control mode is 0 by default
-  SISOControlLoop(PIController &controller, T &stage) : controller(controller), stage(stage) {}
+  SISOControlLoop(C &controller, A &stage) : controller(controller), stage(stage) {}
 
   void control(double t, float measurement) {
     // OPD control
@@ -500,18 +905,18 @@ class SISOControlLoop {
     int cm = this->control_mode.load();
 
     // if control_mode has changed, reset the controller
-    static int prev_cm = cm;
-    if (cm != prev_cm) {
-      this->controller.reset_state();
-    }
-    prev_cm = cm;
+    // static int prev_cm = cm;
+    // if (cm != prev_cm) {
+    //   this->controller.reset_state();
+    // }
+    // prev_cm = cm;
 
     switch (cm) {
       case 0:  // do nothing
         break;
-      case 1:                                           // P
-        actuator_command = (setpoint + dither_signal);  // convert nm to um
-        this->stage.move_to(actuator_command * 1e-3);   // convert nm to um
+      case 1: // P
+        actuator_command = (setpoint + dither_signal);
+        this->stage.move_to(actuator_command);
         break;
       case 2:  // C
         controller_input = dither_signal;
@@ -521,19 +926,19 @@ class SISOControlLoop {
         controller_input = dither_signal;
         controller_output = this->controller.step(controller_input);
         actuator_command = controller_output;
-        this->stage.move_to(actuator_command * 1e-3);
+        this->stage.move_to(actuator_command);
         break;
       case 4:  // CP closed, dither plant
         controller_input = setpoint - measurement;
         controller_output = this->controller.step(controller_input);
         actuator_command = controller_output + dither_signal;
-        this->stage.move_to(actuator_command * 1e-3);  // convert nm to um
+        this->stage.move_to(actuator_command);  // convert nm to um
         break;
       case 5:  // CP closed, dither setpoint
         controller_input = setpoint + dither_signal - measurement;
         controller_output = this->controller.step(controller_input);
         actuator_command = controller_output;
-        this->stage.move_to(actuator_command * 1e-3);  // convert nm to um
+        this->stage.move_to(actuator_command);  // convert nm to um
         break;
       default:
         // don't
@@ -550,12 +955,52 @@ class SISOControlLoop {
   std::atomic<float> i = 0.0f;
   std::atomic<float> dither_freq = 0.0f;
   std::atomic<float> dither_amp = 0.0f;
-  PIController &controller;
-  PI_E754_Controller &stage;
+  C &controller;
+  A &stage;
   TSCircularBuffer<ControlData> controlDataBuffer;
 };
 
+class ShearXActuator {
+ public:
+  ShearXActuator(PI_E727_Controller &stage) : stage(stage) {}
+
+  void move_to(float position) { stage.move_to_x(position); }
+
+ private:
+  PI_E727_Controller &stage;
+};
+
+class ShearYActuator {
+ public:
+  ShearYActuator(PI_E727_Controller &stage) : stage(stage) {}
+
+  void move_to(float position) { stage.move_to_y(position); }
+
+ private:
+  PI_E727_Controller &stage;
+};
+
+
+// controllers
+PIController opd_controller;
+PIController shear_x1_controller;
+PIController shear_x2_controller;
+PIController shear_y1_controller;
+PIController shear_y2_controller;
+
+// actuators
+ShearXActuator shear_x1_actuator(tip_tilt_stage1);
+ShearXActuator shear_x2_actuator(tip_tilt_stage2);
+ShearYActuator shear_y1_actuator(tip_tilt_stage1);
+ShearYActuator shear_y2_actuator(tip_tilt_stage2);
+
+// control loops
 SISOControlLoop opd_loop(opd_controller, opd_stage);
+SISOControlLoop shear_x1_loop(shear_x1_controller, shear_x1_actuator);
+SISOControlLoop shear_x2_loop(shear_x2_controller, shear_x2_actuator);
+SISOControlLoop shear_y1_loop(shear_y1_controller, shear_y1_actuator);
+SISOControlLoop shear_y2_loop(shear_y2_controller, shear_y2_actuator);
+
 
 void run_calculation() {
   int sockfd = setup_ethernet();
@@ -682,22 +1127,6 @@ void run_calculation() {
     }
 
     // variables for control
-    static float shear_x1_error = 0.0f;
-    static float shear_x1_error_integral = 0.0f;
-    static float shear_x1_control_signal = 0.0f;
-
-    static float shear_x2_error = 0.0f;
-    static float shear_x2_error_integral = 0.0f;
-    static float shear_x2_control_signal = 0.0f;
-
-    static float shear_y1_error = 0.0f;
-    static float shear_y1_error_integral = 0.0f;
-    static float shear_y1_control_signal = 0.0f;
-
-    static float shear_y2_error = 0.0f;
-    static float shear_y2_error_integral = 0.0f;
-    static float shear_y2_control_signal = 0.0f;
-
     static float pointing_x1_error = 0.0f;
     static float pointing_x1_error_integral = 0.0f;
     static float pointing_x1_control_signal = 0.0f;
@@ -714,43 +1143,12 @@ void run_calculation() {
     static float pointing_y2_error_integral = 0.0f;
     static float pointing_y2_control_signal = 0.0f;
 
-    // OPD control
+    // Run control loops
     opd_loop.control(t, opd_f);
-
-    // Shear control
-    if (RunShearControl.load()) {
-      // calculate error
-      shear_x1_error = shear_x1_setpoint.load() - shear_x1_f;
-      shear_x2_error = shear_x2_setpoint.load() - shear_x2_f;
-      shear_y1_error = shear_y1_setpoint.load() - shear_y1_f;
-      shear_y2_error = shear_y2_setpoint.load() - shear_y2_f;
-
-      // calculate integral
-      shear_x1_error_integral += shear_i.load() * shear_x1_error;
-      shear_x2_error_integral += shear_i.load() * shear_x2_error;
-      shear_y1_error_integral += shear_i.load() * shear_y1_error;
-      shear_y2_error_integral += shear_i.load() * shear_y2_error;
-
-      // calculate derivative
-      // x1d_error_derivative = x1d_error - x1d_error_prev;
-
-      // calculate control signal
-      shear_x1_control_signal = shear_p.load() * shear_x1_error + shear_x1_error_integral;
-      shear_x2_control_signal = shear_p.load() * shear_x2_error + shear_x2_error_integral;
-      shear_y1_control_signal = shear_p.load() * shear_y1_error + shear_y1_error_integral;
-      shear_y2_control_signal = shear_p.load() * shear_y2_error + shear_y2_error_integral;
-
-      // actuate piezo actuator
-      tip_tilt_stage1.move_to_x(shear_x1_control_signal);
-      tip_tilt_stage2.move_to_x(shear_x2_control_signal);
-      tip_tilt_stage1.move_to_y(shear_y1_control_signal);
-      tip_tilt_stage2.move_to_y(shear_y2_control_signal);
-    } else {
-      shear_x1_error_integral = 0.0f;
-      shear_x2_error_integral = 0.0f;
-      shear_y1_error_integral = 0.0f;
-      shear_y2_error_integral = 0.0f;
-    }
+    shear_x1_loop.control(t, shear_x1_f);
+    shear_x2_loop.control(t, shear_x2_f);
+    shear_y1_loop.control(t, shear_y1_f);
+    shear_y2_loop.control(t, shear_y2_f);
 
     if (RunPointingControl.load()) {
       // calculate error
@@ -783,11 +1181,12 @@ void run_calculation() {
   }
 }
 
-template <class T>
-void characterise_open_loop(SISOControlLoop<T> &loop, float t_settle, float t_record, std::string filename) {
+template <class C, class A>
+void characterise_open_loop(SISOControlLoop<C,A> &loop, float t_settle, float t_record, std::string filename) {
   // prepare storage file
   std::ofstream file(filename);
-  file << "Time (s),OPD (nm)\n";
+  file << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
+          "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
   loop.control_mode.store(0); // Switch control loop off
   loop.controller.reset_state(); // reset controller
@@ -808,47 +1207,49 @@ void characterise_open_loop(SISOControlLoop<T> &loop, float t_settle, float t_re
         auto m = sensorDataQueue.pop();
         // format: 6 decimals for time, 3 decimals for measurement
         file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd
-             << "\n";
+             << "," << std::fixed << std::setprecision(3) << m.shear_x1 << "," << std::fixed << std::setprecision(3)
+              << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed
+              << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1
+              << "," << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3)
+              << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
       }
     }
   }
 }
   
-template <class T>
-void characterise_control_loop(SISOControlLoop<T> &loop) {
-  std::cout << "Starting OPD characterisation" << std::endl;
+template <class C, class A>
+void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, float t_settle, float t_record, float f1, float f2, float fsteps, float dither_amp, std::string description) {
+  std::cout << "Starting control loop characterisation" << std::endl;
 
   // wait for one minute (leave the room)
-  // std::cout << "Waiting for one minute" << std::endl;
-  // std::this_thread::sleep_for(std::chrono::seconds(60));
-  // std::cout << "Done waiting" << std::endl;
-
-  float settling_time = 1.0;     // s
-  float recording_time = 1.0;  // s
+  std::cout << "Waiting for one minute" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(60));
+  std::cout << "Done waiting" << std::endl;
 
   // set control parameters
   loop.setpoint.store(0.0);
-  loop.p.store(0.7);
-  loop.i.store(0.01);
+  loop.p.store(p); // 0.7
+  loop.i.store(i); // 0.01
 
   // directory to store files in: dire name is opd_date_time (e.g. measurements/opd_2021-09-01_12:00:00)
   auto datetime_string = get_iso_datestring();
-  std::string dirname = "measurements/" + datetime_string + "_opd";
+  std::string dirname = "measurements/" + datetime_string + "_" + description;
   std::filesystem::create_directory(dirname);
 
   // OPEN LOOP CHARACTERISATION
-  std::cout << "\t OPD open loop" << std::endl;
+  std::cout << "\t Open loop time series" << std::endl;
   // storage file
   std::string filename = dirname + "/open_loop.csv";
 
-  characterise_open_loop(loop, settling_time, recording_time, filename);
+  characterise_open_loop(loop, t_settle, t_record, filename);
 
   // CLOSED LOOP CHARACTERISATION
-  std::cout << "\t OPD closed loop" << std::endl;
+  std::cout << "\t Closed loop time series" << std::endl;
   // storage file
   filename = dirname + "/closed_loop.csv";
   std::ofstream file(filename);
-  file << "Time (s),OPD (nm)\n";
+  file << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
+          "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
   // make sure control loop is on
   loop.control_mode.store(4);
@@ -857,7 +1258,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
   loop.controller.reset_state();
 
   // wait settling time
-  std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+  std::this_thread::sleep_for(std::chrono::seconds(int(t_settle)));
 
   // flush OPD queue
   while (!sensorDataQueue.isempty()) {
@@ -867,7 +1268,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
   // record for recording time: every 10 ms, write contents to file
   auto t_start = std::chrono::high_resolution_clock::now();
   while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() <
-         recording_time) {
+         t_record) {
     // wait 10 ms
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
@@ -878,22 +1279,25 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
         auto m = sensorDataQueue.pop();
         // format: 6 decimals for time, 3 decimals for OPD
         file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd
-             << "\n";
+             << "," << std::fixed << std::setprecision(3) << m.shear_x1 << "," << std::fixed << std::setprecision(3)
+              << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed
+              << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1
+              << "," << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3)
+              << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
       }
     }
   }
   file.close();
 
-  // IMPULSE RESPONSE CHARACTERISATION
-  std::cout << "\t OPD impulse response" << std::endl;
+  // STEP RESPONSE CHARACTERISATION
+  std::cout << "\t Step response" << std::endl;
   // storage file
-  filename = dirname + "/impulse_response.csv";
+  filename = dirname + "/step_response.csv";
   file.open(filename);
-  file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output "
-          "(nm),Actuator command (nm)\n";
+  file << "Time (s),Measurement,Setpoint,Dither signal,Controller input,Controller output,Actuator command\n";
 
   // file 2
-  std::string filename3 = dirname + "/impulse_response_sensor.csv";
+  std::string filename3 = dirname + "/step_response_sensor.csv";
   std::ofstream file3(filename3);
   file3 << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
            "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
@@ -903,7 +1307,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
 
   // settle control loop
   loop.control_mode.store(4);
-  std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+  std::this_thread::sleep_for(std::chrono::seconds(int(t_settle)));
   loop.setpoint.store(0.0);
 
   // flush data queues
@@ -926,7 +1330,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
     if (setpoint_high) {
       loop.setpoint.store(0.0);
     } else {
-      loop.setpoint.store(100.0);
+      loop.setpoint.store(dither_amp);
     }
     setpoint_high = !setpoint_high;
 
@@ -962,28 +1366,20 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
   file.close();
 
   // CONTROL LAW FREQUENCY CHARACTERISATION
-  std::cout << "\t OPD control law frequency characterisation" << std::endl;
+  std::cout << "\t Controller frequency characterisation" << std::endl;
 
   // dither frequencies
-  std::vector<float> dither_freqs = {};  // low frequencies take long, so only a few
+  std::vector<float> dither_freqs = {0.1, 0.3};  // low frequencies take long, so only a few
 
-  // append logarithmic freqs from 1 to 500 Hz
-  float logf1 = std::log10(10.0);
-  float logf2 = std::log10(1000.0);
-  int fsteps = 10;
+  // append logarithmic freqs
+  float logf1 = std::log10(f1);
+  float logf2 = std::log10(f2);
   for (int i = 0; i < fsteps; i++) {
     dither_freqs.push_back(std::pow(10, logf1 + i * (logf2 - logf1) / (fsteps - 1)));
   }
 
-  // dither amplitudes: all 20 nm
-  std::vector<float> dither_amps(dither_freqs.size(), 20.0);  // nm
-
-  // for low frequencies, increase dither amplitude to 100 nm
-  for (int i = 0; i < dither_freqs.size(); i++) {
-    if (dither_freqs[i] < 20.0) {
-      dither_amps[i] = 100.0;
-    }
-  }
+  // dither amplitudes
+  std::vector<float> dither_amps(dither_freqs.size(), dither_amp);  // nm
 
   // recording time: at least 1 s, at most 10/freq
   std::vector<float> recording_times(dither_freqs.size(), 0.0);  // s
@@ -1002,7 +1398,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
     // storage file: frequency in format 1.2345e67
     filename = subdir + "/" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
-    file << "Time (s),Controller input (nm),Controller output (nm)\n";
+    file << "Time (s),Controller input,Controller output\n";
 
     // set control parameters
     loop.setpoint.store(0.0);
@@ -1016,7 +1412,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
 
     // settle control loop
     loop.control_mode.store(2);
-    std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+    std::this_thread::sleep_for(std::chrono::seconds(int(t_settle)));
 
     // flush data queues
     while (!loop.controlDataBuffer.isempty()) {
@@ -1060,7 +1456,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
     // storage file: frequency in format 1.2345e67
     filename = subdir1 + "/control_" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
-    file << "Time (s),Measurement (nm),Actuator command (nm)\n";
+    file << "Time (s),Measurement,Actuator command\n";
 
     // second file: all sensor data
     std::string filename2 = subdir1 + "/sensor_" + std::to_string(dither_freqs[i]) + "_hz.csv";
@@ -1080,7 +1476,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
 
     // settle control loop
     loop.control_mode.store(1);
-    std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+    std::this_thread::sleep_for(std::chrono::seconds(int(t_settle)));
 
     // flush data queues
     while (!loop.controlDataBuffer.isempty()) {
@@ -1131,7 +1527,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
 
   // FREQUENCY CHARACTERISATION CLOSED LOOP DITHER PLANT
   // for all dither frequencies and amplitudes, run the control loop for a while and record dither and opd measurments
-  std::cout << "\t OPD closed loop dither plant" << std::endl;
+  std::cout << "\t Closed loop dither plant" << std::endl;
 
   std::string subdir2 = dirname + "/freq_closed_loop_dither_plant";
   std::filesystem::create_directory(subdir2);
@@ -1141,8 +1537,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
     // storage file: frequency in format 1.2345e67
     filename = subdir2 + "/control_" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
-    file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output "
-            "(nm),Actuator command (nm)\n";
+    file << "Time (s),Measurement,Setpoint,Dither signal,Controller input,Controller output,Actuator command\n";
 
     // file2
     std::string filename2 = subdir2 + "/sensor_" + std::to_string(dither_freqs[i]) + "_hz.csv";
@@ -1162,7 +1557,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
 
     // settle control loop
     loop.control_mode.store(4);
-    std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+    std::this_thread::sleep_for(std::chrono::seconds(int(t_settle)));
 
     // flush data queues
     while (!loop.controlDataBuffer.isempty()) {
@@ -1226,8 +1621,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
     // storage file: frequency in format 1.2345e67
     filename = subdir3 + "/control_" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
-    file << "Time (s),Measurement (nm),Setpoint (nm),Dither signal (nm),Controller input (nm),Controller output "
-            "(nm),Actuator command (nm)\n";
+    file << "Time (s),Measurement,Setpoint,Dither signal,Controller input,Controller output,Actuator command\n";
 
     // file2
     std::string filename2 = subdir3 + "/sensor_" + std::to_string(dither_freqs[i]) + "_hz.csv";
@@ -1247,7 +1641,7 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
 
     // settle control loop
     loop.control_mode.store(5);
-    std::this_thread::sleep_for(std::chrono::seconds(int(settling_time)));
+    std::this_thread::sleep_for(std::chrono::seconds(int(t_settle)));
 
     // flush data queues
     while (!loop.controlDataBuffer.isempty()) {
@@ -1301,8 +1695,117 @@ void characterise_control_loop(SISOControlLoop<T> &loop) {
 
   // DONE
   gui_control.store(true);
-  std::cout << "Finished OPD characterisation" << std::endl;
+  std::cout << "Finished control loop characterisation: " << description << std::endl;
 }
+
+
+template <class C1, class A1, class C2, class A2, class A3>
+void characterise_joint_closed_loop(SISOControlLoop<C1, A1> &opd_loop, SISOControlLoop<C2, A2> &shear_x1_loop,
+                                    SISOControlLoop<C2, A2> &shear_x2_loop, SISOControlLoop<C2, A3> &shear_y1_loop,
+                                    SISOControlLoop<C2, A3> &shear_y2_loop, float opd_p, float opd_i, float shear_p,
+                                    float shear_i, float t_settle, float t_record, std::string description) {
+  std::cout << "Starting joint closed loop characterisation" << std::endl;
+
+  // wait for one minute (leave the room)
+  // std::cout << "Waiting for one minute" << std::endl;
+  // std::this_thread::sleep_for(std::chrono::seconds(60));
+  // std::cout << "Done waiting" << std::endl;
+
+  // set control parameters
+  opd_loop.setpoint.store(0.0);
+  opd_loop.p.store(opd_p); // 0.7
+  opd_loop.i.store(opd_i); // 0.01
+
+  shear_x1_loop.setpoint.store(0.0);
+  shear_x1_loop.p.store(shear_p); // 0.4
+  shear_x1_loop.i.store(shear_i); // 0.007
+
+  shear_x2_loop.setpoint.store(0.0);
+  shear_x2_loop.p.store(shear_p); // 0.4
+  shear_x2_loop.i.store(shear_i); // 0.007
+
+  shear_y1_loop.setpoint.store(0.0);
+  shear_y1_loop.p.store(shear_p); // 0.4
+  shear_y1_loop.i.store(shear_i); // 0.007
+
+  shear_y2_loop.setpoint.store(0.0);
+  shear_y2_loop.p.store(shear_p); // 0.4
+  shear_y2_loop.i.store(shear_i); // 0.007
+
+  // directory to store files in: dire name is opd_date_time (e.g. measurements/opd_2021-09-01_12:00:00)
+  auto datetime_string = get_iso_datestring();
+  std::string dirname = "measurements/" + datetime_string + "_" + description;
+  std::filesystem::create_directory(dirname);
+
+  // CLOSED LOOP CHARACTERISATION
+  std::cout << "\t Closed loop time series" << std::endl;
+  // storage file
+  std::string filename = dirname + "/closed_loop.csv";
+  std::ofstream file(filename);
+
+  file << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
+          "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
+
+  // reset controller
+  opd_loop.controller.reset_state();
+  shear_x1_loop.controller.reset_state();
+  shear_x2_loop.controller.reset_state();
+  shear_y1_loop.controller.reset_state();
+  shear_y2_loop.controller.reset_state();
+
+  // turn on control loops
+  opd_loop.control_mode.store(4);
+  shear_x1_loop.control_mode.store(4);
+  shear_x2_loop.control_mode.store(4);
+  shear_y1_loop.control_mode.store(4);
+  shear_y2_loop.control_mode.store(4);
+
+  // wait settling time
+  std::this_thread::sleep_for(std::chrono::seconds(int(t_settle)));
+
+  // flush data queues
+  while (!sensorDataQueue.isempty()) {
+    sensorDataQueue.pop();
+  }
+
+  // record for recording time: every 10 ms, write contents to file
+  auto t_start = std::chrono::high_resolution_clock::now();
+  while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - t_start).count() <
+         t_record) {
+    // wait 10 ms
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    // write to file
+    if (!sensorDataQueue.isempty()) {
+      int N = sensorDataQueue.size();
+      for (int i = 0; i < N; i++) {
+        auto m = sensorDataQueue.pop();
+        // format: 6 decimals for time, 3 decimals for OPD
+        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd
+             << "," << std::fixed << std::setprecision(3) << m.shear_x1 << "," << std::fixed << std::setprecision(3)
+              << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed
+              << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1
+              << "," << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3)
+              << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
+      }
+    }
+  }
+
+  file.close();
+
+  //  turn off all control loops
+  opd_loop.control_mode.store(0);
+  shear_x1_loop.control_mode.store(0);
+  shear_x2_loop.control_mode.store(0);
+  shear_y1_loop.control_mode.store(0);
+  shear_y2_loop.control_mode.store(0);
+
+
+  // DONE
+  std::cout << "Finished joint closed loop characterisation: " << description << std::endl;
+                                
+}
+
 
 void startMeasurement() {
   RunMeasurement.store(true);
@@ -1327,8 +1830,14 @@ void RenderUI() {
   static int shear_loop_select = 0;
   static float shear_p_gui = 0.4f;
   static float shear_i_gui = 0.007f;
-  shear_p.store(shear_p_gui);
-  shear_i.store(shear_i_gui);
+  shear_x1_loop.p.store(shear_p_gui);
+  shear_x1_loop.i.store(shear_i_gui);
+  shear_x2_loop.p.store(shear_p_gui);
+  shear_x2_loop.i.store(shear_i_gui);
+  shear_y1_loop.p.store(shear_p_gui);
+  shear_y1_loop.i.store(shear_i_gui);
+  shear_y2_loop.p.store(shear_p_gui);
+  shear_y2_loop.i.store(shear_i_gui);
 
   // pointing control gui parameters
   static int pointing_loop_select = 0;
@@ -1501,7 +2010,7 @@ void RenderUI() {
     // characterise button: launch characterisation of OPD thread and deactivate gui control
     static bool opd_char_button = false;
 
-    ImGui::Checkbox("Characterise OPD", &opd_char_button);
+    ImGui::Checkbox("Characterise Control loop", &opd_char_button);
 
     // print status of gui_control
     ImGui::Text("GUI control: %s", gui_control.load() ? "true" : "false");
@@ -1509,8 +2018,9 @@ void RenderUI() {
     if (opd_char_button) {
       gui_control.store(false);
       opd_char_button = false;
-      // std::jthread char_opd_thread(characterise_control_loop);
-      characterise_control_loop(opd_loop);
+      characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_final_test");
+      characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 200.0, 0.1, 100.0, 50, 30.0, "shear_x1_final_test");
+      characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01, 0.4, 0.007, 1.0, 200.0, "joint_final_test");
     }
 
     // control mode selector
@@ -1757,18 +2267,23 @@ void RenderUI() {
 
     // run control if "Closed loop" is selected
     if (shear_loop_select == 2) {
-      RunShearControl.store(true);
+      shear_x1_loop.control_mode.store(4);
+      shear_x2_loop.control_mode.store(4);
+      shear_y1_loop.control_mode.store(4);
+      shear_y2_loop.control_mode.store(4);
     } else {
-      RunShearControl.store(false);
+      shear_x1_loop.control_mode.store(0);
+      shear_x2_loop.control_mode.store(0);
+      shear_y1_loop.control_mode.store(0);
+      shear_y2_loop.control_mode.store(0);
     }
 
     // open loop
     if (shear_loop_select == 1) {
-      // actuators are rotated 90 degrees, hence the x/y swap
-      tip_tilt_stage1.move_to_x(shear_x1_ol_setpoint);
-      tip_tilt_stage1.move_to_y(shear_y1_ol_setpoint);
-      tip_tilt_stage2.move_to_x(shear_x2_ol_setpoint);
-      tip_tilt_stage2.move_to_y(shear_y2_ol_setpoint);
+      shear_x1_loop.control_mode.store(1);
+      shear_x2_loop.control_mode.store(1);
+      shear_y1_loop.control_mode.store(1);
+      shear_y2_loop.control_mode.store(1);
     }
 
     static float t_gui_x = 0;
@@ -1927,7 +2442,7 @@ void RenderUI() {
       if (shear_x1_setpoint_gui > x1d_setpoint_max) shear_x1_setpoint_gui = x1d_setpoint_max;
 
       // set shear_x1_setpoint
-      shear_x1_setpoint.store(shear_x1_setpoint_gui);
+      shear_x1_loop.setpoint.store(shear_x1_setpoint_gui);
 
       ImGui::TreePop();
     }

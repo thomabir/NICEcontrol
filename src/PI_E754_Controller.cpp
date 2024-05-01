@@ -89,7 +89,7 @@ void PI_E754_Controller::move_to(double value) {
 }
 
 void PI_E754_Controller::move_to_blocking(double value) {
-  double dValue = value + offset;
+  double dValue = value * 1e-3 + offset; // value is in nm, convert to um
   PI_MOV(iD, "1", &dValue); // PI_MOV blocks until the move is done
 }
 

@@ -58,26 +58,26 @@ def freq_analysis_full(filenames_arr, input_signal_str, output_signal_str):
 
     return freqs, gains
 
-measurement_dir = 'measurements/2024-04-30T21:07:26Z_opd'
+measurement_dir = 'measurements/2024-05-01T19:56:53Z_shear_x1_final_test'
 
 ## Controller frequency response analysis
 filenames = glob.glob(f'{measurement_dir}/freq_controller/*_hz.csv')
-f_con, gg_con = freq_analysis_full(filenames, 'Controller input (nm)', 'Controller output (nm)')
+f_con, gg_con = freq_analysis_full(filenames, 'Controller input', 'Controller output')
 g_con, ph_con = complex_gain_to_mag_phase(gg_con)
 
 ## Plant frequency response analysis
 filenames = glob.glob(f'{measurement_dir}/freq_plant/control_*_hz.csv')
-f_plant, gg_plant = freq_analysis_full(filenames, 'Actuator command (nm)', 'Measurement (nm)')
+f_plant, gg_plant = freq_analysis_full(filenames, 'Actuator command', 'Measurement')
 g_plant, ph_plant = complex_gain_to_mag_phase(gg_plant)
 
 ## Closed loop dither plant frequency response analysis
 filenames = glob.glob(f'{measurement_dir}/freq_closed_loop_dither_plant/control_*_hz.csv')
-f_clp, gg_clp = freq_analysis_full(filenames, 'Measurement (nm)', 'Dither signal (nm)')
+f_clp, gg_clp = freq_analysis_full(filenames, 'Measurement', 'Dither signal')
 g_clp, ph_clp = complex_gain_to_mag_phase(gg_clp)
 
 ## Closed loop dither setpoint frequency response analysis
 filenames = glob.glob(f'{measurement_dir}/freq_closed_loop_dither_setpoint/control_*_hz.csv')
-f_cls, gg_cls = freq_analysis_full(filenames, 'Dither signal (nm)', 'Measurement (nm)')
+f_cls, gg_cls = freq_analysis_full(filenames, 'Dither signal', 'Measurement')
 g_cls, ph_cls = complex_gain_to_mag_phase(gg_cls)
 
 
@@ -121,25 +121,44 @@ plt.show()
 exit()
 
 
-## Impulse response analysis
-filename = f'{measurement_dir}opd_impulse_response.csv'
+## Step response
+# filename = measurement_dir + '/step_response.csv'
 
-# read data from the file
-data = pd.read_csv(filename)
-t = data['Time (s)']
-measurement = data['Measurement (nm)']
-setpoint = data['Setpoint (nm)']
-dither_signal = data['Dither signal (nm)']
-controller_input = data['Controller input (nm)']
-controller_output = data['Controller output (nm)']
-actuator_command = data['Actuator command (nm)']
+# # read data from the file
+# data = pd.read_csv(filename)
+# t = data["Time (s)"]
+# measurement = data["Measurement"]
+# setpoint = data["Setpoint"]
 
-# plot
+# filename = measurement_dir + '/step_response_sensor.csv'
+# data = pd.read_csv(filename)
+# t_sensor = data["Time (s)"]
+# # shear_x2 = data["Pointing x1 (urad)"]
+
+# # plot
 # fig, ax = plt.subplots()
 # ax.plot(t, measurement, label='Measurement')
 # ax.plot(t, setpoint, label='Setpoint')
+# # ax.plot(t_sensor, shear_x2, label='Shear x2')
 # ax.set_xlabel('Time (s)')
-# ax.set_ylabel('Position (nm)')
+# ax.set_ylabel('Position')
 # ax.legend()
 # plt.show()
 
+## Closed loop
+filename = measurement_dir + '/closed_loop.csv'
+data = pd.read_csv(filename)
+t = data["Time (s)"]
+opd = data["OPD (nm)"]
+shear_x1 = data["Shear x1 (um)"]
+shear_x2 = data["Shear x2 (um)"]
+
+# plot
+fig, ax = plt.subplots()
+ax.plot(t, opd, label='OPD')
+ax.plot(t, shear_x1, label='Shear x1')
+ax.plot(t, shear_x2, label='Shear x2')
+ax.set_xlabel('Time (s)')
+ax.set_ylabel('Position')
+ax.legend()
+plt.show()

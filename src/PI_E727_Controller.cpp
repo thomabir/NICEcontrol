@@ -87,6 +87,16 @@ double PI_E727_Controller::ready() {
   return value - offset;
 }
 
+void PI_E727_Controller::move_to_axis(int axis, double value) {
+  if (axis == 1) {
+    move_to_x(value);
+  } else if (axis == 2) {
+    move_to_y(value);
+  } else {
+    std::cout << "Invalid axis" << std::endl;
+  }
+}
+
 void PI_E727_Controller::move_to_x(double value) {
   if (is_moving_x.load()) {return;} // stage is unreachable while moving
 
