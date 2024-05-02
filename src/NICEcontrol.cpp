@@ -9,6 +9,7 @@
 #include <math.h>
 #include <stdio.h>
 
+#include <array>
 #include <atomic>
 #include <boost/circular_buffer.hpp>
 #include <chrono>
@@ -140,34 +141,6 @@ class ControlData {
   }
 };
 
-template <int N>
-class ControlDataN {
- public:
-  ControlData data[N];
-
-  // default: all zeros
-  ControlDataN() {
-    for (int i = 0; i < N; i++) {
-      data[i] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-    }
-  }
-
-  ControlDataN(const ControlDataN<N> &other) {
-    for (int i = 0; i < N; i++) {
-      data[i] = other.data[i];
-    }
-  }
-
-  ControlDataN<N> &operator=(const ControlDataN<N> &other) {
-    for (int i = 0; i < N; i++) {
-      data[i] = other.data[i];
-    }
-    return *this;
-  }
-
-  ControlData &operator[](int i) { return data[i]; }
-};
-
 class SensorData {
  public:
   double time;
@@ -260,105 +233,6 @@ class SensorData {
         return opd;
     }
   }
-};
-
-template <int N>
-class VecN {
- public:
-  float data[N];
-
-  VecN() {  // default: fill with zeros
-    for (int i = 0; i < N; i++) {
-      data[i] = 0.0f;
-    }
-  }
-
-  // VecN<3> output = {0.0f, 0.0f, 0.0f};
-  VecN(std::initializer_list<float> list) {
-    int i = 0;
-    for (auto it = list.begin(); it != list.end(); ++it) {
-      data[i] = *it;
-      i++;
-    }
-  }
-
-  // VecN<3> output = other_vec3;
-  VecN(const VecN<N> &other) {
-    for (int i = 0; i < N; i++) {
-      data[i] = other.data[i];
-    }
-  }
-
-  // VecN<3> output;
-  // output = other_vec3;
-  VecN<N> &operator=(const VecN<N> &other) {
-    for (int i = 0; i < N; i++) {
-      data[i] = other.data[i];
-    }
-    return *this;
-  }
-
-  VecN<N> operator+(const VecN<N> &other) {
-    VecN<N> result;
-    for (int i = 0; i < N; i++) {
-      result.data[i] = data[i] + other.data[i];
-    }
-    return result;
-  }
-
-  VecN<N> operator-(const VecN<N> &other) {
-    VecN<N> result;
-    for (int i = 0; i < N; i++) {
-      result.data[i] = data[i] - other.data[i];
-    }
-    return result;
-  }
-
-  VecN<N> operator*(const float &scalar) {
-    VecN<N> result;
-    for (int i = 0; i < N; i++) {
-      result.data[i] = data[i] * scalar;
-    }
-    return result;
-  }
-
-  VecN<N> operator/(const float &scalar) {
-    VecN<N> result;
-    for (int i = 0; i < N; i++) {
-      result.data[i] = data[i] / scalar;
-    }
-    return result;
-  }
-
-  VecN<N> operator+=(const VecN<N> &other) {
-    for (int i = 0; i < N; i++) {
-      data[i] += other.data[i];
-    }
-    return *this;
-  }
-
-  VecN<N> operator-=(const VecN<N> &other) {
-    for (int i = 0; i < N; i++) {
-      data[i] -= other.data[i];
-    }
-    return *this;
-  }
-
-  VecN<N> operator*=(const float &scalar) {
-    for (int i = 0; i < N; i++) {
-      data[i] *= scalar;
-    }
-    return *this;
-  }
-
-  VecN<N> operator/=(const float &scalar) {
-    for (int i = 0; i < N; i++) {
-      data[i] /= scalar;
-    }
-    return *this;
-  }
-
-  float &operator[](int i) { return data[i]; }
 };
 
 template <typename T, typename U>
@@ -620,14 +494,16 @@ void setupActuators() {
 
   // nF tip/tilt stages
   nF_stage_1.init();
-  nF_stage_1.move_to(0.0, 0.0);
+  nF_stage_1.move_to({0.0, 0.0});
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "nF Stage 1 Position: " << nF_stage_1.read_x() << ", " << nF_stage_1.read_y() << std::endl;
+  auto pos = nF_stage_1.read();
+  std::cout << "nF Stage 1 Position: " << pos[0] << ", " << pos[1] << std::endl;
 
   nF_stage_2.init();
-  nF_stage_2.move_to(0.0, 0.0);
+  nF_stage_2.move_to({0.0, 0.0});
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "nF Stage 2 Position: " << nF_stage_2.read_x() << ", " << nF_stage_2.read_y() << std::endl;
+  pos = nF_stage_2.read();
+  std::cout << "nF Stage 2 Position: " << pos[0] << ", " << pos[1] << std::endl;
 
   // OPD stage
   opd_stage.init();
@@ -692,34 +568,42 @@ class CombinedActuator {
   PI_E727_Controller &tip_tilt_stage;
 };
 
-// a combined PI controller, which consists of an arbitrary number of PI controllers, held as pointers
+// N PI controllers, each with P and I gains, diagonal N x N system
 template <int N>
-class CombinedPIController {
+class DiagPIController {
  public:
-  // example initialisation: CombinedPIController<2> shear1_pi_controller({shear_x1_pi, shear_y1_pi});
-  CombinedPIController(std::array<PIController *, N> controllers) : controllers(controllers) {}
-
-  // set the P and I gains for the i-th controller
-  void setPI(int i, float P, float I) { controllers[i]->setPI(P, I); }
-
-  // reset the state of all controllers
-  void reset_state() {
-    for (int i = 0; i < N; i++) {
-      controllers[i]->reset_state();
-    }
+  DiagPIController() {
+    Ps.fill(0.);
+    Is.fill(0.);
+    error_integrals.fill(0.);
   }
 
-  // step the i-th controller with input
-  VecN<N> step(VecN<N> input) {
-    VecN<N> output;
+  void setPI(std::array<float, N> Ps, std::array<float, N> Is) {
+    this->Ps = Ps;
+    this->Is = Is;
+  }
+
+  void reset_state() { error_integrals.fill(0); }
+
+  void reset_all() {
+    error_integrals.fill(0);
+    Ps.fill(0);
+    Is.fill(0);
+  }
+
+  std::array<float, N> step(std::array<float, N> inputs) {
+    std::array<float, N> outputs;
     for (int i = 0; i < N; i++) {
-      output[i] = controllers[i]->step(input[i]);
+      error_integrals[i] += inputs[i];
+      outputs[i] = Ps[i] * inputs[i] + Is[i] * error_integrals[i];
     }
-    return output;
+    return outputs;
   }
 
  private:
-  std::array<PIController *, N> controllers;
+  std::array<float, N> Ps;
+  std::array<float, N> Is;
+  std::array<float, N> error_integrals;
 };
 
 template <int N, class C, class A>  // N x N MIMO control loop
@@ -728,72 +612,43 @@ class MIMOControlLoop {
   // control mode is 0 by default
   MIMOControlLoop(C &controller, A &actuator) : controller(controller), actuator(actuator) {}
 
-  void control(double t, SensorData &sensor_data) {
-    // OPD control: arrays with N elements
-    static VecN<N> controller_input = {0.0f};
-    static VecN<N> controller_output = {0.0f};
-    static float actuator_command[N] = {0.0f};
+  void control(double t, std::array<float, N> sensor_data) {
+    std::array<float, N> controller_input = {0.0f};
+    std::array<float, N> controller_output = {0.0f};
+    std::array<float, N> actuator_command = {0.0f};
 
-    // calculate dither signal: zero
-    float dither_signal[N] = {0.0f};
+    // load all atomic variables into non-atomic ones to avoid changes while this function is running
+    std::array<float, N> setpoint_loc = this->setpoint.load();
+    std::array<float, N> Ps_loc = this->Ps.load();
+    std::array<float, N> Is_loc = this->Is.load();
+    float dither_freq_loc = this->dither_freq.load();
+    float dither_amp_loc = this->dither_amp.load();
+    int dither_axis_loc = this->dither_axis.load();
+    std::array<int, N> dither_mode_loc = this->dither_mode.load();
+    std::array<int, N> plant_mode_loc = this->plant_mode.load();
+    std::array<int, N> controller_mode_loc = this->controller_mode.load();
 
-    float dither_signal_scalar = this->dither_amp.load() * std::sin(2 * PI * this->dither_freq.load() * t);
-
-    for (int i = 0; i < N; i++) {
-      if (this->dither_axis.load() == i) {
-        dither_signal[i] = dither_signal_scalar;
-      }
-    }
-
-    // get control parameters
-    float setpoint[N];
-    for (int i = 0; i < N; i++) {
-      setpoint[i] = this->setpoint[i].load();
-    }
+    // calculate dither signal: zero except for the dither axis
+    std::array<float, N> dither_signal = {0.0f};
+    dither_signal[dither_axis_loc] = dither_amp_loc * std::sin(2 * PI * dither_freq_loc * t);
 
     // controller: set p and i
-    for (int i = 0; i < N; i++) {
-      this->controller.setPI(i, this->Ps[i].load(), this->Is[i].load());
-    }
-
-    // TODO: reset controller if control mode has changed
-    // int cm[N];
-    // for (int i = 0; i < N; i++) {
-    //   cm[i] = this->control_mode[i].load();
-    // }
-
-    // // if control_mode has changed, reset the controller
-    // static int prev_cm[N] = {0};
-    // for (int i = 0; i < N; i++) {
-    //   if (cm[i] != prev_cm[i]) {
-    //     this->controller.reset_state();
-    //   }
-    // }
-    // for (int i = 0; i < N; i++) {
-    //   prev_cm[i] = cm[i];
-    // }
-
-    // get dither mode, store in dm
-    int dm[N];
-    for (int i = 0; i < N; i++) {
-      dm[i] = this->dither_mode[i].load();
-    }
+    this->controller.setPI(Ps_loc, Is_loc);
 
     // assemble controller input
     for (int i = 0; i < N; i++) {
-      // TODO: figure out what to do in each case
-      switch (this->controller_input[i].load()) {
+      switch (controller_mode_loc[i]) {
         case 0:  // 0 as input
           controller_input[i] = 0.0f;
           break;
         case 1:  // setpoint - measurement as input
-          controller_input[i] = setpoint[i] - sensor_data[i];
+          controller_input[i] = setpoint_loc[i] - sensor_data[i];
           break;
         default:
           // don't
           break;
       }
-      if (dm[i] == 1) {
+      if (dither_mode_loc[i] == 1) {
         controller_input[i] += dither_signal[i];
       }
     }
@@ -803,11 +658,11 @@ class MIMOControlLoop {
 
     // calculate actuator command
     for (int i = 0; i < N; i++) {
-      switch (this->plant_input[i].load()) {
+      switch (plant_mode_loc[i]) {
         case 0:  // off
           break;
         case 1:  // plant gets setpoint
-          actuator_command[i] = setpoint[i];
+          actuator_command[i] = setpoint_loc[i];
           break;
         case 2:  // plant gets controller output
           actuator_command[i] = controller_output[i];
@@ -816,51 +671,48 @@ class MIMOControlLoop {
           // don't
           break;
       }
-      if (dm[i] == 2) {
+      if (dither_mode_loc[i] == 2) {
         actuator_command[i] += dither_signal[i];
       }
     }
 
     // move actuator
-    for (int i = 0; i < N; i++) {
-      this->actuator.move_axis(i, actuator_command[i]);
-    }
+    actuator.move_to(actuator_command);
 
     // prepare data to be pushed to the buffer
     // make an array of N controldata objects
-    ControlData control_data[N];
+    // ControlData control_data[N];
 
     // fill the array with data
-    for (int i = 0; i < N; i++) {
-      control_data[i] = {t,
-                         sensor_data[i],
-                         setpoint[i],
-                         dither_signal[i],
-                         controller_input[i],
-                         controller_output[i],
-                         actuator_command[i]};
-    }
+    // for (int i = 0; i < N; i++) {
+    //   control_data[i] = {t,
+    //                      sensor_data[i],
+    //                      setpoint[i],
+    //                      dither_signal[i],
+    //                      controller_input[i],
+    //                      controller_output[i],
+    //                      actuator_command[i]};
+    // }
 
     // push the data to the buffer
-    this->controlDataBuffer.push(control_data);
+    // this->controlDataBuffer.push(control_data);
   }
 
-  std::atomic<float> setpoint[N] = {0.0f};
-  std::atomic<float> Ps[N] = {0.0f};
-  std::atomic<float> Is[N] = {0.0f};
+  std::atomic<std::array<float, N>> setpoint{};
+  std::atomic<std::array<float, N>> Ps{};
+  std::atomic<std::array<float, N>> Is{};
   std::atomic<float> dither_freq = 0.0f;
   std::atomic<float> dither_amp = 0.0f;
   std::atomic<int> dither_axis = 0;
-  std::atomic<int> dither_mode[N] = {0};       // 0 = off, 1 = dither controller, 2 = dither plant
-  std::atomic<int> plant_input[N] = {0};       // 0 = off, 1 = plant gets setpoint, 2 = plant gets controller output
-  std::atomic<int> controller_input[N] = {0};  // 0 = 0 as input, 1 = setpoint - measurement as input
+  std::atomic<std::array<int, N>> dither_mode{};  // 0 = off, 1 = dither controller, 2 = dither plant
+  std::atomic<std::array<int, N>> plant_mode{};   // 0 = off, 1 = plant gets setpoint, 2 = plant gets controller output
+  std::atomic<std::array<int, N>> controller_mode{};  // 0 = 0 as input, 1 = setpoint - measurement as input
 
   A &actuator;
   C &controller;
 
-  // data buffer: 1 + N x 6 columns
-  // time, 6x(sensor_data, setpoint, dither_signal, controller_input, controller_output, actuator_command)
-  TSCircularBuffer<ControlDataN<N>> controlDataBuffer;
+  // data buffer: N x controldata
+  // TSCircularBuffer<ControlDataN<N>> controlDataBuffer;
 };
 
 template <class C, class A>  // SISO control loop
@@ -972,46 +824,20 @@ class ShearYActuator {
   PI_E727_Controller &stage;
 };
 
-class nFShearXActuator {
- public:
-  nFShearXActuator(nF_EBD_Controller &stage) : stage(stage) {}
-
-  void move_to(float position) { stage.move_to_x(position); }
-
- private:
-  nF_EBD_Controller &stage;
-};
-
-class nFShearYActuator {
- public:
-  nFShearYActuator(nF_EBD_Controller &stage) : stage(stage) {}
-
-  void move_to(float position) { stage.move_to_y(position); }
-
- private:
-  nF_EBD_Controller &stage;
-};
-
 // controllers
 PIController opd_controller;
 PIController shear_x1_controller;
 PIController shear_x2_controller;
 PIController shear_y1_controller;
 PIController shear_y2_controller;
-PIController point_x1_controller;
-PIController point_x2_controller;
-PIController point_y1_controller;
-PIController point_y2_controller;
+DiagPIController<2> point_1_controller;
+DiagPIController<2> point_2_controller;
 
 // actuators
 ShearXActuator shear_x1_actuator(tip_tilt_stage1);
 ShearXActuator shear_x2_actuator(tip_tilt_stage2);
 ShearYActuator shear_y1_actuator(tip_tilt_stage1);
 ShearYActuator shear_y2_actuator(tip_tilt_stage2);
-nFShearXActuator point_x1_actuator(nF_stage_1);
-nFShearXActuator point_x2_actuator(nF_stage_2);
-nFShearYActuator point_y1_actuator(nF_stage_1);
-nFShearYActuator point_y2_actuator(nF_stage_2);
 
 // control loops
 SISOControlLoop opd_loop(opd_controller, opd_stage);
@@ -1019,10 +845,8 @@ SISOControlLoop shear_x1_loop(shear_x1_controller, shear_x1_actuator);
 SISOControlLoop shear_x2_loop(shear_x2_controller, shear_x2_actuator);
 SISOControlLoop shear_y1_loop(shear_y1_controller, shear_y1_actuator);
 SISOControlLoop shear_y2_loop(shear_y2_controller, shear_y2_actuator);
-SISOControlLoop point_x1_loop(point_x1_controller, point_x1_actuator);
-SISOControlLoop point_x2_loop(point_x2_controller, point_x2_actuator);
-SISOControlLoop point_y1_loop(point_y1_controller, point_y1_actuator);
-SISOControlLoop point_y2_loop(point_y2_controller, point_y2_actuator);
+MIMOControlLoop<2, DiagPIController<2>, nF_EBD_Controller> point_1_loop(point_1_controller, nF_stage_1);
+MIMOControlLoop<2, DiagPIController<2>, nF_EBD_Controller> point_2_loop(point_2_controller, nF_stage_2);
 
 void run_calculation() {
   int sockfd = setup_ethernet();
@@ -1154,10 +978,8 @@ void run_calculation() {
     shear_x2_loop.control(t, shear_x2_f);
     shear_y1_loop.control(t, shear_y1_f);
     shear_y2_loop.control(t, shear_y2_f);
-    point_x1_loop.control(t, point_x1_f);
-    point_x2_loop.control(t, point_x2_f);
-    point_y1_loop.control(t, point_y1_f);
-    point_y2_loop.control(t, point_y2_f);
+    point_1_loop.control(t, {point_x1_f, point_y1_f});
+    point_2_loop.control(t, {point_x2_f, point_y2_f});
   }
 }
 
@@ -1902,40 +1724,29 @@ void RenderUI() {
 
     // Pointing
     if (pointing_loop_select == 2) {
-      point_x1_loop.control_mode.store(4);
-      point_x2_loop.control_mode.store(4);
-      point_y1_loop.control_mode.store(4);
-      point_y2_loop.control_mode.store(4);
+      point_1_loop.plant_mode.store({2, 2});
+      point_1_loop.controller_mode.store({1, 1});
+      point_2_loop.plant_mode.store({2, 2});
+      point_2_loop.controller_mode.store({1, 1});
     } else if (pointing_loop_select == 1) {
-      point_x1_loop.control_mode.store(1);
-      point_x2_loop.control_mode.store(1);
-      point_y1_loop.control_mode.store(1);
-      point_y2_loop.control_mode.store(1);
+      point_1_loop.plant_mode.store({1, 1});
+      point_1_loop.controller_mode.store({0, 0});
+      point_2_loop.plant_mode.store({1, 1});
+      point_2_loop.controller_mode.store({0, 0});
     } else {
-      point_x1_loop.control_mode.store(0);
-      point_x2_loop.control_mode.store(0);
-      point_y1_loop.control_mode.store(0);
-      point_y2_loop.control_mode.store(0);
+      point_1_loop.plant_mode.store({0, 0});
+      point_1_loop.controller_mode.store({0, 0});
+      point_2_loop.plant_mode.store({0, 0});
+      point_2_loop.controller_mode.store({0, 0});
     }
 
-    point_x1_loop.p.store(pointing_p_gui);
-    point_x1_loop.i.store(pointing_i_gui);
-    point_x2_loop.p.store(pointing_p_gui);
-    point_x2_loop.i.store(pointing_i_gui);
-    point_y1_loop.p.store(pointing_p_gui);
-    point_y1_loop.i.store(pointing_i_gui);
-    point_y2_loop.p.store(pointing_p_gui);
-    point_y2_loop.i.store(pointing_i_gui);
+    point_1_loop.Ps.store({pointing_p_gui, pointing_p_gui});
+    point_1_loop.Is.store({pointing_i_gui, pointing_i_gui});
+    point_2_loop.Ps.store({pointing_p_gui, pointing_p_gui});
+    point_2_loop.Is.store({pointing_i_gui, pointing_i_gui});
 
-    point_x1_loop.setpoint.store(pointing_x1_setpoint_gui);
-    point_x2_loop.setpoint.store(pointing_x2_setpoint_gui);
-    point_y1_loop.setpoint.store(pointing_y1_setpoint_gui);
-    point_y2_loop.setpoint.store(pointing_y2_setpoint_gui);
-  }
-
-  static auto current_measurement = 0.f;
-  if (!sensorDataQueue.isempty()) {
-    current_measurement = sensorDataQueue.back().opd;
+    point_1_loop.setpoint.store({{pointing_x1_setpoint_gui, pointing_y1_setpoint_gui}});
+    point_2_loop.setpoint.store({{pointing_x2_setpoint_gui, pointing_y2_setpoint_gui}});
   }
 
   static ScrollingBuffer opd_buffer, shear_x1_buffer, shear_x2_buffer, shear_y1_buffer, shear_y2_buffer,
@@ -2243,9 +2054,6 @@ void RenderUI() {
     }
 
     if (ImGui::TreeNode("Metrology##OPD")) {
-      // Display measurement
-      ImGui::Text("Current measurement: %.4f", current_measurement);
-
       // calculate mean and std of OPD buffer
       static float mean = 0.0f;
       static float stddev = 0.0f;
@@ -2544,7 +2352,13 @@ void RenderUI() {
       const float pointing_setpoint_min = -2.0f, pointing_setpoint_max = 2.0f;
 
       // pointing input: drag
-      ImGui::SliderFloat("(Drag or double-click to adjust)", &pointing_x1_setpoint_gui, pointing_setpoint_min,
+      ImGui::SliderFloat("Pointing X1 setpoint", &pointing_x1_setpoint_gui, pointing_setpoint_min,
+                         pointing_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Pointing Y1 setpoint", &pointing_y1_setpoint_gui, pointing_setpoint_min,
+                         pointing_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Pointing X2 setpoint", &pointing_x2_setpoint_gui, pointing_setpoint_min,
+                         pointing_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Pointing Y2 setpoint", &pointing_y2_setpoint_gui, pointing_setpoint_min,
                          pointing_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
 
       ImGui::TreePop();

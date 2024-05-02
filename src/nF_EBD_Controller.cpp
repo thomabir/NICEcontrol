@@ -1,5 +1,6 @@
 #include "nF_EBD_Controller.hpp"
 
+#include <array>
 #include <atomic>
 #include <cstring>
 #include <iostream>
@@ -30,96 +31,50 @@ void nF_EBD_Controller::init() {
 
   // activate servo mode
   int status;
-  int axis0 = 0;
-  int axis1 = 1;
-  nF_set_dev_axis_svo_m(this->fd, 1, &axis0, &status);
-  nF_set_dev_axis_svo_m(this->fd, 1, &axis1, &status);
+  nF_set_dev_axis_svo_m(this->fd, 1, &this->axis0, &status);
+  nF_set_dev_axis_svo_m(this->fd, 1, &this->axis1, &status);
 
   // check if both axes servo modes are enabled. Print error if at least one is not enabled.
   int servo_mode;
-  nF_get_dev_axis_svo_m(this->fd, 1, &axis0, &servo_mode);
+  nF_get_dev_axis_svo_m(this->fd, 1, &this->axis0, &servo_mode);
   if (servo_mode != 1) {
     std::cout << this->name << ": Error: Servo mode not enabled for axis 0" << std::endl;
   }
-  nF_get_dev_axis_svo_m(this->fd, 1, &axis1, &servo_mode);
+  nF_get_dev_axis_svo_m(this->fd, 1, &this->axis1, &servo_mode);
   if (servo_mode != 1) {
     std::cout << this->name << ": Error: Servo mode not enabled for axis 1" << std::endl;
   }
 }
 
-void nF_EBD_Controller::move_to(double x_target, double y_target) {
+void nF_EBD_Controller::move_to(std::array<float, 2> target) {
   if (is_moving.load()) {
     return;
   }  // stage is unreachable while moving
 
   // recalculate target positions: rotate 45 degrees
-  double x_target_r = +x_target + y_target;
-  double y_target_r = +y_target - x_target;
+  float x = target[0] + target[1];
+  float y = target[1] - target[0];
 
   is_moving.store(true);
-  std::thread([this, x_target_r, y_target_r] {
-    move_to_blocking(x_target_r, y_target_r);
+  std::thread([this, x, y] {
+    move_to_blocking(x, y);
     is_moving.store(false);
   }).detach();
 }
 
-void nF_EBD_Controller::move_to_x(double x_target) {
-  if (is_moving.load()) {
-    return;
-  }  // stage is unreachable while moving
-
-  is_moving.store(true);
-  std::thread([this, x_target] {
-    move_to_x_blocking(x_target);
-    is_moving.store(false);
-  }).detach();
-}
-
-void nF_EBD_Controller::move_to_y(double y_target) {
-  if (is_moving.load()) {
-    return;
-  }  // stage is unreachable while moving
-
-  is_moving.store(true);
-  std::thread([this, y_target] {
-    move_to_y_blocking(y_target);
-    is_moving.store(false);
-  }).detach();
-}
-
-double nF_EBD_Controller::read_x() {
-  int axis0 = 0;
-  float position;
-  nF_get_dev_axis_position_m(this->fd, 1, &axis0, &position);
-  return position - this->offset;
-}
-
-double nF_EBD_Controller::read_y() {
-  int axis1 = 1;
-  float position;
-  nF_get_dev_axis_position_m(this->fd, 1, &axis1, &position);
-  return position - this->offset;
+std::array<float, 2> nF_EBD_Controller::read() {
+  float position_x;
+  float position_y;
+  nF_get_dev_axis_position_m(this->fd, 1, &this->axis0, &position_x);
+  nF_get_dev_axis_position_m(this->fd, 1, &this->axis1, &position_y);
+  return {position_x - this->offset, position_y - this->offset};
 }
 
 void nF_EBD_Controller::move_to_blocking(float x_target, float y_target) {
-  int axis0 = 0;
-  int axis1 = 1;
   x_target = x_target + this->offset;
   y_target = y_target + this->offset;
-  nF_set_dev_axis_target_m(this->fd, 1, 1, &axis0, &x_target);
-  nF_set_dev_axis_target_m(this->fd, 1, 1, &axis1, &y_target);
-}
-
-void nF_EBD_Controller::move_to_x_blocking(float x_target) {
-  int axis0 = 0;
-  x_target = x_target + this->offset;
-  nF_set_dev_axis_target_m(this->fd, 1, 1, &axis0, &x_target);
-}
-
-void nF_EBD_Controller::move_to_y_blocking(float y_target) {
-  int axis1 = 1;
-  y_target = y_target + this->offset;
-  nF_set_dev_axis_target_m(this->fd, 1, 1, &axis1, &y_target);
+  nF_set_dev_axis_target_m(this->fd, 1, 1, &this->axis0, &x_target);
+  nF_set_dev_axis_target_m(this->fd, 1, 1, &this->axis1, &y_target);
 }
 
 void nF_EBD_Controller::close() { nF_intf_disconnect(this->fd); }

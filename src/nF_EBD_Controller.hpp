@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <iostream>
 
@@ -7,21 +8,17 @@ class nF_EBD_Controller {
  public:
   nF_EBD_Controller(char *com_name);
   void init();
-  double read();
-  void move_to(double x_target, double y_target);
-  void move_to_x(double x_target);
-  void move_to_y(double y_target);
-  double read_x();
-  double read_y();
+  std::array<float, 2> read();
+  void move_to(std::array<float, 2> target);
   void close();
 
  private:
   char name[1024];
   char com_name[1024];
   int fd;                       // file descriptor, to send commands to the stage
-  double offset = 4.0;          // mrad
+  int axis0 = 0;                // x-axis
+  int axis1 = 1;                // y-axis
+  float offset = 4.0;           // mrad
   std::atomic<bool> is_moving;  // stage is unreachable while moving
   void move_to_blocking(float x_target, float y_target);
-  void move_to_x_blocking(float x_target);
-  void move_to_y_blocking(float y_target);
 };
