@@ -1,9 +1,9 @@
 #include "PI_E727_Controller.hpp"
 
+#include <atomic>
 #include <cstring>
 #include <iostream>
 #include <thread>
-#include <atomic>
 
 #include "../lib/pi/AutoZeroSample.h"
 #include "../lib/pi/PI_GCS2_DLL.h"
@@ -98,29 +98,31 @@ void PI_E727_Controller::move_to_axis(int axis, double value) {
 }
 
 void PI_E727_Controller::move_to_x(double value) {
-  if (is_moving_x.load()) {return;} // stage is unreachable while moving
+  if (is_moving_x.load()) {
+    return;
+  }  // stage is unreachable while moving
 
   is_moving_x.store(true);
   std::thread([this, value] {
     move_to_x_blocking(value);
     is_moving_x.store(false);
   }).detach();
-
 }
 
 void PI_E727_Controller::move_to_y(double value) {
-  if (is_moving_y.load()) {return;} // stage is unreachable while moving
+  if (is_moving_y.load()) {
+    return;
+  }  // stage is unreachable while moving
 
   is_moving_y.store(true);
   std::thread([this, value] {
     move_to_y_blocking(value);
     is_moving_y.store(false);
   }).detach();
-
 }
 
 void PI_E727_Controller::move_to_x_blocking(double value) {
-  const double dValue = - value + offset; // the negative sign is because of the orientation of the piezo
+  const double dValue = -value + offset;  // the negative sign is because of the orientation of the piezo
   PI_MOV(iD, "1", &dValue);
 }
 

@@ -1,9 +1,9 @@
 #include "nF_EBD_Controller.hpp"
 
-#include <thread>
-#include <iostream>
 #include <atomic>
 #include <cstring>
+#include <iostream>
+#include <thread>
 
 #include "../lib/nF/nF_interface.h"
 
@@ -48,11 +48,13 @@ void nF_EBD_Controller::init() {
 }
 
 void nF_EBD_Controller::move_to(double x_target, double y_target) {
-  if (is_moving.load()) {return;} // stage is unreachable while moving
+  if (is_moving.load()) {
+    return;
+  }  // stage is unreachable while moving
 
   // recalculate target positions: rotate 45 degrees
-  double x_target_r = + x_target + y_target;
-  double y_target_r = + y_target - x_target;
+  double x_target_r = +x_target + y_target;
+  double y_target_r = +y_target - x_target;
 
   is_moving.store(true);
   std::thread([this, x_target_r, y_target_r] {
@@ -62,7 +64,9 @@ void nF_EBD_Controller::move_to(double x_target, double y_target) {
 }
 
 void nF_EBD_Controller::move_to_x(double x_target) {
-  if (is_moving.load()) {return;} // stage is unreachable while moving
+  if (is_moving.load()) {
+    return;
+  }  // stage is unreachable while moving
 
   is_moving.store(true);
   std::thread([this, x_target] {
@@ -72,7 +76,9 @@ void nF_EBD_Controller::move_to_x(double x_target) {
 }
 
 void nF_EBD_Controller::move_to_y(double y_target) {
-  if (is_moving.load()) {return;} // stage is unreachable while moving
+  if (is_moving.load()) {
+    return;
+  }  // stage is unreachable while moving
 
   is_moving.store(true);
   std::thread([this, y_target] {
@@ -116,7 +122,4 @@ void nF_EBD_Controller::move_to_y_blocking(float y_target) {
   nF_set_dev_axis_target_m(this->fd, 1, 1, &axis1, &y_target);
 }
 
-
-void nF_EBD_Controller::close() {
-  nF_intf_disconnect(this->fd);
-}
+void nF_EBD_Controller::close() { nF_intf_disconnect(this->fd); }

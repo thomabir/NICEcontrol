@@ -1,9 +1,9 @@
 #include "PI_E754_Controller.hpp"
 
+#include <atomic>
 #include <cstring>
 #include <iostream>
 #include <thread>
-#include <atomic>
 
 #include "../lib/pi/AutoZeroSample.h"
 #include "../lib/pi/PI_GCS2_DLL.h"
@@ -76,7 +76,9 @@ double PI_E754_Controller::read() {
 }
 
 void PI_E754_Controller::move_to(double value) {
-  if (is_moving.load()) {return;} // stage is unreachable while moving
+  if (is_moving.load()) {
+    return;
+  }  // stage is unreachable while moving
 
   is_moving.store(true);
   std::thread([this, value] {
@@ -89,14 +91,12 @@ void PI_E754_Controller::move_to(double value) {
 }
 
 void PI_E754_Controller::move_to_blocking(double value) {
-  double dValue = value * 1e-3 + offset; // value is in nm, convert to um
-  PI_MOV(iD, "1", &dValue); // PI_MOV blocks until the move is done
+  double dValue = value * 1e-3 + offset;  // value is in nm, convert to um
+  PI_MOV(iD, "1", &dValue);               // PI_MOV blocks until the move is done
 }
 
 // run autozero procedure
-void PI_E754_Controller::autozero() {
-  autozero_axis(iD, "1");
-}
+void PI_E754_Controller::autozero() { autozero_axis(iD, "1"); }
 
 void PI_E754_Controller::close() { PI_CloseConnection(iD); }
 

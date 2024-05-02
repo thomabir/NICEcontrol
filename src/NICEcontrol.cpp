@@ -88,57 +88,57 @@ struct Measurement {
 };
 
 class ControlData {
-  public:
-    double time;
-    float measurement;
-    float setpoint;
-    float dither_signal;
-    float controller_input;
-    float controller_output;
-    float actuator_command;
+ public:
+  double time;
+  float measurement;
+  float setpoint;
+  float dither_signal;
+  float controller_input;
+  float controller_output;
+  float actuator_command;
 
-    ControlData(double time, float measurement, float setpoint, float dither_signal, float controller_input, float controller_output, float actuator_command) {
-      this->time = time;
-      this->measurement = measurement;
-      this->setpoint = setpoint;
-      this->dither_signal = dither_signal;
-      this->controller_input = controller_input;
-      this->controller_output = controller_output;
-      this->actuator_command = actuator_command;
-    }
+  ControlData(double time, float measurement, float setpoint, float dither_signal, float controller_input,
+              float controller_output, float actuator_command) {
+    this->time = time;
+    this->measurement = measurement;
+    this->setpoint = setpoint;
+    this->dither_signal = dither_signal;
+    this->controller_input = controller_input;
+    this->controller_output = controller_output;
+    this->actuator_command = actuator_command;
+  }
 
-    ControlData() {
-      this->time = 0.0;
-      this->measurement = 0.0;
-      this->setpoint = 0.0;
-      this->dither_signal = 0.0;
-      this->controller_input = 0.0;
-      this->controller_output = 0.0;
-      this->actuator_command = 0.0;
-    }
+  ControlData() {
+    this->time = 0.0;
+    this->measurement = 0.0;
+    this->setpoint = 0.0;
+    this->dither_signal = 0.0;
+    this->controller_input = 0.0;
+    this->controller_output = 0.0;
+    this->actuator_command = 0.0;
+  }
 
-    ControlData(const ControlData &other) {
-      this->time = other.time;
-      this->measurement = other.measurement;
-      this->setpoint = other.setpoint;
-      this->dither_signal = other.dither_signal;
-      this->controller_input = other.controller_input;
-      this->controller_output = other.controller_output;
-      this->actuator_command = other.actuator_command;
-    }
+  ControlData(const ControlData &other) {
+    this->time = other.time;
+    this->measurement = other.measurement;
+    this->setpoint = other.setpoint;
+    this->dither_signal = other.dither_signal;
+    this->controller_input = other.controller_input;
+    this->controller_output = other.controller_output;
+    this->actuator_command = other.actuator_command;
+  }
 
-    ControlData &operator=(const ControlData &other) {
-      this->time = other.time;
-      this->measurement = other.measurement;
-      this->setpoint = other.setpoint;
-      this->dither_signal = other.dither_signal;
-      this->controller_input = other.controller_input;
-      this->controller_output = other.controller_output;
-      this->actuator_command = other.actuator_command;
-      return *this;
-    }
+  ControlData &operator=(const ControlData &other) {
+    this->time = other.time;
+    this->measurement = other.measurement;
+    this->setpoint = other.setpoint;
+    this->dither_signal = other.dither_signal;
+    this->controller_input = other.controller_input;
+    this->controller_output = other.controller_output;
+    this->actuator_command = other.actuator_command;
+    return *this;
+  }
 };
-
 
 template <int N>
 class ControlDataN {
@@ -169,96 +169,97 @@ class ControlDataN {
 };
 
 class SensorData {
-  public:
-    double time;
-    float opd;
-    float shear_x1;
-    float shear_x2;
-    float shear_y1;
-    float shear_y2;
-    float point_x1;
-    float point_x2;
-    float point_y1;
-    float point_y2;
+ public:
+  double time;
+  float opd;
+  float shear_x1;
+  float shear_x2;
+  float shear_y1;
+  float shear_y2;
+  float point_x1;
+  float point_x2;
+  float point_y1;
+  float point_y2;
 
-    SensorData(double time, float opd, float shear_x1, float shear_x2, float shear_y1, float shear_y2, float point_x1, float point_x2, float point_y1, float point_y2) {
-      this->time = time;
-      this->opd = opd;
-      this->shear_x1 = shear_x1;
-      this->shear_x2 = shear_x2;
-      this->shear_y1 = shear_y1;
-      this->shear_y2 = shear_y2;
-      this->point_x1 = point_x1;
-      this->point_x2 = point_x2;
-      this->point_y1 = point_y1;
-      this->point_y2 = point_y2;
-    }
+  SensorData(double time, float opd, float shear_x1, float shear_x2, float shear_y1, float shear_y2, float point_x1,
+             float point_x2, float point_y1, float point_y2) {
+    this->time = time;
+    this->opd = opd;
+    this->shear_x1 = shear_x1;
+    this->shear_x2 = shear_x2;
+    this->shear_y1 = shear_y1;
+    this->shear_y2 = shear_y2;
+    this->point_x1 = point_x1;
+    this->point_x2 = point_x2;
+    this->point_y1 = point_y1;
+    this->point_y2 = point_y2;
+  }
 
-    SensorData() {
-      this->time = 0.0;
-      this->opd = 0.0;
-      this->shear_x1 = 0.0;
-      this->shear_x2 = 0.0;
-      this->shear_y1 = 0.0;
-      this->shear_y2 = 0.0;
-      this->point_x1 = 0.0;
-      this->point_x2 = 0.0;
-      this->point_y1 = 0.0;
-      this->point_y2 = 0.0;
-    }
+  SensorData() {
+    this->time = 0.0;
+    this->opd = 0.0;
+    this->shear_x1 = 0.0;
+    this->shear_x2 = 0.0;
+    this->shear_y1 = 0.0;
+    this->shear_y2 = 0.0;
+    this->point_x1 = 0.0;
+    this->point_x2 = 0.0;
+    this->point_y1 = 0.0;
+    this->point_y2 = 0.0;
+  }
 
-    SensorData(const SensorData &other) {
-      this->time = other.time;
-      this->opd = other.opd;
-      this->shear_x1 = other.shear_x1;
-      this->shear_x2 = other.shear_x2;
-      this->shear_y1 = other.shear_y1;
-      this->shear_y2 = other.shear_y2;
-      this->point_x1 = other.point_x1;
-      this->point_x2 = other.point_x2;
-      this->point_y1 = other.point_y1;
-      this->point_y2 = other.point_y2;
-    }
+  SensorData(const SensorData &other) {
+    this->time = other.time;
+    this->opd = other.opd;
+    this->shear_x1 = other.shear_x1;
+    this->shear_x2 = other.shear_x2;
+    this->shear_y1 = other.shear_y1;
+    this->shear_y2 = other.shear_y2;
+    this->point_x1 = other.point_x1;
+    this->point_x2 = other.point_x2;
+    this->point_y1 = other.point_y1;
+    this->point_y2 = other.point_y2;
+  }
 
-    SensorData &operator=(const SensorData &other) {
-      this->time = other.time;
-      this->opd = other.opd;
-      this->shear_x1 = other.shear_x1;
-      this->shear_x2 = other.shear_x2;
-      this->shear_y1 = other.shear_y1;
-      this->shear_y2 = other.shear_y2;
-      this->point_x1 = other.point_x1;
-      this->point_x2 = other.point_x2;
-      this->point_y1 = other.point_y1;
-      this->point_y2 = other.point_y2;
-      return *this;
-    }
+  SensorData &operator=(const SensorData &other) {
+    this->time = other.time;
+    this->opd = other.opd;
+    this->shear_x1 = other.shear_x1;
+    this->shear_x2 = other.shear_x2;
+    this->shear_y1 = other.shear_y1;
+    this->shear_y2 = other.shear_y2;
+    this->point_x1 = other.point_x1;
+    this->point_x2 = other.point_x2;
+    this->point_y1 = other.point_y1;
+    this->point_y2 = other.point_y2;
+    return *this;
+  }
 
-    // acces by index
-    float &operator[](int i) {
-      switch (i) {
-        case 0:
-          return opd;
-        case 1:
-          return shear_x1;
-        case 2:
-          return shear_x2;
-        case 3:
-          return shear_y1;
-        case 4:
-          return shear_y2;
-        case 5:
-          return point_x1;
-        case 6:
-          return point_x2;
-        case 7:
-          return point_y1;
-        case 8:
-          return point_y2;
-        default:
-          return opd;
-      }
+  // acces by index
+  float &operator[](int i) {
+    switch (i) {
+      case 0:
+        return opd;
+      case 1:
+        return shear_x1;
+      case 2:
+        return shear_x2;
+      case 3:
+        return shear_y1;
+      case 4:
+        return shear_y2;
+      case 5:
+        return point_x1;
+      case 6:
+        return point_x2;
+      case 7:
+        return point_y1;
+      case 8:
+        return point_y2;
+      default:
+        return opd;
     }
+  }
 };
 
 template <int N>
@@ -266,7 +267,7 @@ class VecN {
  public:
   float data[N];
 
-  VecN() { // default: fill with zeros
+  VecN() {  // default: fill with zeros
     for (int i = 0; i < N; i++) {
       data[i] = 0.0f;
     }
@@ -578,7 +579,6 @@ float pointing_x2_setpoint_gui = 0.0f;
 float pointing_y1_setpoint_gui = 0.0f;
 float pointing_y2_setpoint_gui = 0.0f;
 
-
 // variables that control the measurement thread
 std::atomic<bool> RunMeasurement(false);
 
@@ -636,14 +636,10 @@ void setupActuators() {
   std::cout << "OPD Position: " << opd_stage.read() << std::endl;
 }
 
-
-
 TSCircularBuffer<SensorData> sensorDataQueue;
 
 TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
 TSCircularBuffer<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
-
-
 
 int setup_ethernet() {
   // setup ethernet connection
@@ -703,13 +699,8 @@ class CombinedPIController {
   // example initialisation: CombinedPIController<2> shear1_pi_controller({shear_x1_pi, shear_y1_pi});
   CombinedPIController(std::array<PIController *, N> controllers) : controllers(controllers) {}
 
-
-
-
   // set the P and I gains for the i-th controller
-  void setPI(int i, float P, float I) {
-    controllers[i]->setPI(P, I);
-  }
+  void setPI(int i, float P, float I) { controllers[i]->setPI(P, I); }
 
   // reset the state of all controllers
   void reset_state() {
@@ -727,12 +718,11 @@ class CombinedPIController {
     return output;
   }
 
-  private:
-    std::array<PIController *, N> controllers;
-
+ private:
+  std::array<PIController *, N> controllers;
 };
 
-template <int N, class C, class A> // N x N MIMO control loop
+template <int N, class C, class A>  // N x N MIMO control loop
 class MIMOControlLoop {
  public:
   // control mode is 0 by default
@@ -839,26 +829,31 @@ class MIMOControlLoop {
     // prepare data to be pushed to the buffer
     // make an array of N controldata objects
     ControlData control_data[N];
-    
+
     // fill the array with data
     for (int i = 0; i < N; i++) {
-      control_data[i] = {t, sensor_data[i], setpoint[i], dither_signal[i], controller_input[i], controller_output[i], actuator_command[i]};
+      control_data[i] = {t,
+                         sensor_data[i],
+                         setpoint[i],
+                         dither_signal[i],
+                         controller_input[i],
+                         controller_output[i],
+                         actuator_command[i]};
     }
 
     // push the data to the buffer
     this->controlDataBuffer.push(control_data);
-
   }
- 
+
   std::atomic<float> setpoint[N] = {0.0f};
   std::atomic<float> Ps[N] = {0.0f};
   std::atomic<float> Is[N] = {0.0f};
   std::atomic<float> dither_freq = 0.0f;
   std::atomic<float> dither_amp = 0.0f;
   std::atomic<int> dither_axis = 0;
-  std::atomic<int> dither_mode[N] = {0}; // 0 = off, 1 = dither controller, 2 = dither plant
-  std::atomic<int> plant_input[N] = {0}; // 0 = off, 1 = plant gets setpoint, 2 = plant gets controller output
-  std::atomic<int> controller_input[N] = {0}; // 0 = 0 as input, 1 = setpoint - measurement as input
+  std::atomic<int> dither_mode[N] = {0};       // 0 = off, 1 = dither controller, 2 = dither plant
+  std::atomic<int> plant_input[N] = {0};       // 0 = off, 1 = plant gets setpoint, 2 = plant gets controller output
+  std::atomic<int> controller_input[N] = {0};  // 0 = 0 as input, 1 = setpoint - measurement as input
 
   A &actuator;
   C &controller;
@@ -866,10 +861,9 @@ class MIMOControlLoop {
   // data buffer: 1 + N x 6 columns
   // time, 6x(sensor_data, setpoint, dither_signal, controller_input, controller_output, actuator_command)
   TSCircularBuffer<ControlDataN<N>> controlDataBuffer;
-
 };
 
-template <class C, class A> // SISO control loop
+template <class C, class A>  // SISO control loop
 class SISOControlLoop {
  public:
   // control mode is 0 by default
@@ -885,7 +879,7 @@ class SISOControlLoop {
     this->dither_amp.store(0.0f);
 
     // reset controller
-    this->controller.reset_all(); // also resets P, I
+    this->controller.reset_all();  // also resets P, I
   }
 
   void control(double t, float measurement) {
@@ -912,7 +906,7 @@ class SISOControlLoop {
     switch (cm) {
       case 0:  // do nothing
         break;
-      case 1: // P
+      case 1:  // P
         actuator_command = (setpoint + dither_signal);
         this->stage.move_to(actuator_command);
         break;
@@ -1029,7 +1023,6 @@ SISOControlLoop point_x1_loop(point_x1_controller, point_x1_actuator);
 SISOControlLoop point_x2_loop(point_x2_controller, point_x2_actuator);
 SISOControlLoop point_y1_loop(point_y1_controller, point_y1_actuator);
 SISOControlLoop point_y2_loop(point_y2_controller, point_y2_actuator);
-
 
 void run_calculation() {
   int sockfd = setup_ethernet();
@@ -1169,7 +1162,8 @@ void run_calculation() {
 }
 
 template <class C, class A>
-void characterise_open_loop(SISOControlLoop<C,A> &loop, float P, float I, float t_settle, float t_record, std::string filename) {
+void characterise_open_loop(SISOControlLoop<C, A> &loop, float P, float I, float t_settle, float t_record,
+                            std::string filename) {
   // prepare storage file
   std::ofstream file(filename);
   file << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
@@ -1179,8 +1173,10 @@ void characterise_open_loop(SISOControlLoop<C,A> &loop, float P, float I, float 
   loop.control_mode.store(0);
   loop.p.store(P);
   loop.i.store(I);
-  std::this_thread::sleep_for(std::chrono::seconds(int(t_settle))); // wait settling time
-  while (!sensorDataQueue.isempty()) {sensorDataQueue.pop();} // flush measurement queue
+  std::this_thread::sleep_for(std::chrono::seconds(int(t_settle)));  // wait settling time
+  while (!sensorDataQueue.isempty()) {
+    sensorDataQueue.pop();
+  }  // flush measurement queue
 
   // record data for t_record seconds
   auto t_start = std::chrono::high_resolution_clock::now();
@@ -1197,19 +1193,20 @@ void characterise_open_loop(SISOControlLoop<C,A> &loop, float P, float I, float 
         // format: 6 decimals for time, 3 decimals for measurement
         file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd
              << "," << std::fixed << std::setprecision(3) << m.shear_x1 << "," << std::fixed << std::setprecision(3)
-              << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed
-              << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1
-              << "," << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3)
-              << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
+             << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed
+             << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1 << ","
+             << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3)
+             << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
       }
     }
   }
   // reset
   loop.reset_all();
 }
-  
+
 template <class C, class A>
-void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, float t_settle, float t_record, float f1, float f2, float fsteps, float dither_amp, std::string description) {
+void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, float t_settle, float t_record, float f1,
+                               float f2, float fsteps, float dither_amp, std::string description) {
   std::cout << "Starting control loop characterisation" << std::endl;
 
   // dither frequencies
@@ -1261,15 +1258,10 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, fl
   }
   freq_file.close();
 
-
-
-
   // reset all
   loop.reset_all();
   loop.p.store(P);
   loop.i.store(I);
-
-  
 
   // OPEN LOOP CHARACTERISATION
   std::cout << "\t Open loop time series" << std::endl;
@@ -1317,10 +1309,10 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, fl
         // format: 6 decimals for time, 3 decimals for OPD
         file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd
              << "," << std::fixed << std::setprecision(3) << m.shear_x1 << "," << std::fixed << std::setprecision(3)
-              << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed
-              << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1
-              << "," << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3)
-              << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
+             << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed
+             << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1 << ","
+             << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3)
+             << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
       }
     }
   }
@@ -1522,9 +1514,9 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, fl
           // format: 6 decimals for time, 3 decimals for OPD
           file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3)
                << m.measurement << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed
-                << std::setprecision(3) << m.dither_signal << "," << std::fixed << std::setprecision(3)
-                << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << ","
-                << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
+               << std::setprecision(3) << m.dither_signal << "," << std::fixed << std::setprecision(3)
+               << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << ","
+               << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
         }
       }
 
@@ -1719,12 +1711,10 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, fl
   loop.reset_all();
   loop.p.store(P);
   loop.i.store(I);
-  
 
   gui_control.store(true);
   std::cout << "Finished control loop characterisation: " << description << std::endl;
 }
-
 
 template <class C1, class A1, class C2, class A2, class A3>
 void characterise_joint_closed_loop(SISOControlLoop<C1, A1> &opd_loop, SISOControlLoop<C2, A2> &shear_x1_loop,
@@ -1812,10 +1802,10 @@ void characterise_joint_closed_loop(SISOControlLoop<C1, A1> &opd_loop, SISOContr
         // format: 6 decimals for time, 3 decimals for OPD
         file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3) << m.opd
              << "," << std::fixed << std::setprecision(3) << m.shear_x1 << "," << std::fixed << std::setprecision(3)
-              << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed
-              << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1
-              << "," << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3)
-              << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
+             << m.shear_x2 << "," << std::fixed << std::setprecision(3) << m.shear_y1 << "," << std::fixed
+             << std::setprecision(3) << m.shear_y2 << "," << std::fixed << std::setprecision(3) << m.point_x1 << ","
+             << std::fixed << std::setprecision(3) << m.point_x2 << "," << std::fixed << std::setprecision(3)
+             << m.point_y1 << "," << std::fixed << std::setprecision(3) << m.point_y2 << "\n";
       }
     }
   }
@@ -1829,12 +1819,9 @@ void characterise_joint_closed_loop(SISOControlLoop<C1, A1> &opd_loop, SISOContr
   shear_y1_loop.control_mode.store(0);
   shear_y2_loop.control_mode.store(0);
 
-
   // DONE
   std::cout << "Finished joint closed loop characterisation: " << description << std::endl;
-                                
 }
-
 
 void startMeasurement() {
   RunMeasurement.store(true);
@@ -1859,13 +1846,11 @@ void RenderUI() {
   static int shear_loop_select = 0;
   static float shear_p_gui = 0.4f;
   static float shear_i_gui = 0.007f;
-  
 
   // pointing control <-> GUI
   static int pointing_loop_select = 0;
   static float pointing_p_gui = 1e-5f;
   static float pointing_i_gui = 1e-7f;
-
 
   if (gui_control.load()) {
     // OPD
@@ -2128,7 +2113,8 @@ void RenderUI() {
       // loop, p, i, t_settle, t_record, f1, f2, fstep, dither_amp, description
       characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 2.0, 10.0, 1000.0, 5, 50.0, "opd_box_test");
       characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 2.0, 10.0, 300.0, 5, 30.0, "shear_x1_box_test");
-      characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01, 0.4, 0.007, 1.0, 2.0, "joint_box_test");
+      characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01,
+                                     0.4, 0.007, 1.0, 2.0, "joint_box_test");
     }
 
     // control mode selector
@@ -2139,8 +2125,6 @@ void RenderUI() {
     ImGui::RadioButton("Open loop##OPD", &gui_opd_loop_select, 1);
     ImGui::SameLine();
     ImGui::RadioButton("Closed loop##OPD", &gui_opd_loop_select, 2);
-
-    
 
     // real time plot
     static ScrollingBuffer opd_dith_buffer, setpoint_buffer;
@@ -2321,8 +2305,8 @@ void RenderUI() {
       const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
 
       // opd input: drag
-      ImGui::SliderFloat("Setpoint", &opd_setpoint_gui, opd_setpoint_min, opd_setpoint_max,
-                         "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Setpoint", &opd_setpoint_gui, opd_setpoint_min, opd_setpoint_max, "%.1f nm",
+                         ImGuiSliderFlags_AlwaysClamp);
 
       // clamp opd_setpoint_gui to min/max
       if (opd_setpoint_gui < opd_setpoint_min) opd_setpoint_gui = opd_setpoint_min;
@@ -2346,8 +2330,6 @@ void RenderUI() {
     ImGui::RadioButton("Open loop##X", &shear_loop_select, 1);
     ImGui::SameLine();
     ImGui::RadioButton("Closed loop##X", &shear_loop_select, 2);
-
-    
 
     static float t_gui_x = 0;
 
@@ -2491,16 +2473,14 @@ void RenderUI() {
       const float x1d_setpoint_min = -1000.0f, x1d_setpoint_max = 1000.0f;
 
       // x1d input: drag
-      ImGui::SliderFloat("Setpoint X1", &shear_x1_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
-                         "%.1f", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::SliderFloat("Setpoint Y1", &shear_y1_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
-                         "%.1f", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::SliderFloat("Setpoint X2", &shear_x2_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
-                          "%.1f", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::SliderFloat("Setpoint Y2", &shear_y2_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
-                          "%.1f", ImGuiSliderFlags_AlwaysClamp);
-      
-
+      ImGui::SliderFloat("Setpoint X1", &shear_x1_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max, "%.1f",
+                         ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Setpoint Y1", &shear_y1_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max, "%.1f",
+                         ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Setpoint X2", &shear_x2_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max, "%.1f",
+                         ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Setpoint Y2", &shear_y2_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max, "%.1f",
+                         ImGuiSliderFlags_AlwaysClamp);
 
       ImGui::TreePop();
     }
@@ -2566,7 +2546,6 @@ void RenderUI() {
       // pointing input: drag
       ImGui::SliderFloat("(Drag or double-click to adjust)", &pointing_x1_setpoint_gui, pointing_setpoint_min,
                          pointing_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
-
 
       ImGui::TreePop();
     }
