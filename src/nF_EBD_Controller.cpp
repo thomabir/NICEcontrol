@@ -61,6 +61,26 @@ void nF_EBD_Controller::move_to(double x_target, double y_target) {
   }).detach();
 }
 
+void nF_EBD_Controller::move_to_x(double x_target) {
+  if (is_moving.load()) {return;} // stage is unreachable while moving
+
+  is_moving.store(true);
+  std::thread([this, x_target] {
+    move_to_x_blocking(x_target);
+    is_moving.store(false);
+  }).detach();
+}
+
+void nF_EBD_Controller::move_to_y(double y_target) {
+  if (is_moving.load()) {return;} // stage is unreachable while moving
+
+  is_moving.store(true);
+  std::thread([this, y_target] {
+    move_to_y_blocking(y_target);
+    is_moving.store(false);
+  }).detach();
+}
+
 double nF_EBD_Controller::read_x() {
   int axis0 = 0;
   float position;
@@ -83,6 +103,19 @@ void nF_EBD_Controller::move_to_blocking(float x_target, float y_target) {
   nF_set_dev_axis_target_m(this->fd, 1, 1, &axis0, &x_target);
   nF_set_dev_axis_target_m(this->fd, 1, 1, &axis1, &y_target);
 }
+
+void nF_EBD_Controller::move_to_x_blocking(float x_target) {
+  int axis0 = 0;
+  x_target = x_target + this->offset;
+  nF_set_dev_axis_target_m(this->fd, 1, 1, &axis0, &x_target);
+}
+
+void nF_EBD_Controller::move_to_y_blocking(float y_target) {
+  int axis1 = 1;
+  y_target = y_target + this->offset;
+  nF_set_dev_axis_target_m(this->fd, 1, 1, &axis1, &y_target);
+}
+
 
 void nF_EBD_Controller::close() {
   nF_intf_disconnect(this->fd);

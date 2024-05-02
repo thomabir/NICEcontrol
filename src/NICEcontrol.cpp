@@ -574,16 +574,10 @@ float shear_y2_setpoint_gui = 0.0f;
 
 // pointing control
 float pointing_x1_setpoint_gui = 0.0f;
-std::atomic<float> pointing_x1_setpoint = 0.0f;
 float pointing_x2_setpoint_gui = 0.0f;
-std::atomic<float> pointing_x2_setpoint = 0.0f;
 float pointing_y1_setpoint_gui = 0.0f;
-std::atomic<float> pointing_y1_setpoint = 0.0f;
 float pointing_y2_setpoint_gui = 0.0f;
-std::atomic<float> pointing_y2_setpoint = 0.0f;
-std::atomic<bool> RunPointingControl(false);
-std::atomic<float> pointing_p = 0.0f;
-std::atomic<float> pointing_i = 0.0f;
+
 
 // variables that control the measurement thread
 std::atomic<bool> RunMeasurement(false);
@@ -643,10 +637,6 @@ void setupActuators() {
 }
 
 
-static float pointing_x1_ol_setpoint = 0.0f;
-static float pointing_x2_ol_setpoint = 0.0f;
-static float pointing_y1_ol_setpoint = 0.0f;
-static float pointing_y2_ol_setpoint = 0.0f;
 
 TSCircularBuffer<SensorData> sensorDataQueue;
 
@@ -988,6 +978,25 @@ class ShearYActuator {
   PI_E727_Controller &stage;
 };
 
+class nFShearXActuator {
+ public:
+  nFShearXActuator(nF_EBD_Controller &stage) : stage(stage) {}
+
+  void move_to(float position) { stage.move_to_x(position); }
+
+ private:
+  nF_EBD_Controller &stage;
+};
+
+class nFShearYActuator {
+ public:
+  nFShearYActuator(nF_EBD_Controller &stage) : stage(stage) {}
+
+  void move_to(float position) { stage.move_to_y(position); }
+
+ private:
+  nF_EBD_Controller &stage;
+};
 
 // controllers
 PIController opd_controller;
@@ -995,12 +1004,20 @@ PIController shear_x1_controller;
 PIController shear_x2_controller;
 PIController shear_y1_controller;
 PIController shear_y2_controller;
+PIController point_x1_controller;
+PIController point_x2_controller;
+PIController point_y1_controller;
+PIController point_y2_controller;
 
 // actuators
 ShearXActuator shear_x1_actuator(tip_tilt_stage1);
 ShearXActuator shear_x2_actuator(tip_tilt_stage2);
 ShearYActuator shear_y1_actuator(tip_tilt_stage1);
 ShearYActuator shear_y2_actuator(tip_tilt_stage2);
+nFShearXActuator point_x1_actuator(nF_stage_1);
+nFShearXActuator point_x2_actuator(nF_stage_2);
+nFShearYActuator point_y1_actuator(nF_stage_1);
+nFShearYActuator point_y2_actuator(nF_stage_2);
 
 // control loops
 SISOControlLoop opd_loop(opd_controller, opd_stage);
@@ -1008,6 +1025,10 @@ SISOControlLoop shear_x1_loop(shear_x1_controller, shear_x1_actuator);
 SISOControlLoop shear_x2_loop(shear_x2_controller, shear_x2_actuator);
 SISOControlLoop shear_y1_loop(shear_y1_controller, shear_y1_actuator);
 SISOControlLoop shear_y2_loop(shear_y2_controller, shear_y2_actuator);
+SISOControlLoop point_x1_loop(point_x1_controller, point_x1_actuator);
+SISOControlLoop point_x2_loop(point_x2_controller, point_x2_actuator);
+SISOControlLoop point_y1_loop(point_y1_controller, point_y1_actuator);
+SISOControlLoop point_y2_loop(point_y2_controller, point_y2_actuator);
 
 
 void run_calculation() {
@@ -1134,58 +1155,16 @@ void run_calculation() {
       point_sum_queue.push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
     }
 
-    // variables for control
-    static float pointing_x1_error = 0.0f;
-    static float pointing_x1_error_integral = 0.0f;
-    static float pointing_x1_control_signal = 0.0f;
-
-    static float pointing_x2_error = 0.0f;
-    static float pointing_x2_error_integral = 0.0f;
-    static float pointing_x2_control_signal = 0.0f;
-
-    static float pointing_y1_error = 0.0f;
-    static float pointing_y1_error_integral = 0.0f;
-    static float pointing_y1_control_signal = 0.0f;
-
-    static float pointing_y2_error = 0.0f;
-    static float pointing_y2_error_integral = 0.0f;
-    static float pointing_y2_control_signal = 0.0f;
-
     // Run control loops
     opd_loop.control(t, opd_f);
     shear_x1_loop.control(t, shear_x1_f);
     shear_x2_loop.control(t, shear_x2_f);
     shear_y1_loop.control(t, shear_y1_f);
     shear_y2_loop.control(t, shear_y2_f);
-
-    if (RunPointingControl.load()) {
-      // calculate error
-      pointing_x1_error = pointing_x1_setpoint.load() - point_x1_f;
-      pointing_x2_error = pointing_x2_setpoint.load() - point_x2_f;
-      pointing_y1_error = pointing_y1_setpoint.load() - point_y1_f;
-      pointing_y2_error = pointing_y2_setpoint.load() - point_y2_f;
-
-      // calculate integral
-      pointing_x1_error_integral += pointing_i.load() * pointing_x1_error;
-      pointing_x2_error_integral += pointing_i.load() * pointing_x2_error;
-      pointing_y1_error_integral += pointing_i.load() * pointing_y1_error;
-      pointing_y2_error_integral += pointing_i.load() * pointing_y2_error;
-
-      // calculate control signal
-      pointing_x1_control_signal = pointing_p.load() * pointing_x1_error + pointing_x1_error_integral;
-      pointing_x2_control_signal = pointing_p.load() * pointing_x2_error + pointing_x2_error_integral;
-      pointing_y1_control_signal = pointing_p.load() * pointing_y1_error + pointing_y1_error_integral;
-      pointing_y2_control_signal = pointing_p.load() * pointing_y2_error + pointing_y2_error_integral;
-
-      // actuate piezo actuator
-      nF_stage_1.move_to(pointing_x1_control_signal, pointing_y1_control_signal);
-      nF_stage_2.move_to(pointing_x2_control_signal, pointing_y2_control_signal);
-    } else {
-      pointing_x1_error_integral = 0.0f;
-      pointing_x2_error_integral = 0.0f;
-      pointing_y1_error_integral = 0.0f;
-      pointing_y2_error_integral = 0.0f;
-    }
+    point_x1_loop.control(t, point_x1_f);
+    point_x2_loop.control(t, point_x2_f);
+    point_y1_loop.control(t, point_y1_f);
+    point_y2_loop.control(t, point_y2_f);
   }
 }
 
@@ -1876,8 +1855,20 @@ void RenderUI() {
   static float opd_dither_freq_gui = 0.0f;
   static float opd_dither_amp_gui = 0.0f;
 
+  // shear control <-> GUI
+  static int shear_loop_select = 0;
+  static float shear_p_gui = 0.4f;
+  static float shear_i_gui = 0.007f;
+  
+
+  // pointing control <-> GUI
+  static int pointing_loop_select = 0;
+  static float pointing_p_gui = 1e-5f;
+  static float pointing_i_gui = 1e-7f;
+
+
   if (gui_control.load()) {
-    // run control if "Closed loop" is selected
+    // OPD
     if (gui_opd_loop_select == 2) {
       opd_loop.control_mode.store(4);
     } else if (gui_opd_loop_select == 1) {
@@ -1886,40 +1877,76 @@ void RenderUI() {
       opd_loop.control_mode.store(0);
     }
 
-    // move stage to open loop setpoint if "Open loop" is selected
-
-    // store control loop parameters
     opd_loop.setpoint.store(opd_setpoint_gui);
     opd_loop.p.store(opd_p_gui);
     opd_loop.i.store(opd_i_gui);
     opd_loop.dither_freq.store(opd_dither_freq_gui);
     opd_loop.dither_amp.store(opd_dither_amp_gui);
+
+    // Shear
+    if (shear_loop_select == 2) {
+      shear_x1_loop.control_mode.store(4);
+      shear_x2_loop.control_mode.store(4);
+      shear_y1_loop.control_mode.store(4);
+      shear_y2_loop.control_mode.store(4);
+    } else if (shear_loop_select == 1) {
+      shear_x1_loop.control_mode.store(1);
+      shear_x2_loop.control_mode.store(1);
+      shear_y1_loop.control_mode.store(1);
+      shear_y2_loop.control_mode.store(1);
+    } else {
+      shear_x1_loop.control_mode.store(0);
+      shear_x2_loop.control_mode.store(0);
+      shear_y1_loop.control_mode.store(0);
+      shear_y2_loop.control_mode.store(0);
+    }
+
+    shear_x1_loop.p.store(shear_p_gui);
+    shear_x1_loop.i.store(shear_i_gui);
+    shear_x2_loop.p.store(shear_p_gui);
+    shear_x2_loop.i.store(shear_i_gui);
+    shear_y1_loop.p.store(shear_p_gui);
+    shear_y1_loop.i.store(shear_i_gui);
+    shear_y2_loop.p.store(shear_p_gui);
+    shear_y2_loop.i.store(shear_i_gui);
+
+    shear_x1_loop.setpoint.store(shear_x1_setpoint_gui);
+    shear_x2_loop.setpoint.store(shear_x2_setpoint_gui);
+    shear_y1_loop.setpoint.store(shear_y1_setpoint_gui);
+    shear_y2_loop.setpoint.store(shear_y2_setpoint_gui);
+
+    // Pointing
+    if (pointing_loop_select == 2) {
+      point_x1_loop.control_mode.store(4);
+      point_x2_loop.control_mode.store(4);
+      point_y1_loop.control_mode.store(4);
+      point_y2_loop.control_mode.store(4);
+    } else if (pointing_loop_select == 1) {
+      point_x1_loop.control_mode.store(1);
+      point_x2_loop.control_mode.store(1);
+      point_y1_loop.control_mode.store(1);
+      point_y2_loop.control_mode.store(1);
+    } else {
+      point_x1_loop.control_mode.store(0);
+      point_x2_loop.control_mode.store(0);
+      point_y1_loop.control_mode.store(0);
+      point_y2_loop.control_mode.store(0);
+    }
+
+    point_x1_loop.p.store(pointing_p_gui);
+    point_x1_loop.i.store(pointing_i_gui);
+    point_x2_loop.p.store(pointing_p_gui);
+    point_x2_loop.i.store(pointing_i_gui);
+    point_y1_loop.p.store(pointing_p_gui);
+    point_y1_loop.i.store(pointing_i_gui);
+    point_y2_loop.p.store(pointing_p_gui);
+    point_y2_loop.i.store(pointing_i_gui);
+
+    point_x1_loop.setpoint.store(pointing_x1_setpoint_gui);
+    point_x2_loop.setpoint.store(pointing_x2_setpoint_gui);
+    point_y1_loop.setpoint.store(pointing_y1_setpoint_gui);
+    point_y2_loop.setpoint.store(pointing_y2_setpoint_gui);
   }
-
-  // shear control <-> GUI
-  static int shear_loop_select = 0;
-  static float shear_p_gui = 0.4f;
-  static float shear_i_gui = 0.007f;
-  shear_x1_loop.p.store(shear_p_gui);
-  shear_x1_loop.i.store(shear_i_gui);
-  shear_x2_loop.p.store(shear_p_gui);
-  shear_x2_loop.i.store(shear_i_gui);
-  shear_y1_loop.p.store(shear_p_gui);
-  shear_y1_loop.i.store(shear_i_gui);
-  shear_y2_loop.p.store(shear_p_gui);
-  shear_y2_loop.i.store(shear_i_gui);
-
-  shear_x1_loop.setpoint.store(shear_x1_setpoint_gui);
-  shear_x2_loop.setpoint.store(shear_x2_setpoint_gui);
-  shear_y1_loop.setpoint.store(shear_y1_setpoint_gui);
-  shear_y2_loop.setpoint.store(shear_y2_setpoint_gui);
-
-  // pointing control <-> GUI
-  static int pointing_loop_select = 0;
-  static float pointing_p_gui = 1e-5f;
-  static float pointing_i_gui = 1e-7f;
-  pointing_p.store(pointing_p_gui);
-  pointing_i.store(pointing_i_gui);
 
   static auto current_measurement = 0.f;
   if (!sensorDataQueue.isempty()) {
@@ -2320,27 +2347,6 @@ void RenderUI() {
     ImGui::SameLine();
     ImGui::RadioButton("Closed loop##X", &shear_loop_select, 2);
 
-    // run control if "Closed loop" is selected
-    if (shear_loop_select == 2) {
-      shear_x1_loop.control_mode.store(4);
-      shear_x2_loop.control_mode.store(4);
-      shear_y1_loop.control_mode.store(4);
-      shear_y2_loop.control_mode.store(4);
-    } else {
-      shear_x1_loop.control_mode.store(0);
-      shear_x2_loop.control_mode.store(0);
-      shear_y1_loop.control_mode.store(0);
-      shear_y2_loop.control_mode.store(0);
-    }
-
-    // open loop
-    if (shear_loop_select == 1) {
-      shear_x1_loop.control_mode.store(1);
-      shear_x2_loop.control_mode.store(1);
-      shear_y1_loop.control_mode.store(1);
-      shear_y2_loop.control_mode.store(1);
-    }
-
     
 
     static float t_gui_x = 0;
@@ -2511,19 +2517,6 @@ void RenderUI() {
     ImGui::SameLine();
     ImGui::RadioButton("Closed loop##Pointing", &pointing_loop_select, 2);
 
-    // run control if "Closed loop" is selected
-    if (pointing_loop_select == 2) {
-      RunPointingControl.store(true);
-    } else {
-      RunPointingControl.store(false);
-    }
-
-    // open loop
-    if (pointing_loop_select == 1) {
-      nF_stage_1.move_to(pointing_x1_ol_setpoint, pointing_y1_ol_setpoint);
-      nF_stage_2.move_to(pointing_x2_ol_setpoint, pointing_y2_ol_setpoint);
-    }
-
     static float t_gui_x = 0;
 
     // if measurement is running, update gui time.
@@ -2560,17 +2553,6 @@ void RenderUI() {
       ImPlot::EndPlot();
     }
 
-    // pointing actuator
-    if (ImGui::TreeNode("Actuator##Pointing")) {
-      // open loop setpoint µm
-      ImGui::SliderFloat("X1 setpoint##Pointing", &pointing_x1_ol_setpoint, -5.0f, 5.0f);
-      ImGui::SliderFloat("Y1 setpoint##Pointing", &pointing_y1_ol_setpoint, -5.0f, 5.0f);
-      ImGui::SliderFloat("X2 setpoint##Pointing", &pointing_x2_ol_setpoint, -5.0f, 5.0f);
-      ImGui::SliderFloat("Y2 setpoint##Pointing", &pointing_y2_ol_setpoint, -5.0f, 5.0f);
-
-      ImGui::TreePop();
-    }
-
     // pointing control
     if (ImGui::TreeNode("Control loop##Pointing")) {
       ImGui::Text("Control loop parameters:");
@@ -2585,8 +2567,6 @@ void RenderUI() {
       ImGui::SliderFloat("(Drag or double-click to adjust)", &pointing_x1_setpoint_gui, pointing_setpoint_min,
                          pointing_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
 
-      // set pointing_x1_setpoint
-      pointing_x1_setpoint.store(pointing_x1_setpoint_gui);
 
       ImGui::TreePop();
     }
