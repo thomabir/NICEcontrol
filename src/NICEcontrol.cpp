@@ -1694,6 +1694,15 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
   }
 
   // DONE
+
+  // disable and reset control loop
+  loop.control_mode.store(0);
+  loop.setpoint.store(0.0);
+  loop.dither_freq.store(0.0);
+  loop.dither_amp.store(0.0);
+  loop.controller.reset_state();
+  
+
   gui_control.store(true);
   std::cout << "Finished control loop characterisation: " << description << std::endl;
 }
