@@ -1518,11 +1518,6 @@ void characterise_joint_closed_loop(SISOControlLoop<C1, A1> &opd_loop, SISOContr
                                     float shear_i, float t_settle, float t_record, std::string description) {
   std::cout << "Starting joint closed loop characterisation" << std::endl;
 
-  // wait for one minute (leave the room)
-  // std::cout << "Waiting for one minute" << std::endl;
-  // std::this_thread::sleep_for(std::chrono::seconds(60));
-  // std::cout << "Done waiting" << std::endl;
-
   // reset control loops
   opd_loop.reset_all();
   shear_x1_loop.reset_all();
@@ -1890,9 +1885,9 @@ void RenderUI() {
       gui_control.store(false);
       opd_char_button = false;
 
-      // std::cout << "Waiting for one minute" << std::endl;
-      // std::this_thread::sleep_for(std::chrono::seconds(60));
-      // std::cout << "Done waiting" << std::endl;
+      std::cout << "Waiting for one minute" << std::endl;
+      std::this_thread::sleep_for(std::chrono::seconds(60));
+      std::cout << "Done waiting" << std::endl;
 
       // loop, p, i, t_settle, t_record, f1, f2, fstep, dither_amp, description
       characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_no_box_overnight");
