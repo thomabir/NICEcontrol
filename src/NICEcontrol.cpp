@@ -428,10 +428,10 @@ class FFT_calculator {
 Iir::Butterworth::LowPass<2> shear_x1_lpfilt, shear_x2_lpfilt, shear_y1_lpfilt, shear_y2_lpfilt;
 Iir::Butterworth::LowPass<2> point_x1_lpfilt, point_x2_lpfilt, point_y1_lpfilt, point_y2_lpfilt;
 Iir::Butterworth::LowPass<2> opd_lp_filter;
-const float shear_samplingrate = 12800.;
-const float shear_lpfilt_cutoff = 1000.;
+const float shear_samplingrate = 128000.;
+const float shear_lpfilt_cutoff = 300.;
 const float opd_samplingrate = 128000.;
-const float opd_lpfilt_cutoff = 10000.;
+const float opd_lpfilt_cutoff = 1000.;
 
 namespace NICEcontrol {
 
@@ -468,8 +468,8 @@ PI_E727_Controller tip_tilt_stage1(serial_number1);
 char serial_number2[1024] = "0122042007";
 PI_E727_Controller tip_tilt_stage2(serial_number2);
 
-nF_EBD_Controller nF_stage_1("/dev/ttyUSB0");
-nF_EBD_Controller nF_stage_2("/dev/ttyUSB1");
+nF_EBD_Controller nF_stage_1("/dev/ttyUSB1");
+nF_EBD_Controller nF_stage_2("/dev/ttyUSB0");
 
 void setupActuators() {
   // connect and intialise all piezo stages
@@ -540,33 +540,6 @@ int setup_ethernet() {
 
   return sockfd;
 }
-
-// a class for a new actuator, which includes both the opd stage and one of the tip/tilt stages
-class CombinedActuator {
- public:
-  CombinedActuator(PI_E754_Controller &opd_stage, PI_E727_Controller &tip_tilt_stage)
-      : opd_stage(opd_stage), tip_tilt_stage(tip_tilt_stage) {}
-
-  void move_to_axis(int axis, float position) {
-    switch (axis) {
-      case 0:
-        opd_stage.move_to(position);
-        break;
-      case 1:
-        tip_tilt_stage.move_to_x(position);
-        break;
-      case 2:
-        tip_tilt_stage.move_to_y(position);
-        break;
-      default:
-        break;
-    }
-  }
-
- private:
-  PI_E754_Controller &opd_stage;
-  PI_E727_Controller &tip_tilt_stage;
-};
 
 // N PI controllers, each with P and I gains, diagonal N x N system
 template <int N>
@@ -1032,7 +1005,7 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, fl
   std::cout << "Starting control loop characterisation" << std::endl;
 
   // dither frequencies
-  std::vector<float> dither_freqs = {};  // low frequencies take long, so only a few
+  std::vector<float> dither_freqs = {0.1, 0.2, 0.4, 0.8};  // low frequencies take long, so only a few
 
   // append logarithmic freqs
   float logf1 = std::log10(f1);
@@ -1922,10 +1895,10 @@ void RenderUI() {
       // std::cout << "Done waiting" << std::endl;
 
       // loop, p, i, t_settle, t_record, f1, f2, fstep, dither_amp, description
-      characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 2.0, 10.0, 1000.0, 5, 50.0, "opd_box_test");
-      characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 2.0, 10.0, 300.0, 5, 30.0, "shear_x1_box_test");
+      characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_no_box_overnight");
+      characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 200.0, 1.0, 300.0, 150, 50.0, "shear_x1_no_box_overnight");
       characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01,
-                                     0.4, 0.007, 1.0, 2.0, "joint_box_test");
+                                     0.4, 0.007, 1.0, 200.0, "joint_no_box_overnight");
     }
 
     // control mode selector
