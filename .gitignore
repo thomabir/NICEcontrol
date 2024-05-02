@@ -5,6 +5,7 @@
 *.csv
 imgui.ini
 .vscode/
+measurements/
 
 
 # -------------------
