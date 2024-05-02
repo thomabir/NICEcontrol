@@ -890,11 +890,24 @@ class SISOControlLoop {
   // control mode is 0 by default
   SISOControlLoop(C &controller, A &stage) : controller(controller), stage(stage) {}
 
+  void reset_all() {
+    // reset loop
+    this->control_mode.store(0);
+    this->setpoint.store(0.0f);
+    this->p.store(0.0f);
+    this->i.store(0.0f);
+    this->dither_freq.store(0.0f);
+    this->dither_amp.store(0.0f);
+
+    // reset controller
+    this->controller.reset_all(); // also resets P, I
+  }
+
   void control(double t, float measurement) {
     // OPD control
-    static float controller_input = 0.0f;
-    static float controller_output = 0.0f;
-    static float actuator_command = 0.0f;
+    float controller_input = 0.0f;
+    float controller_output = 0.0f;
+    float actuator_command = 0.0f;
 
     // calculate dither signal
     float dither_signal = this->dither_amp.load() * std::sin(2 * PI * this->dither_freq.load() * t);
@@ -1182,14 +1195,16 @@ void run_calculation() {
 }
 
 template <class C, class A>
-void characterise_open_loop(SISOControlLoop<C,A> &loop, float t_settle, float t_record, std::string filename) {
+void characterise_open_loop(SISOControlLoop<C,A> &loop, float P, float I, float t_settle, float t_record, std::string filename) {
   // prepare storage file
   std::ofstream file(filename);
   file << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
           "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
-  loop.control_mode.store(0); // Switch control loop off
-  loop.controller.reset_state(); // reset controller
+  loop.reset_all();
+  loop.control_mode.store(0);
+  loop.p.store(P);
+  loop.i.store(I);
   std::this_thread::sleep_for(std::chrono::seconds(int(t_settle))); // wait settling time
   while (!sensorDataQueue.isempty()) {sensorDataQueue.pop();} // flush measurement queue
 
@@ -1215,23 +1230,66 @@ void characterise_open_loop(SISOControlLoop<C,A> &loop, float t_settle, float t_
       }
     }
   }
+  // reset
+  loop.reset_all();
 }
   
 template <class C, class A>
-void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, float t_settle, float t_record, float f1, float f2, float fsteps, float dither_amp, std::string description) {
+void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, float t_settle, float t_record, float f1, float f2, float fsteps, float dither_amp, std::string description) {
   std::cout << "Starting control loop characterisation" << std::endl;
 
-  // wait for one minute (leave the room)
-  std::cout << "Waiting for one minute" << std::endl;
-  std::this_thread::sleep_for(std::chrono::seconds(60));
-  std::cout << "Done waiting" << std::endl;
+  // dither frequencies
+  std::vector<float> dither_freqs = {};  // low frequencies take long, so only a few
 
-  // set control parameters
-  loop.setpoint.store(0.0);
-  loop.p.store(p); // 0.7
-  loop.i.store(i); // 0.01
+  // append logarithmic freqs
+  float logf1 = std::log10(f1);
+  float logf2 = std::log10(f2);
+  for (int i = 0; i < fsteps; i++) {
+    dither_freqs.push_back(std::pow(10, logf1 + i * (logf2 - logf1) / (fsteps - 1)));
+  }
 
-  // directory to store files in: dire name is opd_date_time (e.g. measurements/opd_2021-09-01_12:00:00)
+  // dither amplitudes
+  std::vector<float> dither_amps(dither_freqs.size(), dither_amp);  // nm
+
+  // recording time: at least 1 s, at most 10/freq
+  std::vector<float> recording_times(dither_freqs.size(), 0.0);  // s
+
+  for (int i = 0; i < dither_freqs.size(); i++) {
+    recording_times[i] = std::max(1.0, 10.0 / dither_freqs[i]);
+  }
+
+  // write into parameters.txt: P, I, time, description
+  std::string param_filename = "measurements/parameters.txt";
+  std::ofstream param_file(param_filename);
+  param_file << "P: " << P << "\n";
+  param_file << "I: " << I << "\n";
+  param_file << "t_settle: " << t_settle << "\n";
+  param_file << "t_record: " << t_record << "\n";
+  param_file << "f1: " << f1 << "\n";
+  param_file << "f2: " << f2 << "\n";
+  param_file << "fsteps: " << fsteps << "\n";
+  param_file << "dither_amp: " << dither_amp << "\n";
+  param_file << "description: " << description << "\n";
+  param_file.close();
+
+  // write into freqs.csv: dither frequencies, dither amplitudes, recording times
+  std::string freq_filename = "measurements/freqs.csv";
+  std::ofstream freq_file(freq_filename);
+  freq_file << "Frequency (Hz),Dither amplitude,Recording time (s)\n";
+  for (int i = 0; i < dither_freqs.size(); i++) {
+    freq_file << dither_freqs[i] << "," << dither_amps[i] << "," << recording_times[i] << "\n";
+  }
+  freq_file.close();
+
+
+
+
+  // reset all
+  loop.reset_all();
+  loop.p.store(P);
+  loop.i.store(I);
+
+  // directory for storage is labelled with ISO datestring + description
   auto datetime_string = get_iso_datestring();
   std::string dirname = "measurements/" + datetime_string + "_" + description;
   std::filesystem::create_directory(dirname);
@@ -1241,7 +1299,7 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
   // storage file
   std::string filename = dirname + "/open_loop.csv";
 
-  characterise_open_loop(loop, t_settle, t_record, filename);
+  characterise_open_loop(loop, P, I, t_settle, t_record, filename);
 
   // CLOSED LOOP CHARACTERISATION
   std::cout << "\t Closed loop time series" << std::endl;
@@ -1251,11 +1309,13 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
   file << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
           "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
-  // make sure control loop is on
-  loop.control_mode.store(4);
+  // reset
+  loop.reset_all();
+  loop.p.store(P);
+  loop.i.store(I);
 
-  // reset controller
-  loop.controller.reset_state();
+  // turn on control loop
+  loop.control_mode.store(4);
 
   // wait settling time
   std::this_thread::sleep_for(std::chrono::seconds(int(t_settle)));
@@ -1302,13 +1362,14 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
   file3 << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
            "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
-  // reset controller
-  loop.controller.reset_state();
+  // reset control loop
+  loop.reset_all();
+  loop.p.store(P);
+  loop.i.store(I);
 
   // settle control loop
   loop.control_mode.store(4);
   std::this_thread::sleep_for(std::chrono::seconds(int(t_settle)));
-  loop.setpoint.store(0.0);
 
   // flush data queues
   while (!loop.controlDataBuffer.isempty()) {
@@ -1368,26 +1429,6 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
   // CONTROL LAW FREQUENCY CHARACTERISATION
   std::cout << "\t Controller frequency characterisation" << std::endl;
 
-  // dither frequencies
-  std::vector<float> dither_freqs = {0.1, 0.3};  // low frequencies take long, so only a few
-
-  // append logarithmic freqs
-  float logf1 = std::log10(f1);
-  float logf2 = std::log10(f2);
-  for (int i = 0; i < fsteps; i++) {
-    dither_freqs.push_back(std::pow(10, logf1 + i * (logf2 - logf1) / (fsteps - 1)));
-  }
-
-  // dither amplitudes
-  std::vector<float> dither_amps(dither_freqs.size(), dither_amp);  // nm
-
-  // recording time: at least 1 s, at most 10/freq
-  std::vector<float> recording_times(dither_freqs.size(), 0.0);  // s
-
-  for (int i = 0; i < dither_freqs.size(); i++) {
-    recording_times[i] = std::max(1.0, 10.0 / dither_freqs[i]);
-  }
-
   // make subdir: opd_controller_freq
   std::string subdir = dirname + "/freq_controller";
   std::filesystem::create_directory(subdir);
@@ -1398,17 +1439,16 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
     // storage file: frequency in format 1.2345e67
     filename = subdir + "/" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
-    file << "Time (s),Controller input,Controller output\n";
+    file << "Time (s),Measurement,Setpoint,Dither signal,Controller input,Controller output,Actuator command\n";
 
-    // set control parameters
-    loop.setpoint.store(0.0);
+    // reset control loop
+    loop.reset_all();
+    loop.p.store(P);
+    loop.i.store(I);
 
     // set dither loop parameters
     loop.dither_freq.store(dither_freqs[i]);
     loop.dither_amp.store(dither_amps[i]);
-
-    // reset controller
-    loop.controller.reset_state();
 
     // settle control loop
     loop.control_mode.store(2);
@@ -1434,7 +1474,10 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
           auto m = loop.controlDataBuffer.pop();
           // format: 6 decimals for time, 3 decimals for OPD
           file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3)
-               << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << "\n";
+               << m.measurement << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed
+               << std::setprecision(3) << m.dither_signal << "," << std::fixed << std::setprecision(3)
+               << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << ","
+               << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
         }
       }
     }
@@ -1456,7 +1499,7 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
     // storage file: frequency in format 1.2345e67
     filename = subdir1 + "/control_" + std::to_string(dither_freqs[i]) + "_hz.csv";
     file.open(filename);
-    file << "Time (s),Measurement,Actuator command\n";
+    file << "Time (s),Measurement,Setpoint,Dither signal,Controller input,Controller output,Actuator command\n";
 
     // second file: all sensor data
     std::string filename2 = subdir1 + "/sensor_" + std::to_string(dither_freqs[i]) + "_hz.csv";
@@ -1464,15 +1507,14 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
     file2 << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
              "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
-    // set control parameters
-    loop.setpoint.store(0.0);
+    // reset control loop
+    loop.reset_all();
+    loop.p.store(P);
+    loop.i.store(I);
 
     // set dither loop parameters
     loop.dither_freq.store(dither_freqs[i]);
     loop.dither_amp.store(dither_amps[i]);
-
-    // reset controller
-    loop.controller.reset_state();
 
     // settle control loop
     loop.control_mode.store(1);
@@ -1502,7 +1544,10 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
           auto m = loop.controlDataBuffer.pop();
           // format: 6 decimals for time, 3 decimals for OPD
           file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(3)
-               << m.measurement << "," << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
+               << m.measurement << "," << std::fixed << std::setprecision(3) << m.setpoint << "," << std::fixed
+                << std::setprecision(3) << m.dither_signal << "," << std::fixed << std::setprecision(3)
+                << m.controller_input << "," << std::fixed << std::setprecision(3) << m.controller_output << ","
+                << std::fixed << std::setprecision(3) << m.actuator_command << "\n";
         }
       }
 
@@ -1545,15 +1590,14 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
     file2 << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
              "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
-    // set control parameters
-    loop.setpoint.store(0.0);
+    // reset control loop
+    loop.reset_all();
+    loop.p.store(P);
+    loop.i.store(I);
 
     // set dither loop parameters
     loop.dither_freq.store(dither_freqs[i]);
     loop.dither_amp.store(dither_amps[i]);
-
-    // reset controller
-    loop.controller.reset_state();
 
     // settle control loop
     loop.control_mode.store(4);
@@ -1629,15 +1673,14 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
     file2 << "Time (s),OPD (nm),Shear x1 (um),Shear x2 (um),Shear y1 (um),Shear y2 (um),Pointing x1 (urad),Pointing x2 "
              "(urad),Pointing y1 (urad),Pointing y2 (urad)\n";
 
-    // set control parameters
-    loop.setpoint.store(0.0);
+    // reset control loop
+    loop.reset_all();
+    loop.p.store(P);
+    loop.i.store(I);
 
     // set dither loop parameters
     loop.dither_freq.store(dither_freqs[i]);
     loop.dither_amp.store(dither_amps[i]);
-
-    // reset controller
-    loop.controller.reset_state();
 
     // settle control loop
     loop.control_mode.store(5);
@@ -1695,12 +1738,10 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float p, float i, fl
 
   // DONE
 
-  // disable and reset control loop
-  loop.control_mode.store(0);
-  loop.setpoint.store(0.0);
-  loop.dither_freq.store(0.0);
-  loop.dither_amp.store(0.0);
-  loop.controller.reset_state();
+  // reset control loop
+  loop.reset_all();
+  loop.p.store(P);
+  loop.i.store(I);
   
 
   gui_control.store(true);
@@ -1720,26 +1761,28 @@ void characterise_joint_closed_loop(SISOControlLoop<C1, A1> &opd_loop, SISOContr
   // std::this_thread::sleep_for(std::chrono::seconds(60));
   // std::cout << "Done waiting" << std::endl;
 
+  // reset control loops
+  opd_loop.reset_all();
+  shear_x1_loop.reset_all();
+  shear_x2_loop.reset_all();
+  shear_y1_loop.reset_all();
+  shear_y2_loop.reset_all();
+
   // set control parameters
-  opd_loop.setpoint.store(0.0);
-  opd_loop.p.store(opd_p); // 0.7
-  opd_loop.i.store(opd_i); // 0.01
+  opd_loop.p.store(opd_p);
+  opd_loop.i.store(opd_i);
 
-  shear_x1_loop.setpoint.store(0.0);
-  shear_x1_loop.p.store(shear_p); // 0.4
-  shear_x1_loop.i.store(shear_i); // 0.007
+  shear_x1_loop.p.store(shear_p);
+  shear_x1_loop.i.store(shear_i);
 
-  shear_x2_loop.setpoint.store(0.0);
-  shear_x2_loop.p.store(shear_p); // 0.4
-  shear_x2_loop.i.store(shear_i); // 0.007
+  shear_x2_loop.p.store(shear_p);
+  shear_x2_loop.i.store(shear_i);
 
-  shear_y1_loop.setpoint.store(0.0);
-  shear_y1_loop.p.store(shear_p); // 0.4
-  shear_y1_loop.i.store(shear_i); // 0.007
+  shear_y1_loop.p.store(shear_p);
+  shear_y1_loop.i.store(shear_i);
 
-  shear_y2_loop.setpoint.store(0.0);
-  shear_y2_loop.p.store(shear_p); // 0.4
-  shear_y2_loop.i.store(shear_i); // 0.007
+  shear_y2_loop.p.store(shear_p);
+  shear_y2_loop.i.store(shear_i);
 
   // directory to store files in: dire name is opd_date_time (e.g. measurements/opd_2021-09-01_12:00:00)
   auto datetime_string = get_iso_datestring();
@@ -2027,9 +2070,15 @@ void RenderUI() {
     if (opd_char_button) {
       gui_control.store(false);
       opd_char_button = false;
-      characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_no_box_overnight");
-      characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 200.0, 0.1, 100.0, 50, 30.0, "shear_x1_no_box_overnight");
-      characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01, 0.4, 0.007, 1.0, 200.0, "joint_no_box_overnight");
+
+      // std::cout << "Waiting for one minute" << std::endl;
+      // std::this_thread::sleep_for(std::chrono::seconds(60));
+      // std::cout << "Done waiting" << std::endl;
+
+      // loop, p, i, t_settle, t_record, f1, f2, fstep, dither_amp, description
+      characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 2.0, 10.0, 1000.0, 5, 50.0, "opd_box_test");
+      characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 2.0, 10.0, 300.0, 5, 30.0, "shear_x1_box_test");
+      characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01, 0.4, 0.007, 1.0, 2.0, "joint_box_test");
     }
 
     // control mode selector
