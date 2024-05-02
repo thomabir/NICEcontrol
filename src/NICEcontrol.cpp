@@ -590,7 +590,6 @@ std::atomic<bool> RunMeasurement(false);
 
 // initialise opd stage
 // MCL_OPDStage opd_stage;
-static float opd_open_loop_setpoint = 0.0f;
 char serial_number[1024] = "123076463";
 PI_E754_Controller opd_stage(serial_number);
 
@@ -643,10 +642,6 @@ void setupActuators() {
   std::cout << "OPD Position: " << opd_stage.read() << std::endl;
 }
 
-static float shear_x1_ol_setpoint = 0.0f;
-static float shear_x2_ol_setpoint = 0.0f;
-static float shear_y1_ol_setpoint = 0.0f;
-static float shear_y2_ol_setpoint = 0.0f;
 
 static float pointing_x1_ol_setpoint = 0.0f;
 static float pointing_x2_ol_setpoint = 0.0f;
@@ -1874,14 +1869,34 @@ void RenderUI() {
 
   ImGuiIO &io = ImGui::GetIO();
 
-  // opd control gui parameters
+  // OPD control <-> GUI
   static int gui_opd_loop_select = 0;
   static float opd_p_gui = 0.700f;
   static float opd_i_gui = 0.009f;
   static float opd_dither_freq_gui = 0.0f;
   static float opd_dither_amp_gui = 0.0f;
 
-  // shear control gui parameters
+  if (gui_control.load()) {
+    // run control if "Closed loop" is selected
+    if (gui_opd_loop_select == 2) {
+      opd_loop.control_mode.store(4);
+    } else if (gui_opd_loop_select == 1) {
+      opd_loop.control_mode.store(1);
+    } else {
+      opd_loop.control_mode.store(0);
+    }
+
+    // move stage to open loop setpoint if "Open loop" is selected
+
+    // store control loop parameters
+    opd_loop.setpoint.store(opd_setpoint_gui);
+    opd_loop.p.store(opd_p_gui);
+    opd_loop.i.store(opd_i_gui);
+    opd_loop.dither_freq.store(opd_dither_freq_gui);
+    opd_loop.dither_amp.store(opd_dither_amp_gui);
+  }
+
+  // shear control <-> GUI
   static int shear_loop_select = 0;
   static float shear_p_gui = 0.4f;
   static float shear_i_gui = 0.007f;
@@ -1894,7 +1909,12 @@ void RenderUI() {
   shear_y2_loop.p.store(shear_p_gui);
   shear_y2_loop.i.store(shear_i_gui);
 
-  // pointing control gui parameters
+  shear_x1_loop.setpoint.store(shear_x1_setpoint_gui);
+  shear_x2_loop.setpoint.store(shear_x2_setpoint_gui);
+  shear_y1_loop.setpoint.store(shear_y1_setpoint_gui);
+  shear_y2_loop.setpoint.store(shear_y2_setpoint_gui);
+
+  // pointing control <-> GUI
   static int pointing_loop_select = 0;
   static float pointing_p_gui = 1e-5f;
   static float pointing_i_gui = 1e-7f;
@@ -2093,25 +2113,7 @@ void RenderUI() {
     ImGui::SameLine();
     ImGui::RadioButton("Closed loop##OPD", &gui_opd_loop_select, 2);
 
-    if (gui_control.load()) {
-      // run control if "Closed loop" is selected
-      if (gui_opd_loop_select == 2) {
-        opd_loop.control_mode.store(4);
-      } else if (gui_opd_loop_select == 1) {
-        opd_loop.control_mode.store(1);
-      } else {
-        opd_loop.control_mode.store(0);
-      }
-
-      // move stage to open loop setpoint if "Open loop" is selected
-
-      // store control loop parameters
-      opd_loop.setpoint.store(opd_setpoint_gui);
-      opd_loop.p.store(opd_p_gui);
-      opd_loop.i.store(opd_i_gui);
-      opd_loop.dither_freq.store(opd_dither_freq_gui);
-      opd_loop.dither_amp.store(opd_dither_amp_gui);
-    }
+    
 
     // real time plot
     static ScrollingBuffer opd_dith_buffer, setpoint_buffer;
@@ -2279,14 +2281,6 @@ void RenderUI() {
         ImPlot::EndPlot();
       }
 
-      float piezo_measurement = 0.0f;
-
-      // Display measurement
-      ImGui::Text("Current measurement: %.4f", piezo_measurement);
-
-      // open loop setpoint µm
-      ImGui::SliderFloat("Setpoint##OPD", &opd_open_loop_setpoint, 0.f, 15.0f);
-
       ImGui::TreePop();
     }
 
@@ -2300,7 +2294,7 @@ void RenderUI() {
       const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
 
       // opd input: drag
-      ImGui::SliderFloat("(Drag or double-click to adjust)", &opd_setpoint_gui, opd_setpoint_min, opd_setpoint_max,
+      ImGui::SliderFloat("Setpoint", &opd_setpoint_gui, opd_setpoint_min, opd_setpoint_max,
                          "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
 
       // clamp opd_setpoint_gui to min/max
@@ -2346,6 +2340,8 @@ void RenderUI() {
       shear_y1_loop.control_mode.store(1);
       shear_y2_loop.control_mode.store(1);
     }
+
+    
 
     static float t_gui_x = 0;
 
@@ -2475,12 +2471,6 @@ void RenderUI() {
       // Display measurement
       ImGui::Text("Current measurement: %.4f", tip_tilt_actuator_measurement);
 
-      // open loop setpoint µm
-      ImGui::SliderFloat("X1 setpoint##Shear", &shear_x1_ol_setpoint, -1000.0f, 1000.0f);
-      ImGui::SliderFloat("Y1 setpoint##Shear", &shear_y1_ol_setpoint, -1000.0f, 1000.0f);
-      ImGui::SliderFloat("X2 setpoint##Shear", &shear_x2_ol_setpoint, -1000.0f, 1000.0f);
-      ImGui::SliderFloat("Y2 setpoint##Shear", &shear_y2_ol_setpoint, -1000.0f, 1000.0f);
-
       ImGui::TreePop();
     }
 
@@ -2492,18 +2482,19 @@ void RenderUI() {
       ImGui::SliderFloat("P##X1D", &shear_p_gui, 0.0f, 1.0f);
       ImGui::SliderFloat("I##X1D", &shear_i_gui, 0.0f, 0.05f);
 
-      const float x1d_setpoint_min = -200.0f, x1d_setpoint_max = 200.0f;
+      const float x1d_setpoint_min = -1000.0f, x1d_setpoint_max = 1000.0f;
 
       // x1d input: drag
-      ImGui::SliderFloat("(Drag or double-click to adjust)", &shear_x1_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
-                         "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Setpoint X1", &shear_x1_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
+                         "%.1f", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Setpoint Y1", &shear_y1_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
+                         "%.1f", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Setpoint X2", &shear_x2_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
+                          "%.1f", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderFloat("Setpoint Y2", &shear_y2_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max,
+                          "%.1f", ImGuiSliderFlags_AlwaysClamp);
+      
 
-      // clamp shear_x1_setpoint_gui to min/max
-      if (shear_x1_setpoint_gui < x1d_setpoint_min) shear_x1_setpoint_gui = x1d_setpoint_min;
-      if (shear_x1_setpoint_gui > x1d_setpoint_max) shear_x1_setpoint_gui = x1d_setpoint_max;
-
-      // set shear_x1_setpoint
-      shear_x1_loop.setpoint.store(shear_x1_setpoint_gui);
 
       ImGui::TreePop();
     }
