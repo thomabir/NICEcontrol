@@ -1258,8 +1258,13 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, fl
     recording_times[i] = std::max(1.0, 10.0 / dither_freqs[i]);
   }
 
+  // directory for storage is labelled with ISO datestring + description
+  auto datetime_string = get_iso_datestring();
+  std::string dirname = "measurements/" + datetime_string + "_" + description;
+  std::filesystem::create_directory(dirname);
+
   // write into parameters.txt: P, I, time, description
-  std::string param_filename = "measurements/parameters.txt";
+  std::string param_filename = dirname + "/parameters.txt";
   std::ofstream param_file(param_filename);
   param_file << "P: " << P << "\n";
   param_file << "I: " << I << "\n";
@@ -1273,11 +1278,12 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, fl
   param_file.close();
 
   // write into freqs.csv: dither frequencies, dither amplitudes, recording times
-  std::string freq_filename = "measurements/freqs.csv";
+  // dither frequency is a string that matches the filename
+  std::string freq_filename = dirname + "/freqs.csv";
   std::ofstream freq_file(freq_filename);
   freq_file << "Frequency (Hz),Dither amplitude,Recording time (s)\n";
   for (int i = 0; i < dither_freqs.size(); i++) {
-    freq_file << dither_freqs[i] << "," << dither_amps[i] << "," << recording_times[i] << "\n";
+    freq_file << std::to_string(dither_freqs[i]) << "," << dither_amps[i] << "," << recording_times[i] << "\n";
   }
   freq_file.close();
 
@@ -1289,10 +1295,7 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, float P, float I, fl
   loop.p.store(P);
   loop.i.store(I);
 
-  // directory for storage is labelled with ISO datestring + description
-  auto datetime_string = get_iso_datestring();
-  std::string dirname = "measurements/" + datetime_string + "_" + description;
-  std::filesystem::create_directory(dirname);
+  
 
   // OPEN LOOP CHARACTERISATION
   std::cout << "\t Open loop time series" << std::endl;
