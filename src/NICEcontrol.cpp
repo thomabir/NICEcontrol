@@ -80,7 +80,11 @@ std::string get_iso_datestring() {
   strftime(buf, sizeof buf, "%FT%TZ", gmtime(&now));
   // this will work too, if your compiler doesn't support %F or %T:
   // strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
-  return buf;
+
+  // replace all colons with dashes
+  std::string str(buf);
+  std::replace(str.begin(), str.end(), ':', '-');
+  return str;
 }
 
 struct Measurement {
@@ -1890,10 +1894,10 @@ void RenderUI() {
       std::cout << "Done waiting" << std::endl;
 
       // loop, p, i, t_settle, t_record, f1, f2, fstep, dither_amp, description
-      characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_no_box_overnight");
-      characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 200.0, 1.0, 300.0, 150, 50.0, "shear_x1_no_box_overnight");
-      characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01,
-                                     0.4, 0.007, 1.0, 200.0, "joint_no_box_overnight");
+      // characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_no_box_overnight");
+      characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 200.0, 1.0, 300.0, 150, 50.0, "shear_x1_no_box_repeat");
+      // characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01,
+                                    //  0.4, 0.007, 1.0, 200.0, "joint_no_box_overnight");
     }
 
     // control mode selector
