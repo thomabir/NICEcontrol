@@ -13,7 +13,7 @@ PI_E754_Controller::PI_E754_Controller(char *serialNumberString) {
   std::strcpy(this->serialNumberString, serialNumberString);
 
   // set name
-  std::strcpy(this->name, "PI E-754 Tip/Tilt Piezo Controller S/N ");
+  std::strcpy(this->name, "PI E-754 Linear Piezo Controller S/N ");
   std::strcat(this->name, serialNumberString);
 
   // set is_moving to false
