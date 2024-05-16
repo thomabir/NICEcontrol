@@ -27,6 +27,11 @@ void nF_EBD_Controller::init() {
     std::cout << this->name << ": Connection failed" << std::endl;
     return;
   }
+  else if (fd == 1) {
+    std::cout << this->name << ": Connection successful" << std::endl;
+    return;
+  }
+  std::cout << this->name << ": fd returned by nF_intf_connect_tty: " << fd << std::endl;
   this->fd = fd;
 
   // activate servo mode
@@ -67,12 +72,12 @@ std::array<float, 2> nF_EBD_Controller::read() {
   float position_y;
   nF_get_dev_axis_position_m(this->fd, 1, &this->axis0, &position_x);
   nF_get_dev_axis_position_m(this->fd, 1, &this->axis1, &position_y);
-  return {position_x - this->offset, position_y - this->offset};
+  return {position_x * 1e3 - this->offset, position_y * 1e3 - this->offset};
 }
 
 void nF_EBD_Controller::move_to_blocking(float x_target, float y_target) {
-  x_target = x_target + this->offset;
-  y_target = y_target + this->offset;
+  x_target = (x_target + this->offset) * 1e-3;
+  y_target = (y_target + this->offset) * 1e-3;
   nF_set_dev_axis_target_m(this->fd, 1, 1, &this->axis0, &x_target);
   nF_set_dev_axis_target_m(this->fd, 1, 1, &this->axis1, &y_target);
 }

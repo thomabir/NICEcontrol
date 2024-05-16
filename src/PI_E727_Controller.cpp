@@ -78,13 +78,13 @@ void PI_E727_Controller::init() {
 double PI_E727_Controller::readx() {
   double value = 0;
   PI_qPOS(iD, "2", &value);
-  return value - offset;
+  return value - offset; // urad
 }
 
 double PI_E727_Controller::ready() {
   double value = 0;
   PI_qPOS(iD, "1", &value);
-  return value - offset;
+  return value - offset; // urad
 }
 
 void PI_E727_Controller::move_to_axis(int axis, double value) {
@@ -122,12 +122,32 @@ void PI_E727_Controller::move_to_y(double value) {
 }
 
 void PI_E727_Controller::move_to_x_blocking(double value) {
-  const double dValue = -value + offset;  // the negative sign is because of the orientation of the piezo
+  double dValue = value + offset;  // the negative sign is because of the orientation of the piezo
+
+  // check if the value is within the allowed range, clamp if necessary
+  if (dValue < min_pos) {
+    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to " << min_pos << " um instead." << std::endl;
+    dValue = min_pos;
+  } else if (dValue > max_pos) {
+    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to " << max_pos << " um instead." << std::endl;
+    dValue = max_pos;
+  }
+
   PI_MOV(iD, "1", &dValue);
 }
 
 void PI_E727_Controller::move_to_y_blocking(double value) {
-  const double dValue = value + offset;
+  double dValue = value + offset;
+
+  // check if the value is within the allowed range, clamp if necessary
+  if (dValue < min_pos) {
+    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to " << min_pos << " um instead." << std::endl;
+    dValue = min_pos;
+  } else if (dValue > max_pos) {
+    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to " << max_pos << " um instead." << std::endl;
+    dValue = max_pos;
+  }
+
   PI_MOV(iD, "2", &dValue);
 }
 

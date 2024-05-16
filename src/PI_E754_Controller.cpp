@@ -57,11 +57,11 @@ void PI_E754_Controller::init() {
     std::cout << this->name << ": Error: " << iError << std::endl;
   }
 
-  // set servo mode
+  // enable servo
   const int iEnable = 1;
   PI_SVO(iD, "1", &iEnable);
 
-  // check if both axes servo modes are enabled. Print error if at least one is not enabled.
+  // check if servo is enabled.
   int iServoStatus = 0;
   PI_qSVO(iD, "1", &iServoStatus);
   if (iServoStatus != 1) {
@@ -72,7 +72,7 @@ void PI_E754_Controller::init() {
 double PI_E754_Controller::read() {
   double value = 0;
   PI_qPOS(iD, "1", &value);
-  return value - offset;
+  return value * 1e3 - offset; // convert to nm
 }
 
 void PI_E754_Controller::move_to(double value) {
@@ -85,14 +85,21 @@ void PI_E754_Controller::move_to(double value) {
     move_to_blocking(value);
     is_moving.store(false);
   }).detach();
-
-  // double dValue = value + offset;
-  // PI_MOV(iD, "1", &dValue);
 }
 
 void PI_E754_Controller::move_to_blocking(double value) {
-  double dValue = value * 1e-3 + offset;  // value is in nm, convert to um
-  PI_MOV(iD, "1", &dValue);               // PI_MOV blocks until the move is done
+  double dValue = (value + offset) * 1e-3;  // convert to um
+
+  // check if the value is within the allowed range, clamp if necessary
+  if (dValue < min_pos) {
+    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to " << min_pos << " um instead." << std::endl;
+    dValue = min_pos;
+  } else if (dValue > max_pos) {
+    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to " << max_pos << " um instead." << std::endl;
+    dValue = max_pos;
+  }
+
+  PI_MOV(iD, "1", &dValue);  // PI_MOV blocks until the move is done
 }
 
 // run autozero procedure
