@@ -472,8 +472,8 @@ PI_E727_Controller tip_tilt_stage1(serial_number1);
 char serial_number2[1024] = "0122042007";
 PI_E727_Controller tip_tilt_stage2(serial_number2);
 
-nF_EBD_Controller nF_stage_1("/dev/ttyUSB1");
-nF_EBD_Controller nF_stage_2("/dev/ttyUSB0");
+nF_EBD_Controller nF_stage_1("/dev/ttyUSB0");
+nF_EBD_Controller nF_stage_2("/dev/ttyUSB3");
 
 void setupActuators() {
   // connect and intialise all piezo stages
@@ -484,8 +484,7 @@ void setupActuators() {
   tip_tilt_stage1.move_to_x(0.0f);
   tip_tilt_stage1.move_to_y(0.0f);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "x Position: " << tip_tilt_stage1.readx() << std::endl;
-  std::cout << "y Position: " << tip_tilt_stage1.ready() << std::endl;
+  std::cout << "\tPosition: (" << tip_tilt_stage1.readx() << ", " << tip_tilt_stage1.ready() << ") urad" << std::endl;
 
   // Tip/tilt stage 2
   tip_tilt_stage2.init();
@@ -493,8 +492,7 @@ void setupActuators() {
   tip_tilt_stage2.move_to_x(0.0f);
   tip_tilt_stage2.move_to_y(0.0f);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "x Position: " << tip_tilt_stage2.readx() << std::endl;
-  std::cout << "y Position: " << tip_tilt_stage2.ready() << std::endl;
+  std::cout << "\tPosition: (" << tip_tilt_stage2.readx() << ", " << tip_tilt_stage2.ready() << ") urad" << std::endl;
 
   // nF tip/tilt stages
   nF_stage_1.init();
@@ -513,7 +511,7 @@ void setupActuators() {
   opd_stage.init();
   opd_stage.move_to(0.0f);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "OPD Position: " << opd_stage.read() << std::endl;
+  std::cout << "\tPosition: " << opd_stage.read() << " nm" << std::endl;
 }
 
 TSCircularBuffer<SensorData> sensorDataQueue;
@@ -846,108 +844,109 @@ void run_calculation() {
   opd_lp_filter.setup(opd_samplingrate, opd_lpfilt_cutoff);
 
   while (true) {
-    RunMeasurement.wait(false);
-
-    // read the measurement from the ethernet connection
-    count++;
-
-    // Receive data
-    struct sockaddr_in clientAddr;
-    socklen_t clientAddrLen = sizeof(clientAddr);
-    int numBytes = recvfrom(sockfd, buffer, buffer_size, 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
-
+    float opd_f = 0., shear_x1_f = 0., shear_x2_f = 0., shear_y1_f= 0., shear_y2_f = 0., point_x1_f= 0., point_x2_f= 0., point_y1_f = 0., point_y2_f = 0.;
     auto t = getTime();
+    auto t_chrono = std::chrono::high_resolution_clock::now();
 
-    // Check for errors
-    if (numBytes < 0) {
-      std::cerr << "Error receiving data." << std::endl;
-      break;
-    }
+    // RunMeasurement.wait(false);
 
-    // Convert received data to vector of 10 ints
-    int receivedDataInt[20 * 10];
-    std::memcpy(receivedDataInt, buffer, sizeof(int) * 20 * 10);
+    // // read the measurement from the ethernet connection
+    // count++;
 
-    static int counter[10];
-    static int adc_shear1[10];
-    static int adc_shear2[10];
-    static int adc_shear3[10];
-    static int adc_shear4[10];
-    static int adc_point1[10];
-    static int adc_point2[10];
-    static int adc_point3[10];
-    static int adc_point4[10];
-    static int adc_sine_ref[10];
-    static int adc_opd_ref[10];
-    static float opd_nm[10];
-    static float shear_x1_um[10];
-    static float shear_x2_um[10];
-    static float shear_y1_um[10];
-    static float shear_y2_um[10];
-    static float point_x1_um[10];
-    static float point_x2_um[10];
-    static float point_y1_um[10];
-    static float point_y2_um[10];
+    // // Receive data
+    // struct sockaddr_in clientAddr;
+    // socklen_t clientAddrLen = sizeof(clientAddr);
+    // int numBytes = recvfrom(sockfd, buffer, buffer_size, 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
 
-    for (int i = 0; i < 10; i++) {
-      counter[i] = receivedDataInt[20 * i];
-      adc_shear1[i] = receivedDataInt[20 * i + 1];
-      adc_shear2[i] = receivedDataInt[20 * i + 2];
-      adc_shear3[i] = receivedDataInt[20 * i + 3];
-      adc_shear4[i] = receivedDataInt[20 * i + 4];
-      adc_point1[i] = receivedDataInt[20 * i + 5];
-      adc_point2[i] = receivedDataInt[20 * i + 6];
-      adc_point3[i] = receivedDataInt[20 * i + 7];
-      adc_point4[i] = receivedDataInt[20 * i + 8];
-      adc_sine_ref[i] = receivedDataInt[20 * i + 9];
-      adc_opd_ref[i] = receivedDataInt[20 * i + 10];
-      opd_nm[i] = -float(receivedDataInt[20 * i + 11]) / (2 * PI * 10000.) * 1550.;  // 0.1 mrad -> nm
-      shear_x1_um[i] = float(receivedDataInt[20 * i + 12]) / 3000.;                  // um
-      shear_x2_um[i] = float(receivedDataInt[20 * i + 13]) / 3000.;                  // um
-      shear_y1_um[i] = float(receivedDataInt[20 * i + 14]) / 3000.;                  // um
-      shear_y2_um[i] = float(receivedDataInt[20 * i + 15]) / 3000.;                  // um
-      point_x1_um[i] = float(receivedDataInt[20 * i + 16]) / 1000.;                  // urad
-      point_x2_um[i] = float(receivedDataInt[20 * i + 17]) / 1000.;                  // urad
-      point_y1_um[i] = float(receivedDataInt[20 * i + 18]) / 1000.;                  // urad
-      point_y2_um[i] = float(receivedDataInt[20 * i + 19]) / 1000.;                  // urad
-    }
+    // // Check for errors
+    // if (numBytes < 0) {
+    //   std::cerr << "Error receiving data." << std::endl;
+    //   break;
+    // }
 
-    // filter signals
-    float opd_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f;
-    for (int i = 0; i < 10; i++) {
-      opd_f = opd_lp_filter.filter(opd_nm[i]);
+    // // Convert received data to vector of 10 ints
+    // int receivedDataInt[20 * 10];
+    // std::memcpy(receivedDataInt, buffer, sizeof(int) * 20 * 10);
 
-      // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
-      shear_x1_f = shear_x1_lpfilt.filter(shear_y1_um[i] + shear_x1_um[i]);
-      shear_x2_f = shear_x2_lpfilt.filter(shear_y2_um[i] + shear_x2_um[i]);
-      shear_y1_f = shear_y1_lpfilt.filter(shear_x1_um[i] - shear_y1_um[i]);
-      shear_y2_f = shear_y2_lpfilt.filter(shear_x2_um[i] - shear_y2_um[i]);
+    // static int counter[10];
+    // static int adc_shear1[10];
+    // static int adc_shear2[10];
+    // static int adc_shear3[10];
+    // static int adc_shear4[10];
+    // static int adc_point1[10];
+    // static int adc_point2[10];
+    // static int adc_point3[10];
+    // static int adc_point4[10];
+    // static int adc_sine_ref[10];
+    // static int adc_opd_ref[10];
+    // static float opd_nm[10];
+    // static float shear_x1_um[10];
+    // static float shear_x2_um[10];
+    // static float shear_y1_um[10];
+    // static float shear_y2_um[10];
+    // static float point_x1_um[10];
+    // static float point_x2_um[10];
+    // static float point_y1_um[10];
+    // static float point_y2_um[10];
 
-      point_x1_f = point_x1_lpfilt.filter(point_y1_um[i] + point_x1_um[i]);
-      point_x2_f = point_x2_lpfilt.filter(point_y2_um[i] + point_x2_um[i]);
-      point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
-      point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
-    }
+    // for (int i = 0; i < 10; i++) {
+    //   counter[i] = receivedDataInt[20 * i];
+    //   adc_shear1[i] = receivedDataInt[20 * i + 1];
+    //   adc_shear2[i] = receivedDataInt[20 * i + 2];
+    //   adc_shear3[i] = receivedDataInt[20 * i + 3];
+    //   adc_shear4[i] = receivedDataInt[20 * i + 4];
+    //   adc_point1[i] = receivedDataInt[20 * i + 5];
+    //   adc_point2[i] = receivedDataInt[20 * i + 6];
+    //   adc_point3[i] = receivedDataInt[20 * i + 7];
+    //   adc_point4[i] = receivedDataInt[20 * i + 8];
+    //   adc_sine_ref[i] = receivedDataInt[20 * i + 9];
+    //   adc_opd_ref[i] = receivedDataInt[20 * i + 10];
+    //   opd_nm[i] = -float(receivedDataInt[20 * i + 11]) / (2 * PI * 10000.) * 1550.;  // 0.1 mrad -> nm
+    //   shear_x1_um[i] = float(receivedDataInt[20 * i + 12]) / 3000.;                  // um
+    //   shear_x2_um[i] = float(receivedDataInt[20 * i + 13]) / 3000.;                  // um
+    //   shear_y1_um[i] = float(receivedDataInt[20 * i + 14]) / 3000.;                  // um
+    //   shear_y2_um[i] = float(receivedDataInt[20 * i + 15]) / 3000.;                  // um
+    //   point_x1_um[i] = float(receivedDataInt[20 * i + 16]) / 1000.;                  // urad
+    //   point_x2_um[i] = float(receivedDataInt[20 * i + 17]) / 1000.;                  // urad
+    //   point_y1_um[i] = float(receivedDataInt[20 * i + 18]) / 1000.;                  // urad
+    //   point_y2_um[i] = float(receivedDataInt[20 * i + 19]) / 1000.;                  // urad
+    // }
 
-    // enqueue sensor data
-    sensorDataQueue.push(
-        {t, opd_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
+    // // filter signals
+    // for (int i = 0; i < 10; i++) {
+    //   opd_f = opd_lp_filter.filter(opd_nm[i]);
 
-    // enqueue adc measurements
-    for (int i = 0; i < 10; i++) {
-      adc_queues[0].push({counter[i], adc_shear1[i]});
-      adc_queues[1].push({counter[i], adc_shear2[i]});
-      adc_queues[2].push({counter[i], adc_shear3[i]});
-      adc_queues[3].push({counter[i], adc_shear4[i]});
-      adc_queues[4].push({counter[i], adc_point1[i]});
-      adc_queues[5].push({counter[i], adc_point2[i]});
-      adc_queues[6].push({counter[i], adc_point3[i]});
-      adc_queues[7].push({counter[i], adc_point4[i]});
-      adc_queues[8].push({counter[i], adc_sine_ref[i]});
-      adc_queues[9].push({counter[i], adc_opd_ref[i]});
-      shear_sum_queue.push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
-      point_sum_queue.push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
-    }
+    //   // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
+    //   shear_x1_f = shear_x1_lpfilt.filter(shear_y1_um[i] + shear_x1_um[i]);
+    //   shear_x2_f = shear_x2_lpfilt.filter(shear_y2_um[i] + shear_x2_um[i]);
+    //   shear_y1_f = shear_y1_lpfilt.filter(shear_x1_um[i] - shear_y1_um[i]);
+    //   shear_y2_f = shear_y2_lpfilt.filter(shear_x2_um[i] - shear_y2_um[i]);
+
+    //   point_x1_f = point_x1_lpfilt.filter(point_y1_um[i] + point_x1_um[i]);
+    //   point_x2_f = point_x2_lpfilt.filter(point_y2_um[i] + point_x2_um[i]);
+    //   point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
+    //   point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
+    // }
+
+    // // enqueue sensor data
+    // sensorDataQueue.push(
+    //     {t, opd_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
+
+    // // enqueue adc measurements
+    // for (int i = 0; i < 10; i++) {
+    //   adc_queues[0].push({counter[i], adc_shear1[i]});
+    //   adc_queues[1].push({counter[i], adc_shear2[i]});
+    //   adc_queues[2].push({counter[i], adc_shear3[i]});
+    //   adc_queues[3].push({counter[i], adc_shear4[i]});
+    //   adc_queues[4].push({counter[i], adc_point1[i]});
+    //   adc_queues[5].push({counter[i], adc_point2[i]});
+    //   adc_queues[6].push({counter[i], adc_point3[i]});
+    //   adc_queues[7].push({counter[i], adc_point4[i]});
+    //   adc_queues[8].push({counter[i], adc_sine_ref[i]});
+    //   adc_queues[9].push({counter[i], adc_opd_ref[i]});
+    //   shear_sum_queue.push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
+    //   point_sum_queue.push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
+    // }
 
     // Run control loops
     opd_loop.control(t, opd_f);
@@ -957,6 +956,10 @@ void run_calculation() {
     shear_y2_loop.control(t, shear_y2_f);
     point_1_loop.control(t, {point_x1_f, point_y1_f});
     point_2_loop.control(t, {point_x2_f, point_y2_f});
+
+    // wait until t + 7.813 us
+    std::this_thread::sleep_until(t_chrono + std::chrono::nanoseconds(7813));
+    
   }
 }
 
@@ -1913,11 +1916,8 @@ void RenderUI() {
     static ScrollingBuffer opd_dith_buffer, setpoint_buffer;
 
     static float t_gui = 0;
+    t_gui = getTime();
 
-    // if measurement is running, update gui time.
-    if (RunMeasurement.load()) {
-      t_gui = getTime();
-    }
 
     // get control signals
     if (!opd_loop.controlDataBuffer.isempty()) {
@@ -2082,15 +2082,10 @@ void RenderUI() {
       ImGui::SliderFloat("P##OPD", &opd_p_gui, 1e-4f, 1e2f, "%.5f", ImGuiSliderFlags_Logarithmic);
       ImGui::SliderFloat("I##OPD", &opd_i_gui, 1e-4f, 3e-1f, "%.5f", ImGuiSliderFlags_Logarithmic);
 
-      const float opd_setpoint_min = -1000.0f, opd_setpoint_max = 1000.0f;
+      const float opd_setpoint_min = -1e6, opd_setpoint_max = 1e6;
 
-      // opd input: drag
-      ImGui::SliderFloat("Setpoint", &opd_setpoint_gui, opd_setpoint_min, opd_setpoint_max, "%.1f nm",
-                         ImGuiSliderFlags_AlwaysClamp);
-
-      // clamp opd_setpoint_gui to min/max
-      if (opd_setpoint_gui < opd_setpoint_min) opd_setpoint_gui = opd_setpoint_min;
-      if (opd_setpoint_gui > opd_setpoint_max) opd_setpoint_gui = opd_setpoint_max;
+      // opd input: drag or ctrl+click to input
+      ImGui::DragFloat("OPD Setpoint", &opd_setpoint_gui, 0.1f, opd_setpoint_min, opd_setpoint_max, "%.2f nm", ImGuiSliderFlags_AlwaysClamp);
 
       // dither parameters
       ImGui::SliderFloat("Dither frequency##OPD", &opd_dither_freq_gui, 0.1f, 1000.0f, "%.2f Hz",
@@ -2114,9 +2109,7 @@ void RenderUI() {
     static float t_gui_x = 0;
 
     // if measurement is running, update gui time.
-    if (RunMeasurement.load()) {
-      t_gui_x = getTime();
-    }
+    t_gui_x = getTime();
 
     static float x1_history_length = 10.0f;
     ImGui::SliderFloat("History", &x1_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
@@ -2218,19 +2211,26 @@ void RenderUI() {
 
     if (ImGui::TreeNode("Actuator##Shear")) {
       // plot for current piezo position
-      static ImVec4 color = ImVec4(1, 1, 0, 1);
-      static ScrollingBuffer tip_tilt_actuator_buffer;
-      tip_tilt_actuator_buffer.AddPoint(t_gui_x, tip_tilt_stage1.readx());
+      static ScrollingBufferT<double, double> tip_tilt_actuator_buffer[4];
+      tip_tilt_actuator_buffer[0].AddPoint(t_gui_x, tip_tilt_stage1.readx());
+      tip_tilt_actuator_buffer[1].AddPoint(t_gui_x, tip_tilt_stage1.ready());
+      tip_tilt_actuator_buffer[2].AddPoint(t_gui_x, tip_tilt_stage2.readx());
+      tip_tilt_actuator_buffer[3].AddPoint(t_gui_x, tip_tilt_stage2.ready());
+
+      // labels
+      static const char *plot_labels[4] = {"Tip/Tilt 1 X", "Tip/Tilt 1 Y", "Tip/Tilt 2 X", "Tip/Tilt 2 Y"};
 
       if (ImPlot::BeginPlot("##Tip/Tilt actuator", ImVec2(-1, 150 * io.FontGlobalScale))) {
         ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
         ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        ImPlot::SetNextLineStyle(color, x1_thickness);
-        ImPlot::PlotLine("Tip/Tilt actuator position", &tip_tilt_actuator_buffer.Data[0].x,
-                         &tip_tilt_actuator_buffer.Data[0].y, tip_tilt_actuator_buffer.Data.size(), 0,
-                         tip_tilt_actuator_buffer.Offset, 2 * sizeof(float));
+        for (int i = 0; i < 4; i++) {
+          ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), x1_thickness);
+          ImPlot::PlotLine(plot_labels[i], &tip_tilt_actuator_buffer[i].Data[0].time, &tip_tilt_actuator_buffer[i].Data[0].value,
+                           tip_tilt_actuator_buffer[i].Data.size(), 0, tip_tilt_actuator_buffer[i].Offset,
+                           2 * sizeof(double));
+        }
         ImPlot::EndPlot();
       }
 
@@ -2250,17 +2250,13 @@ void RenderUI() {
       ImGui::SliderFloat("P##X1D", &shear_p_gui, 0.0f, 1.0f);
       ImGui::SliderFloat("I##X1D", &shear_i_gui, 0.0f, 0.05f);
 
-      const float x1d_setpoint_min = -1000.0f, x1d_setpoint_max = 1000.0f;
+      const float shear_setpoint_min = -1e6, shear_setpoint_max = 1e6;
 
       // x1d input: drag
-      ImGui::SliderFloat("Setpoint X1", &shear_x1_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max, "%.1f",
-                         ImGuiSliderFlags_AlwaysClamp);
-      ImGui::SliderFloat("Setpoint Y1", &shear_y1_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max, "%.1f",
-                         ImGuiSliderFlags_AlwaysClamp);
-      ImGui::SliderFloat("Setpoint X2", &shear_x2_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max, "%.1f",
-                         ImGuiSliderFlags_AlwaysClamp);
-      ImGui::SliderFloat("Setpoint Y2", &shear_y2_setpoint_gui, x1d_setpoint_min, x1d_setpoint_max, "%.1f",
-                         ImGuiSliderFlags_AlwaysClamp);
+      ImGui::DragFloat("Setpoint X1", &shear_x1_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::DragFloat("Setpoint Y1", &shear_y1_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::DragFloat("Setpoint X2", &shear_x2_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::DragFloat("Setpoint Y2", &shear_y2_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f", ImGuiSliderFlags_AlwaysClamp);
 
       ImGui::TreePop();
     }
@@ -2280,9 +2276,7 @@ void RenderUI() {
     static float t_gui_x = 0;
 
     // if measurement is running, update gui time.
-    if (RunMeasurement.load()) {
-      t_gui_x = getTime();
-    }
+    t_gui_x = getTime();
 
     static float pointing_history_length = 10.0f;
     ImGui::SliderFloat("History", &pointing_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
@@ -2311,6 +2305,38 @@ void RenderUI() {
       ImPlot::PlotLine("Pointing Y2", &point_y2_buffer.Data[0].x, &point_y2_buffer.Data[0].y,
                        point_y2_buffer.Data.size(), 0, point_y2_buffer.Offset, 2 * sizeof(float));
       ImPlot::EndPlot();
+    }
+
+    // actuator
+    if (ImGui::TreeNode("Actuator##Pointing")) {
+      // plot for current piezo position
+      static ImVec4 color = ImVec4(1, 1, 0, 1);
+      static ScrollingBufferT<double, double> nF_stage_position_buffer[4];
+      std::array<float,2> meas = nF_stage_1.read();
+      nF_stage_position_buffer[0].AddPoint(t_gui_x, meas[0]);
+      nF_stage_position_buffer[1].AddPoint(t_gui_x, meas[1]);
+      // meas = nF_stage_2.read();
+      nF_stage_position_buffer[2].AddPoint(t_gui_x, meas[0]);
+      nF_stage_position_buffer[3].AddPoint(t_gui_x, meas[1]);
+
+      if (ImPlot::BeginPlot("##nF stage", ImVec2(-1, 150 * io.FontGlobalScale))) {
+        ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - pointing_history_length, t_gui_x, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), pointing_thickness);
+        ImPlot::PlotLine("nF stage 1 x", &nF_stage_position_buffer[0].Data[0].time, &nF_stage_position_buffer[0].Data[0].value, nF_stage_position_buffer[0].Data.size(), 0, nF_stage_position_buffer[0].Offset, 2 * sizeof(int));
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), pointing_thickness);
+        ImPlot::PlotLine("nF stage 1 y", &nF_stage_position_buffer[1].Data[0].time, &nF_stage_position_buffer[1].Data[0].value, nF_stage_position_buffer[1].Data.size(), 0, nF_stage_position_buffer[1].Offset, 2 * sizeof(int));
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), pointing_thickness);
+        ImPlot::PlotLine("nF stage 2 x", &nF_stage_position_buffer[2].Data[0].time, &nF_stage_position_buffer[2].Data[0].value, nF_stage_position_buffer[2].Data.size(), 0, nF_stage_position_buffer[2].Offset, 2 * sizeof(int));
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), pointing_thickness);
+        ImPlot::PlotLine("nF stage 2 y", &nF_stage_position_buffer[3].Data[0].time, &nF_stage_position_buffer[3].Data[0].value, nF_stage_position_buffer[3].Data.size(), 0, nF_stage_position_buffer[3].Offset, 2 * sizeof(int));
+        ImPlot::EndPlot();
+      }
+
+
+      ImGui::TreePop();
     }
 
     // pointing control
