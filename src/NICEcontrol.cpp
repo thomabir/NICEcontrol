@@ -473,7 +473,7 @@ char serial_number2[1024] = "0122042007";
 PI_E727_Controller tip_tilt_stage2(serial_number2);
 
 nF_EBD_Controller nF_stage_1("/dev/ttyUSB0");
-nF_EBD_Controller nF_stage_2("/dev/ttyUSB3");
+nF_EBD_Controller nF_stage_2("/dev/ttyUSB1");
 
 void setupActuators() {
   // connect and intialise all piezo stages
@@ -493,7 +493,7 @@ void setupActuators() {
   tip_tilt_stage2.move_to_y(0.0f);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
   std::cout << "\tPosition: (" << tip_tilt_stage2.readx() << ", " << tip_tilt_stage2.ready() << ") urad" << std::endl;
-
+ 
   // nF tip/tilt stages
   nF_stage_1.init();
   nF_stage_1.move_to({0.0, 0.0});
@@ -848,105 +848,105 @@ void run_calculation() {
     auto t = getTime();
     auto t_chrono = std::chrono::high_resolution_clock::now();
 
-    // RunMeasurement.wait(false);
+    RunMeasurement.wait(false);
 
-    // // read the measurement from the ethernet connection
-    // count++;
+    // read the measurement from the ethernet connection
+    count++;
 
-    // // Receive data
-    // struct sockaddr_in clientAddr;
-    // socklen_t clientAddrLen = sizeof(clientAddr);
-    // int numBytes = recvfrom(sockfd, buffer, buffer_size, 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
+    // Receive data
+    struct sockaddr_in clientAddr;
+    socklen_t clientAddrLen = sizeof(clientAddr);
+    int numBytes = recvfrom(sockfd, buffer, buffer_size, 0, (struct sockaddr *)&clientAddr, &clientAddrLen);
 
-    // // Check for errors
-    // if (numBytes < 0) {
-    //   std::cerr << "Error receiving data." << std::endl;
-    //   break;
-    // }
+    // Check for errors
+    if (numBytes < 0) {
+      std::cerr << "Error receiving data." << std::endl;
+      break;
+    }
 
-    // // Convert received data to vector of 10 ints
-    // int receivedDataInt[20 * 10];
-    // std::memcpy(receivedDataInt, buffer, sizeof(int) * 20 * 10);
+    // Convert received data to vector of 10 ints
+    int receivedDataInt[20 * 10];
+    std::memcpy(receivedDataInt, buffer, sizeof(int) * 20 * 10);
 
-    // static int counter[10];
-    // static int adc_shear1[10];
-    // static int adc_shear2[10];
-    // static int adc_shear3[10];
-    // static int adc_shear4[10];
-    // static int adc_point1[10];
-    // static int adc_point2[10];
-    // static int adc_point3[10];
-    // static int adc_point4[10];
-    // static int adc_sine_ref[10];
-    // static int adc_opd_ref[10];
-    // static float opd_nm[10];
-    // static float shear_x1_um[10];
-    // static float shear_x2_um[10];
-    // static float shear_y1_um[10];
-    // static float shear_y2_um[10];
-    // static float point_x1_um[10];
-    // static float point_x2_um[10];
-    // static float point_y1_um[10];
-    // static float point_y2_um[10];
+    static int counter[10];
+    static int adc_shear1[10];
+    static int adc_shear2[10];
+    static int adc_shear3[10];
+    static int adc_shear4[10];
+    static int adc_point1[10];
+    static int adc_point2[10];
+    static int adc_point3[10];
+    static int adc_point4[10];
+    static int adc_sine_ref[10];
+    static int adc_opd_ref[10];
+    static float opd_nm[10];
+    static float shear_x1_um[10];
+    static float shear_x2_um[10];
+    static float shear_y1_um[10];
+    static float shear_y2_um[10];
+    static float point_x1_um[10];
+    static float point_x2_um[10];
+    static float point_y1_um[10];
+    static float point_y2_um[10];
 
-    // for (int i = 0; i < 10; i++) {
-    //   counter[i] = receivedDataInt[20 * i];
-    //   adc_shear1[i] = receivedDataInt[20 * i + 1];
-    //   adc_shear2[i] = receivedDataInt[20 * i + 2];
-    //   adc_shear3[i] = receivedDataInt[20 * i + 3];
-    //   adc_shear4[i] = receivedDataInt[20 * i + 4];
-    //   adc_point1[i] = receivedDataInt[20 * i + 5];
-    //   adc_point2[i] = receivedDataInt[20 * i + 6];
-    //   adc_point3[i] = receivedDataInt[20 * i + 7];
-    //   adc_point4[i] = receivedDataInt[20 * i + 8];
-    //   adc_sine_ref[i] = receivedDataInt[20 * i + 9];
-    //   adc_opd_ref[i] = receivedDataInt[20 * i + 10];
-    //   opd_nm[i] = -float(receivedDataInt[20 * i + 11]) / (2 * PI * 10000.) * 1550.;  // 0.1 mrad -> nm
-    //   shear_x1_um[i] = float(receivedDataInt[20 * i + 12]) / 3000.;                  // um
-    //   shear_x2_um[i] = float(receivedDataInt[20 * i + 13]) / 3000.;                  // um
-    //   shear_y1_um[i] = float(receivedDataInt[20 * i + 14]) / 3000.;                  // um
-    //   shear_y2_um[i] = float(receivedDataInt[20 * i + 15]) / 3000.;                  // um
-    //   point_x1_um[i] = float(receivedDataInt[20 * i + 16]) / 1000.;                  // urad
-    //   point_x2_um[i] = float(receivedDataInt[20 * i + 17]) / 1000.;                  // urad
-    //   point_y1_um[i] = float(receivedDataInt[20 * i + 18]) / 1000.;                  // urad
-    //   point_y2_um[i] = float(receivedDataInt[20 * i + 19]) / 1000.;                  // urad
-    // }
+    for (int i = 0; i < 10; i++) {
+      counter[i] = receivedDataInt[20 * i];
+      adc_shear1[i] = receivedDataInt[20 * i + 1];
+      adc_shear2[i] = receivedDataInt[20 * i + 2];
+      adc_shear3[i] = receivedDataInt[20 * i + 3];
+      adc_shear4[i] = receivedDataInt[20 * i + 4];
+      adc_point1[i] = receivedDataInt[20 * i + 5];
+      adc_point2[i] = receivedDataInt[20 * i + 6];
+      adc_point3[i] = receivedDataInt[20 * i + 7];
+      adc_point4[i] = receivedDataInt[20 * i + 8];
+      adc_sine_ref[i] = receivedDataInt[20 * i + 9];
+      adc_opd_ref[i] = receivedDataInt[20 * i + 10];
+      opd_nm[i] = -float(receivedDataInt[20 * i + 11]) / (2 * PI * 10000.) * 1550.;  // 0.1 mrad -> nm
+      shear_x1_um[i] = float(receivedDataInt[20 * i + 12]) / 3000.;                  // um
+      shear_x2_um[i] = float(receivedDataInt[20 * i + 13]) / 3000.;                  // um
+      shear_y1_um[i] = float(receivedDataInt[20 * i + 14]) / 3000.;                  // um
+      shear_y2_um[i] = float(receivedDataInt[20 * i + 15]) / 3000.;                  // um
+      point_x1_um[i] = float(receivedDataInt[20 * i + 16]) / 1000.;                  // urad
+      point_x2_um[i] = float(receivedDataInt[20 * i + 17]) / 1000.;                  // urad
+      point_y1_um[i] = float(receivedDataInt[20 * i + 18]) / 1000.;                  // urad
+      point_y2_um[i] = float(receivedDataInt[20 * i + 19]) / 1000.;                  // urad
+    }
 
-    // // filter signals
-    // for (int i = 0; i < 10; i++) {
-    //   opd_f = opd_lp_filter.filter(opd_nm[i]);
+    // filter signals
+    for (int i = 0; i < 10; i++) {
+      opd_f = opd_lp_filter.filter(opd_nm[i]);
 
-    //   // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
-    //   shear_x1_f = shear_x1_lpfilt.filter(shear_y1_um[i] + shear_x1_um[i]);
-    //   shear_x2_f = shear_x2_lpfilt.filter(shear_y2_um[i] + shear_x2_um[i]);
-    //   shear_y1_f = shear_y1_lpfilt.filter(shear_x1_um[i] - shear_y1_um[i]);
-    //   shear_y2_f = shear_y2_lpfilt.filter(shear_x2_um[i] - shear_y2_um[i]);
+      // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
+      shear_x1_f = shear_x1_lpfilt.filter(shear_y1_um[i] + shear_x1_um[i]);
+      shear_x2_f = shear_x2_lpfilt.filter(shear_y2_um[i] + shear_x2_um[i]);
+      shear_y1_f = shear_y1_lpfilt.filter(shear_x1_um[i] - shear_y1_um[i]);
+      shear_y2_f = shear_y2_lpfilt.filter(shear_x2_um[i] - shear_y2_um[i]);
 
-    //   point_x1_f = point_x1_lpfilt.filter(point_y1_um[i] + point_x1_um[i]);
-    //   point_x2_f = point_x2_lpfilt.filter(point_y2_um[i] + point_x2_um[i]);
-    //   point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
-    //   point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
-    // }
+      point_x1_f = point_x1_lpfilt.filter(point_y1_um[i] + point_x1_um[i]);
+      point_x2_f = point_x2_lpfilt.filter(point_y2_um[i] + point_x2_um[i]);
+      point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
+      point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
+    }
 
-    // // enqueue sensor data
-    // sensorDataQueue.push(
-    //     {t, opd_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
+    // enqueue sensor data
+    sensorDataQueue.push(
+        {t, opd_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
 
-    // // enqueue adc measurements
-    // for (int i = 0; i < 10; i++) {
-    //   adc_queues[0].push({counter[i], adc_shear1[i]});
-    //   adc_queues[1].push({counter[i], adc_shear2[i]});
-    //   adc_queues[2].push({counter[i], adc_shear3[i]});
-    //   adc_queues[3].push({counter[i], adc_shear4[i]});
-    //   adc_queues[4].push({counter[i], adc_point1[i]});
-    //   adc_queues[5].push({counter[i], adc_point2[i]});
-    //   adc_queues[6].push({counter[i], adc_point3[i]});
-    //   adc_queues[7].push({counter[i], adc_point4[i]});
-    //   adc_queues[8].push({counter[i], adc_sine_ref[i]});
-    //   adc_queues[9].push({counter[i], adc_opd_ref[i]});
-    //   shear_sum_queue.push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
-    //   point_sum_queue.push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
-    // }
+    // enqueue adc measurements
+    for (int i = 0; i < 10; i++) {
+      adc_queues[0].push({counter[i], adc_shear1[i]});
+      adc_queues[1].push({counter[i], adc_shear2[i]});
+      adc_queues[2].push({counter[i], adc_shear3[i]});
+      adc_queues[3].push({counter[i], adc_shear4[i]});
+      adc_queues[4].push({counter[i], adc_point1[i]});
+      adc_queues[5].push({counter[i], adc_point2[i]});
+      adc_queues[6].push({counter[i], adc_point3[i]});
+      adc_queues[7].push({counter[i], adc_point4[i]});
+      adc_queues[8].push({counter[i], adc_sine_ref[i]});
+      adc_queues[9].push({counter[i], adc_opd_ref[i]});
+      shear_sum_queue.push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
+      point_sum_queue.push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
+    }
 
     // Run control loops
     opd_loop.control(t, opd_f);
@@ -958,7 +958,7 @@ void run_calculation() {
     point_2_loop.control(t, {point_x2_f, point_y2_f});
 
     // wait until t + 7.813 us
-    std::this_thread::sleep_until(t_chrono + std::chrono::nanoseconds(7813));
+    // std::this_thread::sleep_until(t_chrono + std::chrono::nanoseconds(7813));
     
   }
 }
@@ -1727,6 +1727,35 @@ void RenderUI() {
   static ScrollingBuffer opd_buffer, shear_x1_buffer, shear_x2_buffer, shear_y1_buffer, shear_y2_buffer,
       point_x1_buffer, point_x2_buffer, point_y1_buffer, point_y2_buffer;
 
+  // GUI interface to save OPD measurements to file:
+  // a button "start recording", which when pressed starts recording OPD measurements to a file
+  // the same button reads "stop recording" when recording is active
+  // when "stop recording" is pressed, the file is closed and the button reads "start recording" again
+  // filename is "opd_iso_date_time.csv"
+  // data format: time, OPD
+  static bool recording_running = false;
+  static std::ofstream file;
+  static std::string filename;
+  if (recording_running) {
+    ImGui::Text("Recording OPD measurements to file");
+    if (ImGui::Button("Stop recording")) {
+      recording_running = false;
+      file.close();
+    }
+  } else {
+    ImGui::Text("Record OPD measurements to file");
+    if (ImGui::Button("Start recording")) {
+      recording_running = true;
+      filename = "measurements/opd_" + get_iso_datestring() + ".csv";
+      file.open(filename);
+      file << "Time at start of measurement: " << get_iso_datestring() << "\n";
+      file << "Time (s),OPD (nm)\n";
+    }
+  }
+
+
+
+
   // add the enture sensor data queue to the plot buffers
   if (!sensorDataQueue.isempty()) {
     int N = sensorDataQueue.size();
@@ -1741,6 +1770,12 @@ void RenderUI() {
       point_x2_buffer.AddPoint(m.time, m.point_x2);
       point_y1_buffer.AddPoint(m.time, m.point_y1);
       point_y2_buffer.AddPoint(m.time, m.point_y2);
+
+      // TODO: if saving data, write to file
+      if (recording_running) {
+        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(2) << m.opd
+             << "\n";
+      }
     }
   }
 
