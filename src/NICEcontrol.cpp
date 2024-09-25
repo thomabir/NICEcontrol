@@ -473,7 +473,7 @@ char serial_number2[1024] = "0122042007";
 PI_E727_Controller tip_tilt_stage2(serial_number2);
 
 nF_EBD_Controller nF_stage_1("/dev/ttyUSB0");
-nF_EBD_Controller nF_stage_2("/dev/ttyUSB1");
+nF_EBD_Controller nF_stage_2("/dev/ttyUSB2");
 
 void setupActuators() {
   // connect and intialise all piezo stages
