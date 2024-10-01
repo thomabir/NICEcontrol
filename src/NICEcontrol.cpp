@@ -6,7 +6,7 @@
 #include <GLES2/gl2.h>
 #endif
 #include <GLFW/glfw3.h>  // Will drag system OpenGL headers
-#include <math.h>
+#include <cmath>
 #include <stdio.h>
 
 #include <array>
@@ -472,8 +472,8 @@ PI_E727_Controller tip_tilt_stage1(serial_number1);
 char serial_number2[1024] = "0122042007";
 PI_E727_Controller tip_tilt_stage2(serial_number2);
 
-nF_EBD_Controller nF_stage_1("/dev/ttyUSB0");
-nF_EBD_Controller nF_stage_2("/dev/ttyUSB2");
+nF_EBD_Controller nF_stage_1("/dev/ttyUSB2");
+nF_EBD_Controller nF_stage_2("/dev/ttyUSB3");
 
 void setupActuators() {
   // connect and intialise all piezo stages
@@ -844,7 +844,7 @@ void run_calculation() {
   opd_lp_filter.setup(opd_samplingrate, opd_lpfilt_cutoff);
 
   while (true) {
-    float opd_f = 0., shear_x1_f = 0., shear_x2_f = 0., shear_y1_f= 0., shear_y2_f = 0., point_x1_f= 0., point_x2_f= 0., point_y1_f = 0., point_y2_f = 0.;
+    float opd_rad_f = 0., shear_x1_f = 0., shear_x2_f = 0., shear_y1_f= 0., shear_y2_f = 0., point_x1_f= 0., point_x2_f= 0., point_y1_f = 0., point_y2_f = 0., opd_nm_f = 0.;
     auto t = getTime();
     auto t_chrono = std::chrono::high_resolution_clock::now();
 
@@ -879,7 +879,7 @@ void run_calculation() {
     static int adc_point4[10];
     static int adc_sine_ref[10];
     static int adc_opd_ref[10];
-    static float opd_nm[10];
+    static float opd_rad[10];
     static float shear_x1_um[10];
     static float shear_x2_um[10];
     static float shear_y1_um[10];
@@ -888,6 +888,7 @@ void run_calculation() {
     static float point_x2_um[10];
     static float point_y1_um[10];
     static float point_y2_um[10];
+    static float opd_rad_f_prev = 0.0f;
 
     for (int i = 0; i < 10; i++) {
       counter[i] = receivedDataInt[20 * i];
@@ -901,7 +902,7 @@ void run_calculation() {
       adc_point4[i] = receivedDataInt[20 * i + 8];
       adc_sine_ref[i] = receivedDataInt[20 * i + 9];
       adc_opd_ref[i] = receivedDataInt[20 * i + 10];
-      opd_nm[i] = -float(receivedDataInt[20 * i + 11]) / (2 * PI * 10000.) * 1550.;  // 0.1 mrad -> nm
+      opd_rad[i] = -float(receivedDataInt[20 * i + 11]) * PI / (std::pow(2.0,23) - 1. );  // phase (signed 24 bit int) -> rad
       shear_x1_um[i] = float(receivedDataInt[20 * i + 12]) / 3000.;                  // um
       shear_x2_um[i] = float(receivedDataInt[20 * i + 13]) / 3000.;                  // um
       shear_y1_um[i] = float(receivedDataInt[20 * i + 14]) / 3000.;                  // um
@@ -914,7 +915,7 @@ void run_calculation() {
 
     // filter signals
     for (int i = 0; i < 10; i++) {
-      opd_f = opd_lp_filter.filter(opd_nm[i]);
+      opd_rad_f = opd_lp_filter.filter(opd_rad[i]);
 
       // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
       shear_x1_f = shear_x1_lpfilt.filter(shear_y1_um[i] + shear_x1_um[i]);
@@ -928,9 +929,32 @@ void run_calculation() {
       point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
     }
 
+    // phase-unwrap the OPD signal
+    while (opd_rad_f - opd_rad_f_prev > PI) {
+      opd_rad_f -= 2 * PI;
+    }
+    while (opd_rad_f - opd_rad_f_prev < -PI) {
+      opd_rad_f += 2 * PI;
+    }
+    
+    // Clamp the OPD signal (to prevent very high values when laser is off)
+    if (opd_rad_f > 1e4) {
+      opd_rad_f = 9e3;
+    }
+    if (opd_rad_f < -1e4) {
+      opd_rad_f = -9e3;
+    }
+
+    opd_rad_f_prev = opd_rad_f;
+
+    // convert to nm
+    opd_nm_f = opd_rad_f * 1550 / (2 * PI);
+
+    
+
     // enqueue sensor data
     sensorDataQueue.push(
-        {t, opd_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
+        {t, opd_nm_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
 
     // enqueue adc measurements
     for (int i = 0; i < 10; i++) {
@@ -949,7 +973,7 @@ void run_calculation() {
     }
 
     // Run control loops
-    opd_loop.control(t, opd_f);
+    opd_loop.control(t, opd_nm_f);
     shear_x1_loop.control(t, shear_x1_f);
     shear_x2_loop.control(t, shear_x2_f);
     shear_y1_loop.control(t, shear_y1_f);
