@@ -880,6 +880,7 @@ void run_calculation() {
     static int adc_sine_ref[10];
     static int adc_opd_ref[10];
     static float opd_rad[10];
+    static int32_t opd_int[10];
     static float shear_x1_um[10];
     static float shear_x2_um[10];
     static float shear_y1_um[10];
@@ -888,7 +889,7 @@ void run_calculation() {
     static float point_x2_um[10];
     static float point_y1_um[10];
     static float point_y2_um[10];
-    static float opd_rad_f_prev = 0.0f;
+    static float opd_rad_i_prev = 0.0f;
 
     for (int i = 0; i < 10; i++) {
       counter[i] = receivedDataInt[20 * i];
@@ -902,7 +903,8 @@ void run_calculation() {
       adc_point4[i] = receivedDataInt[20 * i + 8];
       adc_sine_ref[i] = receivedDataInt[20 * i + 9];
       adc_opd_ref[i] = receivedDataInt[20 * i + 10];
-      opd_rad[i] = -float(receivedDataInt[20 * i + 11]) * PI / (std::pow(2.0,23) - 1. );  // phase (signed 24 bit int) -> rad
+      opd_int[i] = receivedDataInt[20 * i + 11];
+      opd_rad[i] = -float(opd_int[i]) * PI / (std::pow(2.0,23) - 1. );  // phase (signed 24 bit int) -> rad
       shear_x1_um[i] = float(receivedDataInt[20 * i + 12]) / 3000.;                  // um
       shear_x2_um[i] = float(receivedDataInt[20 * i + 13]) / 3000.;                  // um
       shear_y1_um[i] = float(receivedDataInt[20 * i + 14]) / 3000.;                  // um
@@ -911,6 +913,18 @@ void run_calculation() {
       point_x2_um[i] = float(receivedDataInt[20 * i + 17]) / 1000.;                  // urad
       point_y1_um[i] = float(receivedDataInt[20 * i + 18]) / 1000.;                  // urad
       point_y2_um[i] = float(receivedDataInt[20 * i + 19]) / 1000.;                  // urad
+    }
+
+    // phase-unwrap the OPD signal
+    // has to be done before filtering, since filtering smoothes out the jumps
+    for (int i = 0; i < 10; i++) {
+      while (opd_rad[i] - opd_rad_i_prev > PI) {
+        opd_rad[i] -= 2 * PI;
+      }
+      while (opd_rad[i] - opd_rad_i_prev < -PI) {
+        opd_rad[i] += 2 * PI;
+      }
+      opd_rad_i_prev = opd_rad[i];
     }
 
     // filter signals
@@ -928,14 +942,6 @@ void run_calculation() {
       point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
       point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
     }
-
-    // phase-unwrap the OPD signal
-    while (opd_rad_f - opd_rad_f_prev > PI) {
-      opd_rad_f -= 2 * PI;
-    }
-    while (opd_rad_f - opd_rad_f_prev < -PI) {
-      opd_rad_f += 2 * PI;
-    }
     
     // Clamp the OPD signal (to prevent very high values when laser is off)
     if (opd_rad_f > 1e4) {
@@ -945,12 +951,8 @@ void run_calculation() {
       opd_rad_f = -9e3;
     }
 
-    opd_rad_f_prev = opd_rad_f;
-
-    // convert to nm
+    // convert OPD from radians to nm
     opd_nm_f = opd_rad_f * 1550 / (2 * PI);
-
-    
 
     // enqueue sensor data
     sensorDataQueue.push(
@@ -1770,7 +1772,7 @@ void RenderUI() {
     ImGui::Text("Record OPD measurements to file");
     if (ImGui::Button("Start recording")) {
       recording_running = true;
-      filename = "measurements/opd_" + get_iso_datestring() + ".csv";
+      filename = "measurements/" + get_iso_datestring() + "_opd.csv";
       file.open(filename);
       file << "Time at start of measurement: " << get_iso_datestring() << "\n";
       file << "Time (s),OPD (nm)\n";
