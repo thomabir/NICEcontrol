@@ -518,6 +518,7 @@ TSCircularBuffer<SensorData> sensorDataQueue;
 
 TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
 TSCircularBuffer<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
+TSCircularBuffer<MeasurementT<int, int>> adc_sci_null_queue, adc_sci_mod_queue;
 
 int setup_ethernet() {
   // setup ethernet connection
@@ -865,8 +866,10 @@ void run_calculation() {
     }
 
     // Convert received data to vector of 10 ints
-    int receivedDataInt[20 * 10];
-    std::memcpy(receivedDataInt, buffer, sizeof(int) * 20 * 10);
+    const int num_channels = 22;
+    const int num_timepoints = 10;
+    int receivedDataInt[num_channels * num_timepoints];
+    std::memcpy(receivedDataInt, buffer, sizeof(int) * num_channels * num_timepoints);
 
     static int counter[10];
     static int adc_shear1[10];
@@ -878,6 +881,8 @@ void run_calculation() {
     static int adc_point3[10];
     static int adc_point4[10];
     static int adc_sine_ref[10];
+    static int adc_sci_null[10];
+    static int adc_sci_mod[10];
     static int adc_opd_ref[10];
     static float opd_rad[10];
     static int32_t opd_int[10];
@@ -891,28 +896,30 @@ void run_calculation() {
     static float point_y2_um[10];
     static float opd_rad_i_prev = 0.0f;
 
-    for (int i = 0; i < 10; i++) {
-      counter[i] = receivedDataInt[20 * i];
-      adc_shear1[i] = receivedDataInt[20 * i + 1];
-      adc_shear2[i] = receivedDataInt[20 * i + 2];
-      adc_shear3[i] = receivedDataInt[20 * i + 3];
-      adc_shear4[i] = receivedDataInt[20 * i + 4];
-      adc_point1[i] = receivedDataInt[20 * i + 5];
-      adc_point2[i] = receivedDataInt[20 * i + 6];
-      adc_point3[i] = receivedDataInt[20 * i + 7];
-      adc_point4[i] = receivedDataInt[20 * i + 8];
-      adc_sine_ref[i] = receivedDataInt[20 * i + 9];
-      adc_opd_ref[i] = receivedDataInt[20 * i + 10];
-      opd_int[i] = receivedDataInt[20 * i + 11];
+    for (int i = 0; i < num_timepoints; i++) {
+      counter[i] = receivedDataInt[num_channels * i];
+      adc_shear1[i] = receivedDataInt[num_channels * i + 1];
+      adc_shear2[i] = receivedDataInt[num_channels * i + 2];
+      adc_shear3[i] = receivedDataInt[num_channels * i + 3];
+      adc_shear4[i] = receivedDataInt[num_channels * i + 4];
+      adc_point1[i] = receivedDataInt[num_channels * i + 5];
+      adc_point2[i] = receivedDataInt[num_channels * i + 6];
+      adc_point3[i] = receivedDataInt[num_channels * i + 7];
+      adc_point4[i] = receivedDataInt[num_channels * i + 8];
+      adc_sine_ref[i] = receivedDataInt[num_channels * i + 9];
+      adc_opd_ref[i] = receivedDataInt[num_channels * i + 10];
+      opd_int[i] = receivedDataInt[num_channels * i + 11];
       opd_rad[i] = -float(opd_int[i]) * PI / (std::pow(2.0,23) - 1. );  // phase (signed 24 bit int) -> rad
-      shear_x1_um[i] = float(receivedDataInt[20 * i + 12]) / 3000.;                  // um
-      shear_x2_um[i] = float(receivedDataInt[20 * i + 13]) / 3000.;                  // um
-      shear_y1_um[i] = float(receivedDataInt[20 * i + 14]) / 3000.;                  // um
-      shear_y2_um[i] = float(receivedDataInt[20 * i + 15]) / 3000.;                  // um
-      point_x1_um[i] = float(receivedDataInt[20 * i + 16]) / 1000.;                  // urad
-      point_x2_um[i] = float(receivedDataInt[20 * i + 17]) / 1000.;                  // urad
-      point_y1_um[i] = float(receivedDataInt[20 * i + 18]) / 1000.;                  // urad
-      point_y2_um[i] = float(receivedDataInt[20 * i + 19]) / 1000.;                  // urad
+      shear_x1_um[i] = float(receivedDataInt[num_channels * i + 12]) / 3000.;                  // um
+      shear_x2_um[i] = float(receivedDataInt[num_channels * i + 13]) / 3000.;                  // um
+      shear_y1_um[i] = float(receivedDataInt[num_channels * i + 14]) / 3000.;                  // um
+      shear_y2_um[i] = float(receivedDataInt[num_channels * i + 15]) / 3000.;                  // um
+      point_x1_um[i] = float(receivedDataInt[num_channels * i + 16]) / 1000.;                  // urad
+      point_x2_um[i] = float(receivedDataInt[num_channels * i + 17]) / 1000.;                  // urad
+      point_y1_um[i] = float(receivedDataInt[num_channels * i + 18]) / 1000.;                  // urad
+      point_y2_um[i] = float(receivedDataInt[num_channels * i + 19]) / 1000.;                  // urad
+      adc_sci_null[i] = receivedDataInt[num_channels * i + 20]; // ADU
+      adc_sci_mod[i] = receivedDataInt[num_channels * i + 21]; // ADU
     }
 
     // phase-unwrap the OPD signal
@@ -941,6 +948,9 @@ void run_calculation() {
       point_x2_f = point_x2_lpfilt.filter(point_y2_um[i] + point_x2_um[i]);
       point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
       point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
+
+      // TODO derive null intensity from science signals
+
     }
     
     // Clamp the OPD signal (to prevent very high values when laser is off)
@@ -972,6 +982,8 @@ void run_calculation() {
       adc_queues[9].push({counter[i], adc_opd_ref[i]});
       shear_sum_queue.push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
       point_sum_queue.push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
+      adc_sci_null_queue.push({counter[i], adc_sci_null[i]});
+      adc_sci_mod_queue.push({counter[i], adc_sci_mod[i]});
     }
 
     // Run control loops
@@ -1818,6 +1830,7 @@ void RenderUI() {
   if (ImGui::CollapsingHeader("ADC Measurements")) {
     static ScrollingBufferT<int, int> adc_buffers[10];
     static ScrollingBufferT<int, int> shear_sum_buffer, point_sum_buffer;
+    static ScrollingBufferT<int, int> adc_sci_null_buffer, adc_sci_mod_buffer;
     static float t_adc = 0;
 
     // get lates time in ADC queue
@@ -1853,6 +1866,24 @@ void RenderUI() {
       for (int j = 0; j < N; j++) {
         auto m = point_sum_queue.pop();
         point_sum_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    // sci null
+    if (!adc_sci_null_queue.isempty()) {
+      int N = adc_sci_null_queue.size();
+      for (int j = 0; j < N; j++) {
+        auto m = adc_sci_null_queue.pop();
+        adc_sci_null_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    // sci mod
+    if (!adc_sci_mod_queue.isempty()) {
+      int N = adc_sci_mod_queue.size();
+      for (int j = 0; j < N; j++) {
+        auto m = adc_sci_mod_queue.pop();
+        adc_sci_mod_buffer.AddPoint(m.time, m.value);
       }
     }
 
@@ -1936,6 +1967,17 @@ void RenderUI() {
       ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(11), thickness);
       ImPlot::PlotLine("PointSum", &point_sum_buffer.Data[0].time, &point_sum_buffer.Data[0].value,
                        point_sum_buffer.Data.size(), 0, point_sum_buffer.Offset, 2 * sizeof(int));
+
+      // sci null
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(12), thickness);
+      ImPlot::PlotLine("SCINull", &adc_sci_null_buffer.Data[0].time, &adc_sci_null_buffer.Data[0].value,
+                       adc_sci_null_buffer.Data.size(), 0, adc_sci_null_buffer.Offset, 2 * sizeof(int));
+      
+      // sci mod
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(13), thickness);
+      ImPlot::PlotLine("SCIMod", &adc_sci_mod_buffer.Data[0].time, &adc_sci_mod_buffer.Data[0].value,
+                       adc_sci_mod_buffer.Data.size(), 0, adc_sci_mod_buffer.Offset, 2 * sizeof(int));
+
       ImPlot::EndPlot();
     }
   }
