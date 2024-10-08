@@ -6,13 +6,13 @@
 #include <GLES2/gl2.h>
 #endif
 #include <GLFW/glfw3.h>  // Will drag system OpenGL headers
-#include <cmath>
 #include <stdio.h>
 
 #include <array>
 #include <atomic>
 #include <boost/circular_buffer.hpp>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -493,7 +493,7 @@ void setupActuators() {
   tip_tilt_stage2.move_to_y(0.0f);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
   std::cout << "\tPosition: (" << tip_tilt_stage2.readx() << ", " << tip_tilt_stage2.ready() << ") urad" << std::endl;
- 
+
   // nF tip/tilt stages
   nF_stage_1.init();
   nF_stage_1.move_to({0.0, 0.0});
@@ -845,7 +845,8 @@ void run_calculation() {
   opd_lp_filter.setup(opd_samplingrate, opd_lpfilt_cutoff);
 
   while (true) {
-    float opd_rad_f = 0., shear_x1_f = 0., shear_x2_f = 0., shear_y1_f= 0., shear_y2_f = 0., point_x1_f= 0., point_x2_f= 0., point_y1_f = 0., point_y2_f = 0., opd_nm_f = 0.;
+    float opd_rad_f = 0., shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0.,
+          point_x2_f = 0., point_y1_f = 0., point_y2_f = 0., opd_nm_f = 0.;
     auto t = getTime();
     auto t_chrono = std::chrono::high_resolution_clock::now();
 
@@ -909,17 +910,17 @@ void run_calculation() {
       adc_sine_ref[i] = receivedDataInt[num_channels * i + 9];
       adc_opd_ref[i] = receivedDataInt[num_channels * i + 10];
       opd_int[i] = receivedDataInt[num_channels * i + 11];
-      opd_rad[i] = -float(opd_int[i]) * PI / (std::pow(2.0,23) - 1. );  // phase (signed 24 bit int) -> rad
-      shear_x1_um[i] = float(receivedDataInt[num_channels * i + 12]) / 3000.;                  // um
-      shear_x2_um[i] = float(receivedDataInt[num_channels * i + 13]) / 3000.;                  // um
-      shear_y1_um[i] = float(receivedDataInt[num_channels * i + 14]) / 3000.;                  // um
-      shear_y2_um[i] = float(receivedDataInt[num_channels * i + 15]) / 3000.;                  // um
-      point_x1_um[i] = float(receivedDataInt[num_channels * i + 16]) / 1000.;                  // urad
-      point_x2_um[i] = float(receivedDataInt[num_channels * i + 17]) / 1000.;                  // urad
-      point_y1_um[i] = float(receivedDataInt[num_channels * i + 18]) / 1000.;                  // urad
-      point_y2_um[i] = float(receivedDataInt[num_channels * i + 19]) / 1000.;                  // urad
-      adc_sci_null[i] = receivedDataInt[num_channels * i + 20]; // ADU
-      adc_sci_mod[i] = receivedDataInt[num_channels * i + 21]; // ADU
+      opd_rad[i] = -float(opd_int[i]) * PI / (std::pow(2.0, 23) - 1.);         // phase (signed 24 bit int) -> rad
+      shear_x1_um[i] = float(receivedDataInt[num_channels * i + 12]) / 3000.;  // um
+      shear_x2_um[i] = float(receivedDataInt[num_channels * i + 13]) / 3000.;  // um
+      shear_y1_um[i] = float(receivedDataInt[num_channels * i + 14]) / 3000.;  // um
+      shear_y2_um[i] = float(receivedDataInt[num_channels * i + 15]) / 3000.;  // um
+      point_x1_um[i] = float(receivedDataInt[num_channels * i + 16]) / 1000.;  // urad
+      point_x2_um[i] = float(receivedDataInt[num_channels * i + 17]) / 1000.;  // urad
+      point_y1_um[i] = float(receivedDataInt[num_channels * i + 18]) / 1000.;  // urad
+      point_y2_um[i] = float(receivedDataInt[num_channels * i + 19]) / 1000.;  // urad
+      adc_sci_null[i] = receivedDataInt[num_channels * i + 20];                // ADU
+      adc_sci_mod[i] = receivedDataInt[num_channels * i + 21];                 // ADU
     }
 
     // phase-unwrap the OPD signal
@@ -950,9 +951,8 @@ void run_calculation() {
       point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
 
       // TODO derive null intensity from science signals
-
     }
-    
+
     // Clamp the OPD signal (to prevent very high values when laser is off)
     if (opd_rad_f > 1e4) {
       opd_rad_f = 9e3;
@@ -997,7 +997,6 @@ void run_calculation() {
 
     // wait until t + 7.813 us
     // std::this_thread::sleep_until(t_chrono + std::chrono::nanoseconds(7813));
-    
   }
 }
 
@@ -1791,9 +1790,6 @@ void RenderUI() {
     }
   }
 
-
-
-
   // add the enture sensor data queue to the plot buffers
   if (!sensorDataQueue.isempty()) {
     int N = sensorDataQueue.size();
@@ -1972,7 +1968,7 @@ void RenderUI() {
       ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(12), thickness);
       ImPlot::PlotLine("SCINull", &adc_sci_null_buffer.Data[0].time, &adc_sci_null_buffer.Data[0].value,
                        adc_sci_null_buffer.Data.size(), 0, adc_sci_null_buffer.Offset, 2 * sizeof(int));
-      
+
       // sci mod
       ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(13), thickness);
       ImPlot::PlotLine("SCIMod", &adc_sci_mod_buffer.Data[0].time, &adc_sci_mod_buffer.Data[0].value,
@@ -2003,7 +1999,7 @@ void RenderUI() {
       // characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_no_box_overnight");
       characterise_control_loop(shear_x1_loop, 0.4, 0.007, 1.0, 200.0, 1.0, 300.0, 150, 50.0, "shear_x1_no_box_repeat");
       // characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop, 0.7, 0.01,
-                                    //  0.4, 0.007, 1.0, 200.0, "joint_no_box_overnight");
+      //  0.4, 0.007, 1.0, 200.0, "joint_no_box_overnight");
     }
 
     // control mode selector
@@ -2020,7 +2016,6 @@ void RenderUI() {
 
     static float t_gui = 0;
     t_gui = getTime();
-
 
     // get control signals
     if (!opd_loop.controlDataBuffer.isempty()) {
@@ -2188,7 +2183,8 @@ void RenderUI() {
       const float opd_setpoint_min = -1e6, opd_setpoint_max = 1e6;
 
       // opd input: drag or ctrl+click to input
-      ImGui::DragFloat("OPD Setpoint", &opd_setpoint_gui, 0.1f, opd_setpoint_min, opd_setpoint_max, "%.2f nm", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::DragFloat("OPD Setpoint", &opd_setpoint_gui, 0.1f, opd_setpoint_min, opd_setpoint_max, "%.2f nm",
+                       ImGuiSliderFlags_AlwaysClamp);
 
       // dither parameters
       ImGui::SliderFloat("Dither frequency##OPD", &opd_dither_freq_gui, 0.1f, 1000.0f, "%.2f Hz",
@@ -2330,9 +2326,9 @@ void RenderUI() {
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
         for (int i = 0; i < 4; i++) {
           ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), x1_thickness);
-          ImPlot::PlotLine(plot_labels[i], &tip_tilt_actuator_buffer[i].Data[0].time, &tip_tilt_actuator_buffer[i].Data[0].value,
-                           tip_tilt_actuator_buffer[i].Data.size(), 0, tip_tilt_actuator_buffer[i].Offset,
-                           2 * sizeof(double));
+          ImPlot::PlotLine(plot_labels[i], &tip_tilt_actuator_buffer[i].Data[0].time,
+                           &tip_tilt_actuator_buffer[i].Data[0].value, tip_tilt_actuator_buffer[i].Data.size(), 0,
+                           tip_tilt_actuator_buffer[i].Offset, 2 * sizeof(double));
         }
         ImPlot::EndPlot();
       }
@@ -2356,10 +2352,14 @@ void RenderUI() {
       const float shear_setpoint_min = -1e6, shear_setpoint_max = 1e6;
 
       // x1d input: drag
-      ImGui::DragFloat("Setpoint X1", &shear_x1_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::DragFloat("Setpoint Y1", &shear_y1_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::DragFloat("Setpoint X2", &shear_x2_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::DragFloat("Setpoint Y2", &shear_y2_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::DragFloat("Setpoint X1", &shear_x1_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f",
+                       ImGuiSliderFlags_AlwaysClamp);
+      ImGui::DragFloat("Setpoint Y1", &shear_y1_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f",
+                       ImGuiSliderFlags_AlwaysClamp);
+      ImGui::DragFloat("Setpoint X2", &shear_x2_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f",
+                       ImGuiSliderFlags_AlwaysClamp);
+      ImGui::DragFloat("Setpoint Y2", &shear_y2_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f",
+                       ImGuiSliderFlags_AlwaysClamp);
 
       ImGui::TreePop();
     }
@@ -2415,7 +2415,7 @@ void RenderUI() {
       // plot for current piezo position
       static ImVec4 color = ImVec4(1, 1, 0, 1);
       static ScrollingBufferT<double, double> nF_stage_position_buffer[4];
-      std::array<float,2> meas = nF_stage_1.read();
+      std::array<float, 2> meas = nF_stage_1.read();
       nF_stage_position_buffer[0].AddPoint(t_gui_x, meas[0]);
       nF_stage_position_buffer[1].AddPoint(t_gui_x, meas[1]);
       // meas = nF_stage_2.read();
@@ -2428,16 +2428,23 @@ void RenderUI() {
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), pointing_thickness);
-        ImPlot::PlotLine("nF stage 1 x", &nF_stage_position_buffer[0].Data[0].time, &nF_stage_position_buffer[0].Data[0].value, nF_stage_position_buffer[0].Data.size(), 0, nF_stage_position_buffer[0].Offset, 2 * sizeof(int));
+        ImPlot::PlotLine("nF stage 1 x", &nF_stage_position_buffer[0].Data[0].time,
+                         &nF_stage_position_buffer[0].Data[0].value, nF_stage_position_buffer[0].Data.size(), 0,
+                         nF_stage_position_buffer[0].Offset, 2 * sizeof(int));
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), pointing_thickness);
-        ImPlot::PlotLine("nF stage 1 y", &nF_stage_position_buffer[1].Data[0].time, &nF_stage_position_buffer[1].Data[0].value, nF_stage_position_buffer[1].Data.size(), 0, nF_stage_position_buffer[1].Offset, 2 * sizeof(int));
+        ImPlot::PlotLine("nF stage 1 y", &nF_stage_position_buffer[1].Data[0].time,
+                         &nF_stage_position_buffer[1].Data[0].value, nF_stage_position_buffer[1].Data.size(), 0,
+                         nF_stage_position_buffer[1].Offset, 2 * sizeof(int));
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), pointing_thickness);
-        ImPlot::PlotLine("nF stage 2 x", &nF_stage_position_buffer[2].Data[0].time, &nF_stage_position_buffer[2].Data[0].value, nF_stage_position_buffer[2].Data.size(), 0, nF_stage_position_buffer[2].Offset, 2 * sizeof(int));
+        ImPlot::PlotLine("nF stage 2 x", &nF_stage_position_buffer[2].Data[0].time,
+                         &nF_stage_position_buffer[2].Data[0].value, nF_stage_position_buffer[2].Data.size(), 0,
+                         nF_stage_position_buffer[2].Offset, 2 * sizeof(int));
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), pointing_thickness);
-        ImPlot::PlotLine("nF stage 2 y", &nF_stage_position_buffer[3].Data[0].time, &nF_stage_position_buffer[3].Data[0].value, nF_stage_position_buffer[3].Data.size(), 0, nF_stage_position_buffer[3].Offset, 2 * sizeof(int));
+        ImPlot::PlotLine("nF stage 2 y", &nF_stage_position_buffer[3].Data[0].time,
+                         &nF_stage_position_buffer[3].Data[0].value, nF_stage_position_buffer[3].Data.size(), 0,
+                         nF_stage_position_buffer[3].Offset, 2 * sizeof(int));
         ImPlot::EndPlot();
       }
-
 
       ImGui::TreePop();
     }
