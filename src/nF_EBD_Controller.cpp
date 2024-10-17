@@ -26,8 +26,7 @@ void nF_EBD_Controller::init() {
   if (fd < 0) {
     std::cout << this->name << ": Connection failed" << std::endl;
     return;
-  }
-  else if (fd == 1) {
+  } else if (fd == 1) {
     std::cout << this->name << ": Connection successful" << std::endl;
     return;
   }

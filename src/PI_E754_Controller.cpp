@@ -72,7 +72,7 @@ void PI_E754_Controller::init() {
 double PI_E754_Controller::read() {
   double value = 0;
   PI_qPOS(iD, "1", &value);
-  return value * 1e3 - offset; // convert to nm
+  return value * 1e3 - offset;  // convert to nm
 }
 
 void PI_E754_Controller::move_to(double value) {
@@ -92,10 +92,12 @@ void PI_E754_Controller::move_to_blocking(double value) {
 
   // check if the value is within the allowed range, clamp if necessary
   if (dValue < min_pos) {
-    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to " << min_pos << " um instead." << std::endl;
+    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to "
+    // << min_pos << " um instead." << std::endl;
     dValue = min_pos;
   } else if (dValue > max_pos) {
-    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to " << max_pos << " um instead." << std::endl;
+    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to "
+    // << max_pos << " um instead." << std::endl;
     dValue = max_pos;
   }
 

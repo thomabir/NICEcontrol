@@ -1,36 +1,36 @@
 #ifndef _MADLIB_H_
 #define _MADLIB_H_
 
-#define	MCL_SUCCESS			 0
-#define	MCL_GENERAL_ERROR		-1
-#define	MCL_DEV_ERROR			-2
-#define	MCL_DEV_NOT_ATTACHED		-3
-#define	MCL_USAGE_ERROR			-4
-#define	MCL_DEV_NOT_READY		-5
-#define	MCL_ARGUMENT_ERROR		-6
-#define	MCL_INVALID_AXIS		-7
-#define	MCL_INVALID_HANDLE		-8
+#define MCL_SUCCESS 0
+#define MCL_GENERAL_ERROR -1
+#define MCL_DEV_ERROR -2
+#define MCL_DEV_NOT_ATTACHED -3
+#define MCL_USAGE_ERROR -4
+#define MCL_DEV_NOT_READY -5
+#define MCL_ARGUMENT_ERROR -6
+#define MCL_INVALID_AXIS -7
+#define MCL_INVALID_HANDLE -8
 
 #pragma pack(push, 1)
 struct ProductInformation {
-	unsigned char  axis_bitmap; //bitmap of available axis
-	short ADC_resolution;		//# of bits of resolution
-	short DAC_resolution;		//# of bits of resolution
-	short Product_id;
-	short FirmwareVersion;
-	short FirmwareProfile;
+  unsigned char axis_bitmap;  // bitmap of available axis
+  short ADC_resolution;       // # of bits of resolution
+  short DAC_resolution;       // # of bits of resolution
+  short Product_id;
+  short FirmwareVersion;
+  short FirmwareProfile;
 };
 #pragma pack(pop)
 
 #ifdef __cplusplus
-	extern"C"{
+extern "C" {
 #else
-	typedef unsigned char bool;
+typedef unsigned char bool;
 #endif
 
 #define MADLIB_API
 
-MADLIB_API void	MCL_DLLVersion(short *version, short *revision);
+MADLIB_API void MCL_DLLVersion(short *version, short *revision);
 
 MADLIB_API int MCL_InitHandle();
 MADLIB_API int MCL_GrabHandle(short device);
@@ -59,15 +59,19 @@ MADLIB_API int MCL_CFocusSetFocusMode(bool focusModeOn, int handle);
 MADLIB_API int MCL_CFocusStep(double relativePositionChange, int handle);
 MADLIB_API int MCL_CFocusGetFocusMode(int *focusLocked, int handle);
 
-MADLIB_API int MCL_ReadWaveFormN(unsigned int axis,unsigned int DataPoints,double milliseconds,double* waveform, int handle);
-MADLIB_API int MCL_Setup_ReadWaveFormN(unsigned int axis,unsigned int DataPoints,double milliseconds, int handle);
-MADLIB_API int MCL_Trigger_ReadWaveFormN(unsigned int axis,unsigned int DataPoints,double *waveform, int handle);
-MADLIB_API int MCL_LoadWaveFormN(unsigned int axis,unsigned int DataPoints,double milliseconds,double* waveform, int handle);
-MADLIB_API int MCL_Setup_LoadWaveFormN(unsigned int axis,unsigned int DataPoints,double milliseconds,double *waveform, int handle);
+MADLIB_API int MCL_ReadWaveFormN(unsigned int axis, unsigned int DataPoints, double milliseconds, double *waveform,
+                                 int handle);
+MADLIB_API int MCL_Setup_ReadWaveFormN(unsigned int axis, unsigned int DataPoints, double milliseconds, int handle);
+MADLIB_API int MCL_Trigger_ReadWaveFormN(unsigned int axis, unsigned int DataPoints, double *waveform, int handle);
+MADLIB_API int MCL_LoadWaveFormN(unsigned int axis, unsigned int DataPoints, double milliseconds, double *waveform,
+                                 int handle);
+MADLIB_API int MCL_Setup_LoadWaveFormN(unsigned int axis, unsigned int DataPoints, double milliseconds,
+                                       double *waveform, int handle);
 MADLIB_API int MCL_Trigger_LoadWaveFormN(unsigned int axis, int handle);
-MADLIB_API int MCL_TriggerWaveformAcquisition(unsigned int axis, unsigned int DataPoints, double* waveform, int handle);
+MADLIB_API int MCL_TriggerWaveformAcquisition(unsigned int axis, unsigned int DataPoints, double *waveform, int handle);
 
-MADLIB_API int MCL_WfmaSetup(double *wfDacX, double *wfDacY, double *wfDacZ, int dataPointsPerAxis, double milliseconds, unsigned short iterations, int handle);
+MADLIB_API int MCL_WfmaSetup(double *wfDacX, double *wfDacY, double *wfDacZ, int dataPointsPerAxis, double milliseconds,
+                             unsigned short iterations, int handle);
 MADLIB_API int MCL_WfmaTriggerAndRead(double *wfAdcX, double *wfAdcY, double *wfAdcZ, int handle);
 MADLIB_API int MCL_WfmaTrigger(int handle);
 MADLIB_API int MCL_WfmaRead(double *wfAdcX, double *wfAdcY, double *wfAdcZ, int handle);
@@ -98,18 +102,18 @@ MADLIB_API int MCL_CurrentMinMaxCenter(double *min, double *max, int handle);
 MADLIB_API int MCL_GetFirmwareVersion(short *version, short *profile, int handle);
 MADLIB_API int MCL_GetSerialNumber(int handle);
 MADLIB_API int MCL_GetProductInfo(struct ProductInformation *pi, int handle);
-MADLIB_API void	MCL_PrintDeviceInfo(int handle); 
-MADLIB_API bool	MCL_DeviceAttached(int milliseconds, int handle);
+MADLIB_API void MCL_PrintDeviceInfo(int handle);
+MADLIB_API bool MCL_DeviceAttached(int milliseconds, int handle);
 MADLIB_API int MCL_GetCommandedPosition(double *xCom, double *yCom, double *zCom, int handle);
 
-MADLIB_API int MCL_SequenceLoad(int axis, double* sequence, int seqSize, int handle);
+MADLIB_API int MCL_SequenceLoad(int axis, double *sequence, int seqSize, int handle);
 MADLIB_API int MCL_SequenceClear(int handle);
 MADLIB_API int MCL_SequenceStart(int handle);
 MADLIB_API int MCL_SequenceStop(int handle);
-MADLIB_API int MCL_SequenceGetMax(int* max, int handle);
+MADLIB_API int MCL_SequenceGetMax(int *max, int handle);
 
 #ifdef __cplusplus
-	}
+}
 #endif
 
 #endif
