@@ -1,0 +1,63 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+
+# General
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+    -   id: check-added-large-files
+    -   id: check-case-conflict
+    -   id: check-illegal-windows-names
+    -   id: check-toml
+    -   id: check-yaml
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+
+# Python
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.6.9
+  hooks:
+    # Run the linter.
+    - id: ruff
+      args: [
+        "--select", "I",
+        "--fix",
+        "--line-length=100",
+      ]
+    # Run the formatter.
+    - id: ruff-format
+
+-   repo: local
+    hooks:
+    -   id: system
+        name: pylint
+        entry: pylint
+        language: system
+        types: [python]
+        require_serial: true
+        args:
+            [
+            "--enable=F,E,W,C,R",
+            "--max-line-length=100",
+            "--variable-naming-style=any",
+            "--argument-naming-style=any",
+            "-sn", # Don't display the score
+            "-rn", # Only display messages
+            ]
+
+# C/C++
+-   repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v16.0.4
+    hooks:
+    -   id: clang-format
+
+# Markdown
+- repo: https://github.com/executablebooks/mdformat
+  rev: 0.7.17
+  hooks:
+  - id: mdformat
+    # Optionally add plugins
+    additional_dependencies:
+    - mdformat-gfm
+    - mdformat-beautysh
