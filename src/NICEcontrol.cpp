@@ -827,6 +827,7 @@ SISOControlLoop shear_y1_loop(shear_y1_controller, shear_y1_actuator);
 SISOControlLoop shear_y2_loop(shear_y2_controller, shear_y2_actuator);
 MIMOControlLoop<2, DiagPIController<2>, nF_EBD_Controller> point_1_loop(point_1_controller, nF_stage_1);
 MIMOControlLoop<2, DiagPIController<2>, nF_EBD_Controller> point_2_loop(point_2_controller, nF_stage_2);
+NullLockin null_lockin;
 
 void run_calculation() {
   int sockfd = setup_ethernet();
@@ -849,7 +850,6 @@ void run_calculation() {
   opd_lp_filter.setup(opd_samplingrate, opd_lpfilt_cutoff);
 
   // initialise null processir
-  NullLockin null_lockin;
 
   while (true) {
     float opd_rad_f = 0., shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0.,
@@ -1949,7 +1949,7 @@ void RenderUI() {
                                           "Point LEFT", "Point RIGHT", "Point DOWN",  "SineRef",    "OPDRef"};
 
     // plot style
-    static float thickness = 5;
+    static float thickness = 2;
     static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
@@ -2017,7 +2017,7 @@ void RenderUI() {
     static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
-    if (ImPlot::BeginPlot("##Sci_null", ImVec2(-1, 200 * io.FontGlobalScale))) {
+    if (ImPlot::BeginPlot("##Sci_null", ImVec2(-1, 600 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, t_sci_null - sci_null_history_length, t_sci_null, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);

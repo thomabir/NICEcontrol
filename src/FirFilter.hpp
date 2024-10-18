@@ -14,6 +14,9 @@ class FirFilter {
   // Initialize filter with coefficients
   FirFilter(const std::array<T, N>& coefficients) : coefficients(coefficients) { buffer.fill(0); }
 
+  // default constructor: all zeros
+  FirFilter() : coefficients({0}), buffer({0}) {}
+
   /**
    * @brief Filters the input signal using the FIR filter.
    *
@@ -39,6 +42,8 @@ class FirFilter {
   }
 
   void reset() { buffer.fill(0); }
+
+  void load_coefficients(const std::array<T, N>& coefficients) { this->coefficients = coefficients; }
 
  private:
   std::array<T, N> coefficients;  // filter coefficients
