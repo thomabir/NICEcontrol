@@ -47,6 +47,9 @@
 // Controllers (PID etc.)
 #include "Controllers.hpp"
 
+// NullLockin
+#include "NullLockin.hpp"
+
 // white noise for dithering
 #include <random>
 
@@ -519,6 +522,7 @@ TSCircularBuffer<SensorData> sensorDataQueue;
 TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
 TSCircularBuffer<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
 TSCircularBuffer<MeasurementT<int, int>> adc_sci_null_queue, adc_sci_mod_queue;
+TSCircularBuffer<MeasurementT<double, double>> sci_null_queue;
 
 int setup_ethernet() {
   // setup ethernet connection
@@ -844,9 +848,12 @@ void run_calculation() {
 
   opd_lp_filter.setup(opd_samplingrate, opd_lpfilt_cutoff);
 
+  // initialise null processir
+  NullLockin null_lockin;
+
   while (true) {
     float opd_rad_f = 0., shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0.,
-          point_x2_f = 0., point_y1_f = 0., point_y2_f = 0., opd_nm_f = 0.;
+          point_x2_f = 0., point_y1_f = 0., point_y2_f = 0., opd_nm_f = 0., sci_null = 0.;
     auto t = getTime();
     auto t_chrono = std::chrono::high_resolution_clock::now();
 
@@ -951,6 +958,7 @@ void run_calculation() {
       point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
 
       // TODO derive null intensity from science signals
+      sci_null = null_lockin.process(adc_sci_null[i], adc_sci_mod[i]);
     }
 
     // Clamp the OPD signal (to prevent very high values when laser is off)
@@ -967,6 +975,8 @@ void run_calculation() {
     // enqueue sensor data
     sensorDataQueue.push(
         {t, opd_nm_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
+
+    sci_null_queue.push({t, sci_null});
 
     // enqueue adc measurements
     for (int i = 0; i < 10; i++) {
@@ -1974,6 +1984,47 @@ void RenderUI() {
       ImPlot::PlotLine("SCIMod", &adc_sci_mod_buffer.Data[0].time, &adc_sci_mod_buffer.Data[0].value,
                        adc_sci_mod_buffer.Data.size(), 0, adc_sci_mod_buffer.Offset, 2 * sizeof(int));
 
+      ImPlot::EndPlot();
+    }
+  }
+
+  // Sci_null measurements
+  if (ImGui::CollapsingHeader("Science beam Measurements")) {
+    static ScrollingBuffer sci_null_buffer;
+    static float t_sci_null = 0;
+
+    // get lates time in Sci_null queue
+    if (RunMeasurement.load()) {
+      if (!sci_null_queue.isempty()) {
+        t_sci_null = sci_null_queue.back().time;
+      }
+    }
+
+    // add all measurements to the plot buffers
+    if (!sci_null_queue.isempty()) {
+      int N = sci_null_queue.size();
+      for (int i = 0; i < N; i++) {
+        auto m = sci_null_queue.pop();
+        sci_null_buffer.AddPoint(m.time, m.value);
+      }
+    }
+
+    static float sci_null_history_length = 1.0e-3;
+    ImGui::SliderFloat("Sci_null History", &sci_null_history_length, 0.001, 5., "%.3f s", ImGuiSliderFlags_Logarithmic);
+
+    // plot style
+    static float thickness = 3;
+    static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+    static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+
+    if (ImPlot::BeginPlot("##Sci_null", ImVec2(-1, 200 * io.FontGlobalScale))) {
+      ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_sci_null - sci_null_history_length, t_sci_null, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), thickness);
+      ImPlot::PlotLine("Sci_null", &sci_null_buffer.Data[0].x, &sci_null_buffer.Data[0].y, sci_null_buffer.Data.size(),
+                       0, sci_null_buffer.Offset, 2 * sizeof(int));
       ImPlot::EndPlot();
     }
   }
