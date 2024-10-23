@@ -874,38 +874,51 @@ void run_calculation() {
     }
 
     // Convert received data to vector of 10 ints
-    const int num_channels = 22;
-    const int num_timepoints = 10;
+    const static int num_channels = 22;
+    const static int num_timepoints = 10;
+    static int prev_counter = 0;      // to check for gaps in data
+    static int prev_gap_counter = 0;  // to calculate distance between gaps
     int receivedDataInt[num_channels * num_timepoints];
     std::memcpy(receivedDataInt, buffer, sizeof(int) * num_channels * num_timepoints);
 
-    static int counter[10];
-    static int adc_shear1[10];
-    static int adc_shear2[10];
-    static int adc_shear3[10];
-    static int adc_shear4[10];
-    static int adc_point1[10];
-    static int adc_point2[10];
-    static int adc_point3[10];
-    static int adc_point4[10];
-    static int adc_sine_ref[10];
-    static int adc_sci_null[10];
-    static int adc_sci_mod[10];
-    static int adc_opd_ref[10];
-    static float opd_rad[10];
-    static int32_t opd_int[10];
-    static float shear_x1_um[10];
-    static float shear_x2_um[10];
-    static float shear_y1_um[10];
-    static float shear_y2_um[10];
-    static float point_x1_um[10];
-    static float point_x2_um[10];
-    static float point_y1_um[10];
-    static float point_y2_um[10];
+    static int counter[num_timepoints];
+    static int adc_shear1[num_timepoints];
+    static int adc_shear2[num_timepoints];
+    static int adc_shear3[num_timepoints];
+    static int adc_shear4[num_timepoints];
+    static int adc_point1[num_timepoints];
+    static int adc_point2[num_timepoints];
+    static int adc_point3[num_timepoints];
+    static int adc_point4[num_timepoints];
+    static int adc_sine_ref[num_timepoints];
+    static int adc_sci_null[num_timepoints];
+    static int adc_sci_mod[num_timepoints];
+    static int adc_opd_ref[num_timepoints];
+    static float opd_rad[num_timepoints];
+    static int32_t opd_int[num_timepoints];
+    static float shear_x1_um[num_timepoints];
+    static float shear_x2_um[num_timepoints];
+    static float shear_y1_um[num_timepoints];
+    static float shear_y2_um[num_timepoints];
+    static float point_x1_um[num_timepoints];
+    static float point_x2_um[num_timepoints];
+    static float point_y1_um[num_timepoints];
+    static float point_y2_um[num_timepoints];
     static float opd_rad_i_prev = 0.0f;
 
     for (int i = 0; i < num_timepoints; i++) {
       counter[i] = receivedDataInt[num_channels * i];
+
+      // check for gaps in data
+      if (counter[i] - prev_counter > 1) {
+        int n_missing_samples = counter[i] - prev_counter - 1;
+        int n_samples_between_gaps = counter[i] - prev_gap_counter - 1;
+
+        std::cout << "Gap in data: " << prev_counter << " -> " << counter[i] << " (" << n_missing_samples
+                  << " missing samples) " << n_samples_between_gaps << " samples between gaps" << std::endl;
+        prev_gap_counter = counter[i];
+      }
+
       adc_shear1[i] = receivedDataInt[num_channels * i + 1];
       adc_shear2[i] = receivedDataInt[num_channels * i + 2];
       adc_shear3[i] = receivedDataInt[num_channels * i + 3];
@@ -928,11 +941,13 @@ void run_calculation() {
       point_y2_um[i] = float(receivedDataInt[num_channels * i + 19]) / 1000.;  // urad
       adc_sci_null[i] = receivedDataInt[num_channels * i + 20];                // ADU
       adc_sci_mod[i] = receivedDataInt[num_channels * i + 21];                 // ADU
+
+      prev_counter = counter[i];
     }
 
     // phase-unwrap the OPD signal
     // has to be done before filtering, since filtering smoothes out the jumps
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < num_timepoints; i++) {
       while (opd_rad[i] - opd_rad_i_prev > PI) {
         opd_rad[i] -= 2 * PI;
       }
@@ -943,7 +958,7 @@ void run_calculation() {
     }
 
     // filter signals
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < num_timepoints; i++) {
       opd_rad_f = opd_lp_filter.filter(opd_rad[i]);
 
       // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
@@ -979,7 +994,7 @@ void run_calculation() {
     sci_null_queue.push({t, sci_null});
 
     // enqueue adc measurements
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < num_timepoints; i++) {
       adc_queues[0].push({counter[i], adc_shear1[i]});
       adc_queues[1].push({counter[i], adc_shear2[i]});
       adc_queues[2].push({counter[i], adc_shear3[i]});
@@ -1950,7 +1965,7 @@ void RenderUI() {
 
     // plot style
     static float thickness = 2;
-    static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+    static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickLabels;
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
     if (ImPlot::BeginPlot("##ADC", ImVec2(-1, 400 * io.FontGlobalScale))) {
