@@ -9,13 +9,12 @@ class NullLockin {
     // input filters
     double sampling_rate = 128000;  // Hz
     double center = 20000;          // Hz
-    double width = 5000;            // Hz
+    double width = 1000;            // Hz
     bp1.setup(sampling_rate, center, width);
-
     bp2.setup(sampling_rate, center, width);
 
     // lockin lowpass
-    double cutoff = 20000;  // Hz
+    double cutoff = 1000;  // Hz
     lp1.setup(sampling_rate, cutoff);
     lp2.setup(sampling_rate, cutoff);
   }
@@ -38,14 +37,14 @@ class NullLockin {
     double y = sci_null_delay * sci_mod_90;
 
     // lockin lowpass
-    // x = lp1.filter(x);
-    // y = lp2.filter(y);
+    x = lp1.filter(x);
+    y = lp2.filter(y);
 
     // magnitude
-    // double result = std::sqrt(x * x + y * y);
-    double result = sci_null;
+    double result = std::sqrt(x * x + y * y);
+    // double result = sci_null;
 
-    return result;
+    return result / 1.8e6;
   }
 
  private:

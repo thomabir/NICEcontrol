@@ -2042,6 +2042,32 @@ void RenderUI() {
                        0, sci_null_buffer.Offset, 2 * sizeof(int));
       ImPlot::EndPlot();
     }
+
+    // fft
+    // set up fft
+    const static int fft_size = 1024 * 8 * 8;
+    static double fft_power[fft_size / 2];
+    static double fft_freq[fft_size / 2];
+    static FFT_calculator fft(fft_size, 12800., &sci_null_buffer, fft_power, fft_freq);
+
+    // calculate fft
+    fft.calculate();
+
+    // plot fft_power vs fft_freq, with log scale on x and y axis
+    static ImVec4 fft_color = ImVec4(1, 1, 0, 1);
+    static float fft_thickness = 3;
+    static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
+    static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None;  // ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+    if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 400 * io.FontGlobalScale))) {
+      ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+      ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+      ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 10, 1e13);
+      ImPlot::SetNextLineStyle(fft_color, fft_thickness);
+      ImPlot::PlotLine("Sci Null FFT", &fft_freq[0], &fft_power[0], fft_size / 2, 0, 0, 8);
+      ImPlot::EndPlot();
+    }
   }
 
   if (ImGui::CollapsingHeader("OPD")) {
@@ -2671,7 +2697,7 @@ int main(int, char **) {
 
   // call setupActuators
   std::cout << "Starting setupActuators" << std::endl;
-  NICEcontrol::setupActuators();
+  // NICEcontrol::setupActuators();
 
   // Render loop
   while (!glfwWindowShouldClose(window)) {
