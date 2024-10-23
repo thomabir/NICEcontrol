@@ -1787,7 +1787,7 @@ void RenderUI() {
   }
 
   static ScrollingBuffer opd_buffer, shear_x1_buffer, shear_x2_buffer, shear_y1_buffer, shear_y2_buffer,
-      point_x1_buffer, point_x2_buffer, point_y1_buffer, point_y2_buffer;
+      point_x1_buffer, point_x2_buffer, point_y1_buffer, point_y2_buffer, sci_null_buffer;
 
   // GUI interface to save OPD measurements to file:
   // a button "start recording", which when pressed starts recording OPD measurements to a file
@@ -1799,19 +1799,36 @@ void RenderUI() {
   static std::ofstream file;
   static std::string filename;
   if (recording_running) {
-    ImGui::Text("Recording OPD measurements to file");
-    if (ImGui::Button("Stop recording")) {
+    if (ImGui::Button("OPD: Stop recording")) {
       recording_running = false;
       file.close();
     }
   } else {
-    ImGui::Text("Record OPD measurements to file");
-    if (ImGui::Button("Start recording")) {
+    if (ImGui::Button("OPD: Start recording")) {
       recording_running = true;
       filename = "measurements/" + get_iso_datestring() + "_opd.csv";
       file.open(filename);
       file << "Time at start of measurement: " << get_iso_datestring() << "\n";
       file << "Time (s),OPD (nm)\n";
+    }
+  }
+
+  // save intensity measurements to file
+  static bool record_sci_null = false;
+  static std::ofstream sci_null_file;
+  static std::string sci_null_filename;
+  if (record_sci_null) {
+    if (ImGui::Button("Intensity: Stop recording")) {
+      record_sci_null = false;
+      sci_null_file.close();
+    }
+  } else {
+    if (ImGui::Button("Intensity: Start recording")) {
+      record_sci_null = true;
+      sci_null_filename = "measurements/" + get_iso_datestring() + "_sci_null.csv";
+      sci_null_file.open(sci_null_filename);
+      sci_null_file << "Time at start of measurement: " << get_iso_datestring() << "\n";
+      sci_null_file << "Time (s),Intensity\n";
     }
   }
 
@@ -1830,11 +1847,28 @@ void RenderUI() {
       point_y1_buffer.AddPoint(m.time, m.point_y1);
       point_y2_buffer.AddPoint(m.time, m.point_y2);
 
-      // TODO: if saving data, write to file
+      // TODO: if saving data, write every 12800th sample to file
       if (recording_running) {
         file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(2) << m.opd
              << "\n";
       }
+    }
+  }
+
+  // add sci null measurements to the plot buffer
+  static int sci_null_sample_no = 0;
+  if (!sci_null_queue.isempty()) {
+    int N = sci_null_queue.size();
+    for (int i = 0; i < N; i++) {
+      auto m = sci_null_queue.pop();
+      sci_null_buffer.AddPoint(m.time, m.value);
+
+      // write to file
+      if (record_sci_null && sci_null_sample_no % 12800 == 0) {  // write every 12800th sample
+        sci_null_file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(1)
+                      << m.value << "\n";
+      }
+      sci_null_sample_no++;
     }
   }
 
@@ -1846,6 +1880,9 @@ void RenderUI() {
   } else {
     stopMeasurement();
   }
+
+  static float t_gui = 0;
+  t_gui = getTime();
 
   // ADC measurements
   if (ImGui::CollapsingHeader("ADC Measurements")) {
@@ -2005,36 +2042,18 @@ void RenderUI() {
 
   // Sci_null measurements
   if (ImGui::CollapsingHeader("Science beam Measurements")) {
-    static ScrollingBuffer sci_null_buffer;
-    static float t_sci_null = 0;
-
-    // get lates time in Sci_null queue
-    if (RunMeasurement.load()) {
-      if (!sci_null_queue.isempty()) {
-        t_sci_null = sci_null_queue.back().time;
-      }
-    }
-
-    // add all measurements to the plot buffers
-    if (!sci_null_queue.isempty()) {
-      int N = sci_null_queue.size();
-      for (int i = 0; i < N; i++) {
-        auto m = sci_null_queue.pop();
-        sci_null_buffer.AddPoint(m.time, m.value);
-      }
-    }
-
+    // history length slider
     static float sci_null_history_length = 1.0e-3;
     ImGui::SliderFloat("Sci_null History", &sci_null_history_length, 0.001, 5., "%.3f s", ImGuiSliderFlags_Logarithmic);
 
-    // plot style
+    // plot time series
     static float thickness = 3;
     static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
     if (ImPlot::BeginPlot("##Sci_null", ImVec2(-1, 600 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, t_sci_null - sci_null_history_length, t_sci_null, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - sci_null_history_length, t_gui, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), thickness);
@@ -2043,17 +2062,14 @@ void RenderUI() {
       ImPlot::EndPlot();
     }
 
-    // fft
-    // set up fft
+    // calculate fft
     const static int fft_size = 1024 * 8 * 8;
     static double fft_power[fft_size / 2];
     static double fft_freq[fft_size / 2];
     static FFT_calculator fft(fft_size, 12800., &sci_null_buffer, fft_power, fft_freq);
-
-    // calculate fft
     fft.calculate();
 
-    // plot fft_power vs fft_freq, with log scale on x and y axis
+    // plot fft
     static ImVec4 fft_color = ImVec4(1, 1, 0, 1);
     static float fft_thickness = 3;
     static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
@@ -2105,9 +2121,6 @@ void RenderUI() {
 
     // real time plot
     static ScrollingBuffer opd_dith_buffer, setpoint_buffer;
-
-    static float t_gui = 0;
-    t_gui = getTime();
 
     // get control signals
     if (!opd_loop.controlDataBuffer.isempty()) {
