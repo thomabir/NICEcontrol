@@ -107,8 +107,8 @@ class MIMOControlLoop {
   std::atomic<std::array<int, N>> plant_mode{};   // 0 = off, 1 = plant gets setpoint, 2 = plant gets controller output
   std::atomic<std::array<int, N>> controller_mode{};  // 0 = 0 as input, 1 = setpoint - measurement as input
 
-  A &actuator;
   C &controller;
+  A &actuator;
 
   // data buffer: N x controldata
   // TSCircularBuffer<ControlDataN<N>> controlDataBuffer;
