@@ -30,7 +30,11 @@ void PI_E754_Controller::init() {
   // Probably not thread-safe.
   fclose(stdout);
   iD = PI_ConnectUSB(this->serialNumberString);
-  freopen("/dev/tty", "w", stdout);
+  auto fp = freopen("/dev/tty", "w", stdout);
+  if (fp == nullptr) {
+    std::cerr << this->name << ": Error: Failed to redirect stdout" << std::endl;
+    return;
+  }
 
   // Check if connection was successful
   if (PI_IsConnected(iD)) {
