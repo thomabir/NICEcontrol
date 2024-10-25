@@ -6,7 +6,7 @@
 
 class nF_EBD_Controller {
  public:
-  nF_EBD_Controller(char *com_name);
+  nF_EBD_Controller(const char *com_name);
   void init();
   std::array<float, 2> read();
   void move_to(std::array<float, 2> target);

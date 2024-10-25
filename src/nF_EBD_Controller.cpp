@@ -8,7 +8,7 @@
 
 #include "../lib/nF/nF_interface.h"
 
-nF_EBD_Controller::nF_EBD_Controller(char *com_name) {
+nF_EBD_Controller::nF_EBD_Controller(const char *com_name) {
   // set com_name
   std::strcpy(this->com_name, com_name);
 
