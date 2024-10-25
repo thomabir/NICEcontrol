@@ -14,7 +14,7 @@ class MIMOControlLoop {
   void control(double t, std::array<float, N> sensor_data) {
     std::array<float, N> controller_input = {0.0f};
     std::array<float, N> controller_output = {0.0f};
-    std::array<float, N> actuator_command = {0.0f};
+    std::array<double, N> actuator_command = {0.0f};
 
     // load all atomic variables into non-atomic ones to avoid changes while this function is running
     std::array<float, N> setpoint_loc = this->setpoint.load();

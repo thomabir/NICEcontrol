@@ -50,14 +50,14 @@ void nF_EBD_Controller::init() {
   }
 }
 
-void nF_EBD_Controller::move_to(std::array<float, 2> target) {
+void nF_EBD_Controller::move_to(std::array<double, 2> target) {
   if (is_moving.load()) {
     return;
   }  // stage is unreachable while moving
 
   // recalculate target positions: rotate 45 degrees
-  float x = target[0] + target[1];
-  float y = target[1] - target[0];
+  double x = target[0] + target[1];
+  double y = target[1] - target[0];
 
   is_moving.store(true);
   std::thread([this, x, y] {
@@ -66,19 +66,23 @@ void nF_EBD_Controller::move_to(std::array<float, 2> target) {
   }).detach();
 }
 
-std::array<float, 2> nF_EBD_Controller::read() {
-  float position_x;
-  float position_y;
+std::array<double, 2> nF_EBD_Controller::read() {
+  float position_x, position_y;
   nF_get_dev_axis_position_m(this->fd, 1, &this->axis0, &position_x);
   nF_get_dev_axis_position_m(this->fd, 1, &this->axis1, &position_y);
   return {position_x * 1e3 - this->offset, position_y * 1e3 - this->offset};
 }
 
-void nF_EBD_Controller::move_to_blocking(float x_target, float y_target) {
+void nF_EBD_Controller::move_to_blocking(double x_target, double y_target) {
   x_target = (x_target + this->offset) * 1e-3;
   y_target = (y_target + this->offset) * 1e-3;
-  nF_set_dev_axis_target_m(this->fd, 1, 1, &this->axis0, &x_target);
-  nF_set_dev_axis_target_m(this->fd, 1, 1, &this->axis1, &y_target);
+
+  // nF API expects float, not double
+  float x_target_f = static_cast<float>(x_target);
+  float y_target_f = static_cast<float>(y_target);
+
+  nF_set_dev_axis_target_m(this->fd, 1, 1, &this->axis0, &x_target_f);
+  nF_set_dev_axis_target_m(this->fd, 1, 1, &this->axis1, &y_target_f);
 }
 
 void nF_EBD_Controller::close() { nF_intf_disconnect(this->fd); }

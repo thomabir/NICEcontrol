@@ -1339,7 +1339,7 @@ void RenderUI() {
       // plot for current piezo position
       static ImVec4 color = ImVec4(1, 1, 0, 1);
       static ScrollingBufferT<double, double> nF_stage_position_buffer[4];
-      std::array<float, 2> meas = nF_stage_1.read();
+      std::array<double, 2> meas = nF_stage_1.read();
       nF_stage_position_buffer[0].AddPoint(t_gui_x, meas[0]);
       nF_stage_position_buffer[1].AddPoint(t_gui_x, meas[1]);
       // meas = nF_stage_2.read();
