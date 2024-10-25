@@ -859,8 +859,8 @@ void RenderUI() {
   // Sci_null measurements
   if (ImGui::CollapsingHeader("Science beam Measurements")) {
     // history length slider
-    static float sci_null_history_length = 1.0e-3;
-    ImGui::SliderFloat("Sci_null History", &sci_null_history_length, 0.001, 5., "%.3f s", ImGuiSliderFlags_Logarithmic);
+    static float sci_null_history_length = 5.0;
+    ImGui::SliderFloat("Sci_null History", &sci_null_history_length, 1e-3, 50., "%.3f s", ImGuiSliderFlags_Logarithmic);
 
     // plot time series
     static float thickness = 3;
