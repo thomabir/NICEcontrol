@@ -31,7 +31,7 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, TSCircularBuffer<Sen
   // recording time: at least 1 s, at most 10/freq
   std::vector<float> recording_times(dither_freqs.size(), 0.0);  // s
 
-  for (int i = 0; i < dither_freqs.size(); i++) {
+  for (size_t i = 0; i < dither_freqs.size(); i++) {
     recording_times[i] = std::max(1.0, 10.0 / dither_freqs[i]);
   }
 
@@ -59,7 +59,7 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, TSCircularBuffer<Sen
   std::string freq_filename = dirname + "/freqs.csv";
   std::ofstream freq_file(freq_filename);
   freq_file << "Frequency (Hz),Dither amplitude,Recording time (s)\n";
-  for (int i = 0; i < dither_freqs.size(); i++) {
+  for (size_t i = 0; i < dither_freqs.size(); i++) {
     freq_file << std::to_string(dither_freqs[i]) << "," << dither_amps[i] << "," << recording_times[i] << "\n";
   }
   freq_file.close();
@@ -209,7 +209,7 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, TSCircularBuffer<Sen
   std::filesystem::create_directory(subdir);
 
   // seperate storage file for each frequency
-  for (int i = 0; i < dither_freqs.size(); i++) {
+  for (size_t i = 0; i < dither_freqs.size(); i++) {
     std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
     // storage file: frequency in format 1.2345e67
     filename = subdir + "/" + std::to_string(dither_freqs[i]) + "_hz.csv";
@@ -269,7 +269,7 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, TSCircularBuffer<Sen
 
   // seperate storage file for each frequency
 
-  for (int i = 0; i < dither_freqs.size(); i++) {
+  for (size_t i = 0; i < dither_freqs.size(); i++) {
     std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
     // storage file: frequency in format 1.2345e67
     filename = subdir1 + "/control_" + std::to_string(dither_freqs[i]) + "_hz.csv";
@@ -352,7 +352,7 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, TSCircularBuffer<Sen
   std::string subdir2 = dirname + "/freq_closed_loop_dither_plant";
   std::filesystem::create_directory(subdir2);
 
-  for (int i = 0; i < dither_freqs.size(); i++) {
+  for (size_t i = 0; i < dither_freqs.size(); i++) {
     std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
     // storage file: frequency in format 1.2345e67
     filename = subdir2 + "/control_" + std::to_string(dither_freqs[i]) + "_hz.csv";
@@ -435,7 +435,7 @@ void characterise_control_loop(SISOControlLoop<C, A> &loop, TSCircularBuffer<Sen
   std::string subdir3 = dirname + "/freq_closed_loop_dither_setpoint";
   std::filesystem::create_directory(subdir3);
 
-  for (int i = 0; i < dither_freqs.size(); i++) {
+  for (size_t i = 0; i < dither_freqs.size(); i++) {
     std::cout << "\t f = " << dither_freqs[i] << " Hz" << std::endl;
     // storage file: frequency in format 1.2345e67
     filename = subdir3 + "/control_" + std::to_string(dither_freqs[i]) + "_hz.csv";
