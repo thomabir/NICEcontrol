@@ -17,6 +17,7 @@
 #include <future>
 #include <iostream>
 #include <mutex>
+#include <numbers>
 #include <queue>
 #include <random>
 #include <thread>
@@ -75,9 +76,6 @@
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif
-
-// Constants
-#define PI 3.14159265359
 
 static void glfw_error_callback(int error, const char *description) {
   fprintf(stderr, "GLFW Error %d: %s\n", error, description);
@@ -403,7 +401,8 @@ void run_calculation() {
       adc_sine_ref[i] = receivedDataInt[num_channels * i + 9];
       adc_opd_ref[i] = receivedDataInt[num_channels * i + 10];
       opd_int[i] = receivedDataInt[num_channels * i + 11];
-      opd_rad[i] = -float(opd_int[i]) * PI / (std::pow(2.0, 23) - 1.);         // phase (signed 24 bit int) -> rad
+      opd_rad[i] =
+          -float(opd_int[i]) * std::numbers::pi / (std::pow(2.0, 23) - 1.);    // phase (signed 24 bit int) -> rad
       shear_x1_um[i] = float(receivedDataInt[num_channels * i + 12]) / 3000.;  // um
       shear_x2_um[i] = float(receivedDataInt[num_channels * i + 13]) / 3000.;  // um
       shear_y1_um[i] = float(receivedDataInt[num_channels * i + 14]) / 3000.;  // um
@@ -421,11 +420,11 @@ void run_calculation() {
     // phase-unwrap the OPD signal
     // has to be done before filtering, since filtering smoothes out the jumps
     for (int i = 0; i < num_timepoints; i++) {
-      while (opd_rad[i] - opd_rad_i_prev > PI) {
-        opd_rad[i] -= 2 * PI;
+      while (opd_rad[i] - opd_rad_i_prev > std::numbers::pi) {
+        opd_rad[i] -= 2 * std::numbers::pi;
       }
-      while (opd_rad[i] - opd_rad_i_prev < -PI) {
-        opd_rad[i] += 2 * PI;
+      while (opd_rad[i] - opd_rad_i_prev < -std::numbers::pi) {
+        opd_rad[i] += 2 * std::numbers::pi;
       }
       opd_rad_i_prev = opd_rad[i];
     }
@@ -458,7 +457,7 @@ void run_calculation() {
     }
 
     // convert OPD from radians to nm
-    opd_nm_f = opd_rad_f * 1550 / (2 * PI);
+    opd_nm_f = opd_rad_f * 1550 / (2 * std::numbers::pi);
 
     // enqueue sensor data
     sensorDataQueue.push(
