@@ -329,7 +329,6 @@ void run_calculation() {
     float opd_rad_f = 0., shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0.,
           point_x2_f = 0., point_y1_f = 0., point_y2_f = 0., opd_nm_f = 0., sci_null = 0.;
     auto t = utils::getTime();
-    auto t_chrono = std::chrono::high_resolution_clock::now();
 
     RunMeasurement.wait(false);
 
@@ -1337,7 +1336,6 @@ void RenderUI() {
     // actuator
     if (ImGui::TreeNode("Actuator##Pointing")) {
       // plot for current piezo position
-      static ImVec4 color = ImVec4(1, 1, 0, 1);
       static ScrollingBufferT<double, double> nF_stage_position_buffer[4];
       std::array<double, 2> meas = nF_stage_1.read();
       nF_stage_position_buffer[0].AddPoint(t_gui_x, meas[0]);
