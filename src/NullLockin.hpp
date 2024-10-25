@@ -19,6 +19,11 @@ class NullLockin {
     lp2.setup(sampling_rate, cutoff);
   }
 
+  void update_cutoff(double fcutoff) {
+    lp1.setup(128000, fcutoff);
+    lp2.setup(128000, fcutoff);
+  }
+
   double process(int adc_sci_null, int adc_sci_mod) {
     double sci_null = adc_sci_null;
     double sci_mod = adc_sci_mod;
