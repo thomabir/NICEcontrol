@@ -30,25 +30,4 @@ class ControlData {
     this->controller_output = 0.0;
     this->actuator_command = 0.0;
   }
-
-  ControlData(const ControlData &other) {
-    this->time = other.time;
-    this->measurement = other.measurement;
-    this->setpoint = other.setpoint;
-    this->dither_signal = other.dither_signal;
-    this->controller_input = other.controller_input;
-    this->controller_output = other.controller_output;
-    this->actuator_command = other.actuator_command;
-  }
-
-  ControlData &operator=(const ControlData &other) {
-    this->time = other.time;
-    this->measurement = other.measurement;
-    this->setpoint = other.setpoint;
-    this->dither_signal = other.dither_signal;
-    this->controller_input = other.controller_input;
-    this->controller_output = other.controller_output;
-    this->actuator_command = other.actuator_command;
-    return *this;
-  }
 };

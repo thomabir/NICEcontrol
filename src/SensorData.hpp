@@ -40,33 +40,6 @@ class SensorData {
     this->point_y2 = 0.0;
   }
 
-  SensorData(const SensorData &other) {
-    this->time = other.time;
-    this->opd = other.opd;
-    this->shear_x1 = other.shear_x1;
-    this->shear_x2 = other.shear_x2;
-    this->shear_y1 = other.shear_y1;
-    this->shear_y2 = other.shear_y2;
-    this->point_x1 = other.point_x1;
-    this->point_x2 = other.point_x2;
-    this->point_y1 = other.point_y1;
-    this->point_y2 = other.point_y2;
-  }
-
-  SensorData &operator=(const SensorData &other) {
-    this->time = other.time;
-    this->opd = other.opd;
-    this->shear_x1 = other.shear_x1;
-    this->shear_x2 = other.shear_x2;
-    this->shear_y1 = other.shear_y1;
-    this->shear_y2 = other.shear_y2;
-    this->point_x1 = other.point_x1;
-    this->point_x2 = other.point_x2;
-    this->point_y1 = other.point_y1;
-    this->point_y2 = other.point_y2;
-    return *this;
-  }
-
   // acces by index
   float &operator[](int i) {
     switch (i) {
