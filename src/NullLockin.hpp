@@ -14,7 +14,7 @@ class NullLockin {
     bp2.setup(sampling_rate, center, width);
 
     // lockin lowpass
-    double cutoff = 1000;  // Hz
+    double cutoff = 1;  // Hz
     lp1.setup(sampling_rate, cutoff);
     lp2.setup(sampling_rate, cutoff);
   }
@@ -70,5 +70,5 @@ class NullLockin {
   FirFilter<double, num_taps> hilbert_1 = FirFilter<double, num_taps>(hilbert_coefficients);
 
   // lockin lowpass
-  Iir::Butterworth::LowPass<8> lp1, lp2;
+  Iir::Butterworth::LowPass<4> lp1, lp2;
 };

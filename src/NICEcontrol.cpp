@@ -189,38 +189,40 @@ nF_EBD_Controller nF_stage_2("/dev/ttyUSB3");
 void setupActuators() {
   // connect and intialise all piezo stages
 
-  // Tip/tilt stage 1
-  tip_tilt_stage1.init();
-  // tip_tilt_stage1.autozero(); // run autozero if stage does not move
-  tip_tilt_stage1.move_to_x(0.0f);
-  tip_tilt_stage1.move_to_y(0.0f);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "\tPosition: (" << tip_tilt_stage1.readx() << ", " << tip_tilt_stage1.ready() << ") urad" << std::endl;
+  // // Tip/tilt stage 1
+  // tip_tilt_stage1.init();
+  // // tip_tilt_stage1.autozero(); // run autozero if stage does not move
+  // tip_tilt_stage1.move_to_x(0.0f);
+  // tip_tilt_stage1.move_to_y(0.0f);
+  // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  // std::cout << "\tPosition: (" << tip_tilt_stage1.readx() << ", " << tip_tilt_stage1.ready() << ") urad" <<
+  // std::endl;
 
-  // Tip/tilt stage 2
-  tip_tilt_stage2.init();
-  // tip_tilt_stage2.autozero(); // run autozero if stage does not move
-  tip_tilt_stage2.move_to_x(0.0f);
-  tip_tilt_stage2.move_to_y(0.0f);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "\tPosition: (" << tip_tilt_stage2.readx() << ", " << tip_tilt_stage2.ready() << ") urad" << std::endl;
+  // // Tip/tilt stage 2
+  // tip_tilt_stage2.init();
+  // // tip_tilt_stage2.autozero(); // run autozero if stage does not move
+  // tip_tilt_stage2.move_to_x(0.0f);
+  // tip_tilt_stage2.move_to_y(0.0f);
+  // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  // std::cout << "\tPosition: (" << tip_tilt_stage2.readx() << ", " << tip_tilt_stage2.ready() << ") urad" <<
+  // std::endl;
 
-  // nF tip/tilt stages
-  nF_stage_1.init();
-  nF_stage_1.move_to({0.0, 0.0});
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  auto pos = nF_stage_1.read();
-  std::cout << "nF Stage 1 Position: " << pos[0] << ", " << pos[1] << std::endl;
+  // // nF tip/tilt stages
+  // nF_stage_1.init();
+  // nF_stage_1.move_to({0.0, 0.0});
+  // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  // auto pos = nF_stage_1.read();
+  // std::cout << "nF Stage 1 Position: " << pos[0] << ", " << pos[1] << std::endl;
 
-  nF_stage_2.init();
-  nF_stage_2.move_to({0.0, 0.0});
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  pos = nF_stage_2.read();
-  std::cout << "nF Stage 2 Position: " << pos[0] << ", " << pos[1] << std::endl;
+  // nF_stage_2.init();
+  // nF_stage_2.move_to({0.0, 0.0});
+  // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  // pos = nF_stage_2.read();
+  // std::cout << "nF Stage 2 Position: " << pos[0] << ", " << pos[1] << std::endl;
 
   // OPD stage
   opd_stage.init();
-  opd_stage.move_to(0.0f);
+  opd_stage.move_to(0.f);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
   std::cout << "\tPosition: " << opd_stage.read() << " nm" << std::endl;
 }
@@ -866,6 +868,12 @@ void RenderUI() {
     static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
+    // print current measurement
+    if (!sci_null_buffer.Data.empty()) {
+      auto m = sci_null_buffer.Data.back();
+      ImGui::Text("Current Sci_null: %.1f", m.y);
+    }
+
     if (ImPlot::BeginPlot("##Sci_null", ImVec2(-1, 600 * io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - sci_null_history_length, t_gui, ImGuiCond_Always);
@@ -1026,21 +1034,21 @@ void RenderUI() {
       }
 
       // plot the ratio of the two ffts
-      static double fft_ratio[fft_size / 2];
-      for (int i = 0; i < fft_size / 2; i++) {
-        fft_ratio[i] = fft_power_dith[i] / fft_power[i];
-      }
+      // static double fft_ratio[fft_size / 2];
+      // for (int i = 0; i < fft_size / 2; i++) {
+      //   fft_ratio[i] = fft_power_dith[i] / fft_power[i];
+      // }
 
-      if (ImPlot::BeginPlot("##FFT Ratio", ImVec2(-1, 400 * io.FontGlobalScale))) {
-        ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
-        ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-        ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-        ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 100);
-        ImPlot::SetNextLineStyle(fft_color, thickness);
-        ImPlot::PlotLine("FFT Ratio", &fft_freq_dith[0], &fft_ratio[0], fft_size / 2);
-        ImPlot::EndPlot();
-      }
+      // if (ImPlot::BeginPlot("##FFT Ratio", ImVec2(-1, 400 * io.FontGlobalScale))) {
+      //   ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
+      //   ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+      //   ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+      //   ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
+      //   ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 100);
+      //   ImPlot::SetNextLineStyle(fft_color, thickness);
+      //   ImPlot::PlotLine("FFT Ratio", &fft_freq_dith[0], &fft_ratio[0], fft_size / 2);
+      //   ImPlot::EndPlot();
+      // }
 
       ImGui::TreePop();
     }
@@ -1416,7 +1424,7 @@ int main(int, char **) {
   glfwSetErrorCallback(glfw_error_callback);
   if (!glfwInit()) return 1;
 
-    // Decide GL+GLSL versions
+  // Decide GL+GLSL versions
 #if defined(IMGUI_IMPL_OPENGL_ES2)
   // GL ES 2.0 + GLSL 100
   const char *glsl_version = "#version 100";
@@ -1526,7 +1534,7 @@ int main(int, char **) {
 
   // call setupActuators
   std::cout << "Starting setupActuators" << std::endl;
-  // NICEcontrol::setupActuators();
+  NICEcontrol::setupActuators();
 
   // Render loop
   while (!glfwWindowShouldClose(window)) {
@@ -1586,7 +1594,9 @@ int main(int, char **) {
   glfwTerminate();
 
   // Stop the compute thread
-  { NICEcontrol::RunMeasurement.store(false); }
+  {
+    NICEcontrol::RunMeasurement.store(false);
+  }
   computeThread.join();
 
   return 0;

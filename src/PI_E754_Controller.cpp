@@ -61,6 +61,9 @@ void PI_E754_Controller::init() {
     std::cout << this->name << ": Error: " << iError << std::endl;
   }
 
+  // run autozero
+  autozero();
+
   // enable servo
   const int iEnable = 1;
   PI_SVO(iD, "1", &iEnable);
