@@ -977,23 +977,13 @@ void RenderUI() {
 
       // P and I control loop gains
       static float opd_p_ethercat = 0.0f;
-      static float opd_i_ethercat = 0.0f;
+      static float opd_i_ethercat = 100.0f;
       ImGui::SliderFloat("P##OPD EtherCAT", &opd_p_ethercat, 1e-4f, 1e0f, "%.5f", ImGuiSliderFlags_Logarithmic);
       ImGui::SliderFloat("I##OPD EtherCAT", &opd_i_ethercat, 1e-1f, 1e3f, "%.5f", ImGuiSliderFlags_Logarithmic);
 
       // two binary flags: Reset phase unwrap, and run control loop
       static bool reset_phase_unwrap = false;
-      static bool run_control_loop = false;
       ImGui::Checkbox("Reset phase unwrap", &reset_phase_unwrap);
-
-      // run control loop defined via gui_opd_loop_select
-      if (gui_opd_loop_select == 0) {
-        run_control_loop = false;
-      } else if (gui_opd_loop_select == 1) {
-        run_control_loop = true;
-      } else {
-        run_control_loop = false;
-      }
 
       // Interface to EtherCAT master: Send a few bytes via UDP to the master receiver
       // 5 bytes data via UDP:
@@ -1003,7 +993,7 @@ void RenderUI() {
       const char *udp_ip = "192.168.88.177";
       static EthercatUdpInterface ec_udp_if(udp_ip, udp_port);
       ec_udp_if.send_commands(opd_setpoint_ethercat * 1.0e-3, opd_p_ethercat, opd_i_ethercat, reset_phase_unwrap,
-                              run_control_loop);
+                              gui_opd_loop_select == 2);
 
       ImGui::TreePop();
     }
