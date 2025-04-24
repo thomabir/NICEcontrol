@@ -66,6 +66,12 @@
 // NullLockin
 #include "NullLockin.hpp"
 
+// EtherCAT UDP Interface
+#include "EthercatUdpInterface.hpp"
+
+// Tango
+#include "camera_if.hpp"
+
 // white noise for dithering
 #include <random>
 
@@ -155,6 +161,7 @@ std::atomic<bool> gui_control(true);
 
 // OPD control
 float opd_setpoint_gui = 0.0f;  // setpoint entered in GUI, may be out of range
+std::atomic<bool> reset_phase_unwrap(false);
 
 // shear control
 float shear_x1_setpoint_gui = 0.0f;
@@ -174,7 +181,7 @@ std::atomic<bool> RunMeasurement(false);
 // initialise opd stage
 // MCL_OPDStage opd_stage;
 char serial_number[1024] = "123076463";
-PI_E754_Controller opd_stage(serial_number);
+// PI_E754_Controller opd_stage(serial_number);
 
 // initialise tip/tilt stages
 char serial_number1[1024] = "0122040101";
@@ -221,10 +228,10 @@ void setupActuators() {
   // std::cout << "nF Stage 2 Position: " << pos[0] << ", " << pos[1] << std::endl;
 
   // OPD stage
-  opd_stage.init();
-  opd_stage.move_to(0.f);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  std::cout << "\tPosition: " << opd_stage.read() << " nm" << std::endl;
+  // opd_stage.init();
+  // opd_stage.move_to(0.f);
+  // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  // std::cout << "\tPosition: " << opd_stage.read() << " nm" << std::endl;
 }
 
 TSCircularBuffer<SensorData> sensorDataQueue;
@@ -294,7 +301,7 @@ ShearYActuator shear_y1_actuator(tip_tilt_stage1);
 ShearYActuator shear_y2_actuator(tip_tilt_stage2);
 
 // control loops
-SISOControlLoop opd_loop(opd_controller, opd_stage);
+// SISOControlLoop opd_loop(opd_controller, opd_stage);
 SISOControlLoop shear_x1_loop(shear_x1_controller, shear_x1_actuator);
 SISOControlLoop shear_x2_loop(shear_x2_controller, shear_x2_actuator);
 SISOControlLoop shear_y1_loop(shear_y1_controller, shear_y1_actuator);
@@ -392,6 +399,9 @@ void run_calculation() {
         prev_gap_counter = counter[i];
       }
 
+      // print current counter
+      // std::cout << "Counter: " << counter[i] << std::endl;
+
       adc_shear1[i] = receivedDataInt[num_channels * i + 1];
       adc_shear2[i] = receivedDataInt[num_channels * i + 2];
       adc_shear3[i] = receivedDataInt[num_channels * i + 3];
@@ -419,14 +429,28 @@ void run_calculation() {
       prev_counter = counter[i];
     }
 
+    // print first and last counter of the package
+    // std::cout << "Counter: " << counter[0] << " -> " << counter[num_timepoints - 1] << std::endl;
+
     // phase-unwrap the OPD signal
     // has to be done before filtering, since filtering smoothes out the jumps
+    const int max_unwrap_iters = 500;
+    static int unwrap_iters = 0;
+
     for (int i = 0; i < num_timepoints; i++) {
-      while (opd_rad[i] - opd_rad_i_prev > std::numbers::pi) {
-        opd_rad[i] -= 2 * std::numbers::pi;
+      if (reset_phase_unwrap.load()) {
+        unwrap_iters = 0;
+        opd_rad_i_prev = 0;
       }
-      while (opd_rad[i] - opd_rad_i_prev < -std::numbers::pi) {
+
+      opd_rad[i] = opd_rad[i] + unwrap_iters * 2 * std::numbers::pi;  // add the current number of unwrapping iterations
+      while ((opd_rad[i] - opd_rad_i_prev > std::numbers::pi) && (unwrap_iters > -max_unwrap_iters)) {
+        opd_rad[i] -= 2 * std::numbers::pi;
+        unwrap_iters--;
+      }
+      while ((opd_rad[i] - opd_rad_i_prev < -std::numbers::pi) && (unwrap_iters < max_unwrap_iters)) {
         opd_rad[i] += 2 * std::numbers::pi;
+        unwrap_iters++;
       }
       opd_rad_i_prev = opd_rad[i];
     }
@@ -486,7 +510,7 @@ void run_calculation() {
     }
 
     // Run control loops
-    opd_loop.control(t, opd_nm_f);
+    // opd_loop.control(t, opd_nm_f);
     shear_x1_loop.control(t, shear_x1_f);
     shear_x2_loop.control(t, shear_x2_f);
     shear_y1_loop.control(t, shear_y1_f);
@@ -512,7 +536,7 @@ void RenderUI() {
   ImGuiIO &io = ImGui::GetIO();
 
   // OPD control <-> GUI
-  static int gui_opd_loop_select = 0;
+
   static float opd_p_gui = 0.700f;
   static float opd_i_gui = 0.009f;
   static float opd_dither_freq_gui = 0.0f;
@@ -530,19 +554,19 @@ void RenderUI() {
 
   if (gui_control.load()) {
     // OPD
-    if (gui_opd_loop_select == 2) {
-      opd_loop.control_mode.store(4);
-    } else if (gui_opd_loop_select == 1) {
-      opd_loop.control_mode.store(1);
-    } else {
-      opd_loop.control_mode.store(0);
-    }
+    // if (gui_opd_loop_select == 2) {
+    //   opd_loop.control_mode.store(4);
+    // } else if (gui_opd_loop_select == 1) {
+    //   opd_loop.control_mode.store(1);
+    // } else {
+    //   opd_loop.control_mode.store(0);
+    // }
 
-    opd_loop.setpoint.store(opd_setpoint_gui);
-    opd_loop.p.store(opd_p_gui);
-    opd_loop.i.store(opd_i_gui);
-    opd_loop.dither_freq.store(opd_dither_freq_gui);
-    opd_loop.dither_amp.store(opd_dither_amp_gui);
+    // opd_loop.setpoint.store(opd_setpoint_gui);
+    // opd_loop.p.store(opd_p_gui);
+    // opd_loop.i.store(opd_i_gui);
+    // opd_loop.dither_freq.store(opd_dither_freq_gui);
+    // opd_loop.dither_amp.store(opd_dither_amp_gui);
 
     // Shear
     if (shear_loop_select == 2) {
@@ -701,6 +725,23 @@ void RenderUI() {
   static float t_gui = 0;
   t_gui = utils::getTime();
 
+  // science camera
+  if (ImGui::CollapsingHeader("Science Camera")) {
+    init_camera();
+    int size = get_size();
+    std::cout << "Image sise: " << size << std::endl;
+
+    std::vector<unsigned short> image;
+    image = get_image();
+
+    // print 5 elements of the image
+    std::cout << "Image: ";
+    for (int i = 0; i < 5; i++) {
+      std::cout << image[i] << " ";
+    }
+    std::cout << std::endl;
+  }
+
   // ADC measurements
   if (ImGui::CollapsingHeader("ADC Measurements")) {
     static ScrollingBufferT<int, int> adc_buffers[10];
@@ -763,52 +804,52 @@ void RenderUI() {
     }
 
     // print peak-to-peak and mean value of OPDRef
-    if (!adc_buffers[9].Data.empty()) {
-      auto last_1000_measurements_data = adc_buffers[9].GetLastN(1000);
-      std::vector<int> last_1000_measurements;
-      for (auto &m : last_1000_measurements_data) {
-        last_1000_measurements.push_back(m.value);
-      }
-      int min = *std::min_element(last_1000_measurements.begin(), last_1000_measurements.end());
-      int max = *std::max_element(last_1000_measurements.begin(), last_1000_measurements.end());
-      float mean = std::accumulate(last_1000_measurements.begin(), last_1000_measurements.end(), 0.0) /
-                   last_1000_measurements.size();
-      // print peak-to-peak as floating point number, e.g. 9.432E4
-      ImGui::Text("Peak-to-peak OPDRef: %.2E", float(max - min));
-      ImGui::Text("Mean OPDRef: %.2E", mean);
-    }
+    // if (!adc_buffers[9].Data.empty()) {
+    //   auto last_1000_measurements_data = adc_buffers[9].GetLastN(1000);
+    //   std::vector<int> last_1000_measurements;
+    //   for (auto &m : last_1000_measurements_data) {
+    //     last_1000_measurements.push_back(m.value);
+    //   }
+    //   int min = *std::min_element(last_1000_measurements.begin(), last_1000_measurements.end());
+    //   int max = *std::max_element(last_1000_measurements.begin(), last_1000_measurements.end());
+    //   float mean = std::accumulate(last_1000_measurements.begin(), last_1000_measurements.end(), 0.0) /
+    //                last_1000_measurements.size();
+    //   // print peak-to-peak as floating point number, e.g. 9.432E4
+    //   ImGui::Text("Peak-to-peak OPDRef: %.2E", float(max - min));
+    //   ImGui::Text("Mean OPDRef: %.2E", mean);
+    // }
 
     // same for shear sum
-    if (!adc_buffers[0].Data.empty()) {
-      auto last_1000_shear_sum_data = shear_sum_buffer.GetLastN(1000);
-      std::vector<int> last_1000_shear_sum;
-      for (auto &m : last_1000_shear_sum_data) {
-        last_1000_shear_sum.push_back(m.value);
-      }
-      int min = *std::min_element(last_1000_shear_sum.begin(), last_1000_shear_sum.end());
-      int max = *std::max_element(last_1000_shear_sum.begin(), last_1000_shear_sum.end());
-      float mean =
-          std::accumulate(last_1000_shear_sum.begin(), last_1000_shear_sum.end(), 0.0) / last_1000_shear_sum.size();
-      // print peak-to-peak as floating point number, e.g. 9.432E4
-      ImGui::Text("Peak-to-peak ShearSum: %.2E", float(max - min));
-      ImGui::Text("Mean ShearSum: %.2E", mean);
-    }
+    // if (!adc_buffers[0].Data.empty()) {
+    //   auto last_1000_shear_sum_data = shear_sum_buffer.GetLastN(1000);
+    //   std::vector<int> last_1000_shear_sum;
+    //   for (auto &m : last_1000_shear_sum_data) {
+    //     last_1000_shear_sum.push_back(m.value);
+    //   }
+    //   int min = *std::min_element(last_1000_shear_sum.begin(), last_1000_shear_sum.end());
+    //   int max = *std::max_element(last_1000_shear_sum.begin(), last_1000_shear_sum.end());
+    //   float mean =
+    //       std::accumulate(last_1000_shear_sum.begin(), last_1000_shear_sum.end(), 0.0) / last_1000_shear_sum.size();
+    //   // print peak-to-peak as floating point number, e.g. 9.432E4
+    //   ImGui::Text("Peak-to-peak ShearSum: %.2E", float(max - min));
+    //   ImGui::Text("Mean ShearSum: %.2E", mean);
+    // }
 
     // same for pointing sum
-    if (!adc_buffers[4].Data.empty()) {
-      auto last_1000_point_sum_data = point_sum_buffer.GetLastN(1000);
-      std::vector<int> last_1000_point_sum;
-      for (auto &m : last_1000_point_sum_data) {
-        last_1000_point_sum.push_back(m.value);
-      }
-      int min = *std::min_element(last_1000_point_sum.begin(), last_1000_point_sum.end());
-      int max = *std::max_element(last_1000_point_sum.begin(), last_1000_point_sum.end());
-      float mean =
-          std::accumulate(last_1000_point_sum.begin(), last_1000_point_sum.end(), 0.0) / last_1000_point_sum.size();
-      // print peak-to-peak as floating point number, e.g. 9.432E4
-      ImGui::Text("Peak-to-peak PointSum: %.2E", float(max - min));
-      ImGui::Text("Mean PointSum: %.2E", mean);
-    }
+    // if (!adc_buffers[4].Data.empty()) {
+    //   auto last_1000_point_sum_data = point_sum_buffer.GetLastN(1000);
+    //   std::vector<int> last_1000_point_sum;
+    //   for (auto &m : last_1000_point_sum_data) {
+    //     last_1000_point_sum.push_back(m.value);
+    //   }
+    //   int min = *std::min_element(last_1000_point_sum.begin(), last_1000_point_sum.end());
+    //   int max = *std::max_element(last_1000_point_sum.begin(), last_1000_point_sum.end());
+    //   float mean =
+    //       std::accumulate(last_1000_point_sum.begin(), last_1000_point_sum.end(), 0.0) / last_1000_point_sum.size();
+    //   // print peak-to-peak as floating point number, e.g. 9.432E4
+    //   ImGui::Text("Peak-to-peak PointSum: %.2E", float(max - min));
+    //   ImGui::Text("Mean PointSum: %.2E", mean);
+    // }
 
     static float adc_history_length = 1000.f;
     ImGui::SliderFloat("ADC History", &adc_history_length, 1, 128000, "%.5f s", ImGuiSliderFlags_Logarithmic);
@@ -930,34 +971,35 @@ void RenderUI() {
       // characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_no_box_overnight");
       characterise_control_loop(shear_x1_loop, sensorDataQueue, 0.4, 0.007, 1.0, 200.0, 1.0, 300.0, 150, 50.0,
                                 "shear_x1_no_box_repeat");
-      characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop,
-                                     sensorDataQueue, 0.7, 0.01, 0.4, 0.007, 1.0, 200.0, "joint_no_box_overnight");
+      // characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop,
+      //                                sensorDataQueue, 0.7, 0.01, 0.4, 0.007, 1.0, 200.0, "joint_no_box_overnight");
       gui_control.store(true);
     }
-
-    // control mode selector
-    ImGui::Text("Control mode:");
-    ImGui::SameLine();
-    ImGui::RadioButton("Off##OPD", &gui_opd_loop_select, 0);
-    ImGui::SameLine();
-    ImGui::RadioButton("Open loop##OPD", &gui_opd_loop_select, 1);
-    ImGui::SameLine();
-    ImGui::RadioButton("Closed loop##OPD", &gui_opd_loop_select, 2);
 
     // real time plot
     static ScrollingBuffer opd_dith_buffer, setpoint_buffer;
 
     // get control signals
-    if (!opd_loop.controlDataBuffer.isempty()) {
-      while (!opd_loop.controlDataBuffer.isempty()) {
-        auto m = opd_loop.controlDataBuffer.pop();
-        setpoint_buffer.AddPoint(m.time, m.setpoint);
-        opd_dith_buffer.AddPoint(m.time, m.dither_signal);
-      }
-    }
+    // if (!opd_loop.controlDataBuffer.isempty()) {
+    //   while (!opd_loop.controlDataBuffer.isempty()) {
+    //     auto m = opd_loop.controlDataBuffer.pop();
+    //     setpoint_buffer.AddPoint(m.time, m.setpoint);
+    //     opd_dith_buffer.AddPoint(m.time, m.dither_signal);
+    //   }
+    // }
 
     static bool plot_setpoint = false;
     ImGui::Checkbox("Plot setpoint", &plot_setpoint);
+    // no newline
+    ImGui::SameLine();
+    // phase unwrap reset button: store 1 in reset_phase_unwrap.store
+    static bool reset_phase_unwrap_gui = false;
+    ImGui::Checkbox("Reset phase unwrap", &reset_phase_unwrap_gui);
+    if (reset_phase_unwrap_gui) {
+      reset_phase_unwrap.store(1);
+    } else {
+      reset_phase_unwrap.store(0);
+    }
 
     static float opd_history_length = 10.0f;
     ImGui::SliderFloat("OPD History", &opd_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
@@ -985,18 +1027,6 @@ void RenderUI() {
         ImPlot::PlotLine("Setpoint", &setpoint_buffer.Data[0].x, &setpoint_buffer.Data[0].y,
                          setpoint_buffer.Data.size(), 0, setpoint_buffer.Offset, 2 * sizeof(float));
       }
-      ImPlot::EndPlot();
-    }
-
-    // plot for dither signal
-    if (ImPlot::BeginPlot("Dither##OPD", ImVec2(-1, 150 * io.FontGlobalScale))) {
-      ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - opd_history_length, t_gui, ImGuiCond_Always);
-      ImPlot::SetupAxisLimits(ImAxis_Y1, -opd_loop.dither_amp.load(), opd_loop.dither_amp.load());
-      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      ImPlot::SetNextLineStyle(fft_color, thickness);
-      ImPlot::PlotLine("Dither signal", &opd_dith_buffer.Data[0].x, &opd_dith_buffer.Data[0].y,
-                       opd_dith_buffer.Data.size(), 0, opd_dith_buffer.Offset, 2 * sizeof(float));
       ImPlot::EndPlot();
     }
 
@@ -1033,23 +1063,6 @@ void RenderUI() {
         ImPlot::EndPlot();
       }
 
-      // plot the ratio of the two ffts
-      // static double fft_ratio[fft_size / 2];
-      // for (int i = 0; i < fft_size / 2; i++) {
-      //   fft_ratio[i] = fft_power_dith[i] / fft_power[i];
-      // }
-
-      // if (ImPlot::BeginPlot("##FFT Ratio", ImVec2(-1, 400 * io.FontGlobalScale))) {
-      //   ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
-      //   ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-      //   ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-      //   ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
-      //   ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 100);
-      //   ImPlot::SetNextLineStyle(fft_color, thickness);
-      //   ImPlot::PlotLine("FFT Ratio", &fft_freq_dith[0], &fft_ratio[0], fft_size / 2);
-      //   ImPlot::EndPlot();
-      // }
-
       ImGui::TreePop();
     }
 
@@ -1083,58 +1096,57 @@ void RenderUI() {
       ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode("Actuator##OPD")) {
-      // plot for current piezo position
-      static ImVec4 color = ImVec4(1, 1, 0, 1);
-      static ScrollingBuffer piezo_buffer;
-      piezo_buffer.AddPoint(t_gui, opd_stage.read());
+    if (ImGui::TreeNode("Control##OPD")) {
+      static int gui_opd_loop_select = 0;
+      ImGui::Text("Control mode:");
+      ImGui::SameLine();
+      ImGui::RadioButton("Off##OPD", &gui_opd_loop_select, 0);
+      ImGui::SameLine();
+      // ImGui::RadioButton("Open loop##OPD", &gui_opd_loop_select, 1);
+      // ImGui::SameLine();
+      ImGui::RadioButton("Closed loop##OPD", &gui_opd_loop_select, 2);
 
-      if (ImPlot::BeginPlot("##Piezo", ImVec2(-1, 150 * io.FontGlobalScale))) {
-        ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - opd_history_length, t_gui, ImGuiCond_Always);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        ImPlot::SetNextLineStyle(color, thickness);
-        ImPlot::PlotLine("Piezo position", &piezo_buffer.Data[0].x, &piezo_buffer.Data[0].y, piezo_buffer.Data.size(),
-                         0, piezo_buffer.Offset, 2 * sizeof(float));
-        ImPlot::EndPlot();
-      }
-
-      ImGui::TreePop();
-    }
-
-    if (ImGui::TreeNode("Control loop##OPD")) {
-      ImGui::Text("Control loop parameters:");
-
-      // sliders for p ,i
-      ImGui::SliderFloat("P##OPD", &opd_p_gui, 1e-4f, 1e2f, "%.5f", ImGuiSliderFlags_Logarithmic);
-      ImGui::SliderFloat("I##OPD", &opd_i_gui, 1e-4f, 3e-1f, "%.5f", ImGuiSliderFlags_Logarithmic);
-
+      // OPD setpoint
+      static float opd_setpoint_ethercat = 0.0f;
       const float opd_setpoint_min = -1e6, opd_setpoint_max = 1e6;
-
-      // opd input: drag or ctrl+click to input
-      ImGui::DragFloat("OPD Setpoint", &opd_setpoint_gui, 0.1f, opd_setpoint_min, opd_setpoint_max, "%.2f nm",
+      ImGui::DragFloat("OPD Setpoint", &opd_setpoint_ethercat, 0.1f, opd_setpoint_min, opd_setpoint_max, "%.2f nm",
                        ImGuiSliderFlags_AlwaysClamp);
 
-      // dither parameters
-      ImGui::SliderFloat("Dither frequency##OPD", &opd_dither_freq_gui, 0.1f, 1000.0f, "%.2f Hz",
-                         ImGuiSliderFlags_Logarithmic);
-      ImGui::SliderFloat("Dither amplitude##OPD", &opd_dither_amp_gui, 0.0f, 100.0f, "%.2f nm");
+      // P and I control loop gains
+      static float opd_p_ethercat = 0.0f;
+      static float opd_i_ethercat = 0.0f;
+      ImGui::SliderFloat("P##OPD EtherCAT", &opd_p_ethercat, 1e-4f, 1e0f, "%.5f", ImGuiSliderFlags_Logarithmic);
+      ImGui::SliderFloat("I##OPD EtherCAT", &opd_i_ethercat, 1e-1f, 1e3f, "%.5f", ImGuiSliderFlags_Logarithmic);
+
+      // two binary flags: Reset phase unwrap, and run control loop
+      static bool reset_phase_unwrap = false;
+      static bool run_control_loop = false;
+      ImGui::Checkbox("Reset phase unwrap", &reset_phase_unwrap);
+
+      // run control loop defined via gui_opd_loop_select
+      if (gui_opd_loop_select == 0) {
+        run_control_loop = false;
+      } else if (gui_opd_loop_select == 1) {
+        run_control_loop = true;
+      } else {
+        run_control_loop = false;
+      }
+
+      // Interface to EtherCAT master: Send a few bytes via UDP to the master receiver
+      // 5 bytes data via UDP:
+      // 4 bytes: OPD setpoint float
+      // 1 byte: flags: X X X X X X reset_phase_unwrap run_control_loop
+      const int udp_port = 8888;
+      const char *udp_ip = "192.168.88.177";
+      static EthercatUdpInterface ec_udp_if(udp_ip, udp_port);
+      ec_udp_if.send_commands(opd_setpoint_ethercat * 1.0e-3, opd_p_ethercat, opd_i_ethercat, reset_phase_unwrap,
+                              run_control_loop);
 
       ImGui::TreePop();
     }
   }
 
   if (ImGui::CollapsingHeader("Shear")) {
-    // control mode selector
-    ImGui::Text("Control mode:");
-    ImGui::SameLine();
-    ImGui::RadioButton("Off##X", &shear_loop_select, 0);
-    ImGui::SameLine();
-    ImGui::RadioButton("Open loop##X", &shear_loop_select, 1);
-    ImGui::SameLine();
-    ImGui::RadioButton("Closed loop##X", &shear_loop_select, 2);
-
     static float t_gui_x = 0;
 
     // if measurement is running, update gui time.
@@ -1238,62 +1250,6 @@ void RenderUI() {
       ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode("Actuator##Shear")) {
-      // plot for current piezo position
-      static ScrollingBufferT<double, double> tip_tilt_actuator_buffer[4];
-      tip_tilt_actuator_buffer[0].AddPoint(t_gui_x, tip_tilt_stage1.readx());
-      tip_tilt_actuator_buffer[1].AddPoint(t_gui_x, tip_tilt_stage1.ready());
-      tip_tilt_actuator_buffer[2].AddPoint(t_gui_x, tip_tilt_stage2.readx());
-      tip_tilt_actuator_buffer[3].AddPoint(t_gui_x, tip_tilt_stage2.ready());
-
-      // labels
-      static const char *plot_labels[4] = {"Tip/Tilt 1 X", "Tip/Tilt 1 Y", "Tip/Tilt 2 X", "Tip/Tilt 2 Y"};
-
-      if (ImPlot::BeginPlot("##Tip/Tilt actuator", ImVec2(-1, 150 * io.FontGlobalScale))) {
-        ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        for (int i = 0; i < 4; i++) {
-          ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), x1_thickness);
-          ImPlot::PlotLine(plot_labels[i], &tip_tilt_actuator_buffer[i].Data[0].time,
-                           &tip_tilt_actuator_buffer[i].Data[0].value, tip_tilt_actuator_buffer[i].Data.size(), 0,
-                           tip_tilt_actuator_buffer[i].Offset, 2 * sizeof(double));
-        }
-        ImPlot::EndPlot();
-      }
-
-      float tip_tilt_actuator_measurement = 0.0f;
-
-      // Display measurement
-      ImGui::Text("Current measurement: %.4f", tip_tilt_actuator_measurement);
-
-      ImGui::TreePop();
-    }
-
-    // control
-    if (ImGui::TreeNode("Control loop##X1D")) {
-      ImGui::Text("Control loop parameters:");
-
-      // sliders for p ,i
-      ImGui::SliderFloat("P##X1D", &shear_p_gui, 0.0f, 1.0f);
-      ImGui::SliderFloat("I##X1D", &shear_i_gui, 0.0f, 0.05f);
-
-      const float shear_setpoint_min = -1e6, shear_setpoint_max = 1e6;
-
-      // x1d input: drag
-      ImGui::DragFloat("Setpoint X1", &shear_x1_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f",
-                       ImGuiSliderFlags_AlwaysClamp);
-      ImGui::DragFloat("Setpoint Y1", &shear_y1_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f",
-                       ImGuiSliderFlags_AlwaysClamp);
-      ImGui::DragFloat("Setpoint X2", &shear_x2_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f",
-                       ImGuiSliderFlags_AlwaysClamp);
-      ImGui::DragFloat("Setpoint Y2", &shear_y2_setpoint_gui, 0.1f, shear_setpoint_min, shear_setpoint_max, "%.1f",
-                       ImGuiSliderFlags_AlwaysClamp);
-
-      ImGui::TreePop();
-    }
-
   }  // end of x position
 
   if (ImGui::CollapsingHeader("Pointing")) {
@@ -1339,67 +1295,6 @@ void RenderUI() {
                        point_y2_buffer.Data.size(), 0, point_y2_buffer.Offset, 2 * sizeof(float));
       ImPlot::EndPlot();
     }
-
-    // actuator
-    if (ImGui::TreeNode("Actuator##Pointing")) {
-      // plot for current piezo position
-      static ScrollingBufferT<double, double> nF_stage_position_buffer[4];
-      std::array<double, 2> meas = nF_stage_1.read();
-      nF_stage_position_buffer[0].AddPoint(t_gui_x, meas[0]);
-      nF_stage_position_buffer[1].AddPoint(t_gui_x, meas[1]);
-      // meas = nF_stage_2.read();
-      nF_stage_position_buffer[2].AddPoint(t_gui_x, meas[0]);
-      nF_stage_position_buffer[3].AddPoint(t_gui_x, meas[1]);
-
-      if (ImPlot::BeginPlot("##nF stage", ImVec2(-1, 150 * io.FontGlobalScale))) {
-        ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - pointing_history_length, t_gui_x, ImGuiCond_Always);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), pointing_thickness);
-        ImPlot::PlotLine("nF stage 1 x", &nF_stage_position_buffer[0].Data[0].time,
-                         &nF_stage_position_buffer[0].Data[0].value, nF_stage_position_buffer[0].Data.size(), 0,
-                         nF_stage_position_buffer[0].Offset, 2 * sizeof(int));
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), pointing_thickness);
-        ImPlot::PlotLine("nF stage 1 y", &nF_stage_position_buffer[1].Data[0].time,
-                         &nF_stage_position_buffer[1].Data[0].value, nF_stage_position_buffer[1].Data.size(), 0,
-                         nF_stage_position_buffer[1].Offset, 2 * sizeof(int));
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), pointing_thickness);
-        ImPlot::PlotLine("nF stage 2 x", &nF_stage_position_buffer[2].Data[0].time,
-                         &nF_stage_position_buffer[2].Data[0].value, nF_stage_position_buffer[2].Data.size(), 0,
-                         nF_stage_position_buffer[2].Offset, 2 * sizeof(int));
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), pointing_thickness);
-        ImPlot::PlotLine("nF stage 2 y", &nF_stage_position_buffer[3].Data[0].time,
-                         &nF_stage_position_buffer[3].Data[0].value, nF_stage_position_buffer[3].Data.size(), 0,
-                         nF_stage_position_buffer[3].Offset, 2 * sizeof(int));
-        ImPlot::EndPlot();
-      }
-
-      ImGui::TreePop();
-    }
-
-    // pointing control
-    if (ImGui::TreeNode("Control loop##Pointing")) {
-      ImGui::Text("Control loop parameters:");
-
-      // sliders for p ,i
-      ImGui::SliderFloat("P##Pointing", &pointing_p_gui, 1e-8f, 1e-2f, "%.8f", ImGuiSliderFlags_Logarithmic);
-      ImGui::SliderFloat("I##Pointing", &pointing_i_gui, 1e-8f, 1e-5f, "%.8f", ImGuiSliderFlags_Logarithmic);
-
-      const float pointing_setpoint_min = -2.0f, pointing_setpoint_max = 2.0f;
-
-      // pointing input: drag
-      ImGui::SliderFloat("Pointing X1 setpoint", &pointing_x1_setpoint_gui, pointing_setpoint_min,
-                         pointing_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::SliderFloat("Pointing Y1 setpoint", &pointing_y1_setpoint_gui, pointing_setpoint_min,
-                         pointing_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::SliderFloat("Pointing X2 setpoint", &pointing_x2_setpoint_gui, pointing_setpoint_min,
-                         pointing_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::SliderFloat("Pointing Y2 setpoint", &pointing_y2_setpoint_gui, pointing_setpoint_min,
-                         pointing_setpoint_max, "%.1f nm", ImGuiSliderFlags_AlwaysClamp);
-
-      ImGui::TreePop();
-    }
   }
 
   if (ImGui::CollapsingHeader("Program settings")) {
@@ -1424,7 +1319,7 @@ int main(int, char **) {
   glfwSetErrorCallback(glfw_error_callback);
   if (!glfwInit()) return 1;
 
-  // Decide GL+GLSL versions
+    // Decide GL+GLSL versions
 #if defined(IMGUI_IMPL_OPENGL_ES2)
   // GL ES 2.0 + GLSL 100
   const char *glsl_version = "#version 100";
@@ -1594,9 +1489,7 @@ int main(int, char **) {
   glfwTerminate();
 
   // Stop the compute thread
-  {
-    NICEcontrol::RunMeasurement.store(false);
-  }
+  { NICEcontrol::RunMeasurement.store(false); }
   computeThread.join();
 
   return 0;

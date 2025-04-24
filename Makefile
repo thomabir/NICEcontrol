@@ -35,6 +35,8 @@ SOURCES += $(IMGUI_DIR)/backends/imgui_impl_glfw.cpp $(IMGUI_DIR)/backends/imgui
 # add implot sources
 SOURCES += $(IMPLOT_DIR)/implot.cpp $(IMPLOT_DIR)/implot_demo.cpp $(IMPLOT_DIR)/implot_items.cpp
 
+
+
 # all .o files are placed in the build directory
 OBJS = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(notdir $(SOURCES)))
 OBJS += $(BUILD_DIR)/imgui_impl_glfw.o $(BUILD_DIR)/imgui_impl_opengl3.o
@@ -44,12 +46,21 @@ UNAME_S := $(shell uname -s)
 LINUX_GL_LIBS = -lGL
 
 # compiler flags
-CXXFLAGS = -std=c++20 -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends
+CXXFLAGS = -std=c++20 -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends -I/usr/local/tango/include/tango
 CXXFLAGS += -Ofast -Wall -Wformat #-g
 # CXXFLAGS += -Os
 
-
 LIBS = -lfftw3 -lm -liir -lpi_pi_gcs2
+
+ LIB_TANGO_DIR = -L /usr/local/tango/lib
+ LIBS += $(LIB_TANGO_DIR) -ltango \
+                      -lomniORB4 \
+                      -lomniDynamic4 \
+                      -lCOS4 \
+                      -lomnithread \
+                      -lzmq \
+                      -lpthread
+
 
 ## nanoFaktur piezo controller
 LIBS += -lnF_interface_x64 # nanoFaktur piezo controller
