@@ -6,12 +6,17 @@
 #include <GLES2/gl2.h>
 #endif
 #include <GLFW/glfw3.h>  // Will drag system OpenGL headers
+#include <arpa/inet.h>   // ethernet
+#include <netinet/in.h>  // ethernet
 #include <stdio.h>
+#include <sys/socket.h>  // ethernet
 
 #include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -21,18 +26,6 @@
 #include <queue>
 #include <random>
 #include <thread>
-
-// ethernet
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-
-// IIR filter from https://github.com/berndporr/iir1
-#include <cstring>
-
-#include "../lib/fonts/SourceSans3Regular.cpp"
-#include "../lib/implot/implot.h"
-#include "Iir.h"
 
 // Actuators
 #include "MCL_NanoDrive.hpp"       // Controller for MCL OPD Stage
@@ -59,23 +52,14 @@
 #include "characterise_joint_closed_loop.hpp"
 #include "utils.hpp"
 
-// FFT for data streams
-#include "FftCalculator.hpp"
-
-// NullLockin
-#include "NullLockin.hpp"
-
-// EtherCAT UDP Interface
-#include "EthercatUdpInterface.hpp"
-
-// Tango
-#include "camera_if.hpp"
-
-// white noise for dithering
-#include <random>
-
-// format datetime for logging
-#include <ctime>
+// Other
+#include "../lib/fonts/SourceSans3Regular.cpp"
+#include "../lib/implot/implot.h"    // Plotting for data streams
+#include "EthercatUdpInterface.hpp"  // EtherCAT UDP Interface
+#include "FftCalculator.hpp"         // FFT for data streams
+#include "Iir.h"                     // IIR filter from https://github.com/berndporr/iir1
+#include "NullLockin.hpp"            // NullLockin
+#include "camera_if.hpp"             // Tango interface for camera
 
 // Windows
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
