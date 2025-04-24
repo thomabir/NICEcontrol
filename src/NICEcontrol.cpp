@@ -535,13 +535,6 @@ void RenderUI() {
 
   ImGuiIO &io = ImGui::GetIO();
 
-  // OPD control <-> GUI
-
-  static float opd_p_gui = 0.700f;
-  static float opd_i_gui = 0.009f;
-  static float opd_dither_freq_gui = 0.0f;
-  static float opd_dither_amp_gui = 0.0f;
-
   // shear control <-> GUI
   static int shear_loop_select = 0;
   static float shear_p_gui = 0.4f;
@@ -951,126 +944,42 @@ void RenderUI() {
   }
 
   if (ImGui::CollapsingHeader("OPD")) {
-    // characterise button: launch characterisation of OPD thread and deactivate gui control
-    static bool opd_char_button = false;
-
-    ImGui::Checkbox("Characterise Control loop", &opd_char_button);
-
-    // print status of gui_control
-    ImGui::Text("GUI control: %s", gui_control.load() ? "true" : "false");
-
-    if (opd_char_button) {
-      gui_control.store(false);
-      opd_char_button = false;
-
-      std::cout << "Waiting for one minute" << std::endl;
-      std::this_thread::sleep_for(std::chrono::seconds(60));
-      std::cout << "Done waiting" << std::endl;
-
-      // loop, p, i, t_settle, t_record, f1, f2, fstep, dither_amp, description
-      // characterise_control_loop(opd_loop, 0.7, 0.01, 1.0, 200.0, 1.0, 1000.0, 150, 50.0, "opd_no_box_overnight");
-      characterise_control_loop(shear_x1_loop, sensorDataQueue, 0.4, 0.007, 1.0, 200.0, 1.0, 300.0, 150, 50.0,
-                                "shear_x1_no_box_repeat");
-      // characterise_joint_closed_loop(opd_loop, shear_x1_loop, shear_x2_loop, shear_y1_loop, shear_y2_loop,
-      //                                sensorDataQueue, 0.7, 0.01, 0.4, 0.007, 1.0, 200.0, "joint_no_box_overnight");
-      gui_control.store(true);
-    }
-
-    // real time plot
-    static ScrollingBuffer opd_dith_buffer, setpoint_buffer;
-
-    // get control signals
-    // if (!opd_loop.controlDataBuffer.isempty()) {
-    //   while (!opd_loop.controlDataBuffer.isempty()) {
-    //     auto m = opd_loop.controlDataBuffer.pop();
-    //     setpoint_buffer.AddPoint(m.time, m.setpoint);
-    //     opd_dith_buffer.AddPoint(m.time, m.dither_signal);
-    //   }
-    // }
-
-    static bool plot_setpoint = false;
-    ImGui::Checkbox("Plot setpoint", &plot_setpoint);
-    // no newline
-    ImGui::SameLine();
-    // phase unwrap reset button: store 1 in reset_phase_unwrap.store
-    static bool reset_phase_unwrap_gui = false;
-    ImGui::Checkbox("Reset phase unwrap", &reset_phase_unwrap_gui);
-    if (reset_phase_unwrap_gui) {
-      reset_phase_unwrap.store(1);
-    } else {
-      reset_phase_unwrap.store(0);
-    }
-
-    static float opd_history_length = 10.0f;
-    ImGui::SliderFloat("OPD History", &opd_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
-
-    // x axis: no ticks
-    static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
-
-    // y axis: auto fit
-    static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-
-    static ImVec4 fft_color = ImVec4(1, 1, 0, 1);
-    static ImVec4 setpoint_color = ImVec4(1, 1, 1, 1);
-    static float thickness = 1;
-
-    if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
-      ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - opd_history_length, t_gui, ImGuiCond_Always);
-      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      ImPlot::SetNextLineStyle(fft_color, thickness);
-      ImPlot::PlotLine("Measurement", &opd_buffer.Data[0].x, &opd_buffer.Data[0].y, opd_buffer.Data.size(), 0,
-                       opd_buffer.Offset, 2 * sizeof(float));
-      if (plot_setpoint) {
-        ImPlot::SetNextLineStyle(setpoint_color, thickness);
-        ImPlot::PlotLine("Setpoint", &setpoint_buffer.Data[0].x, &setpoint_buffer.Data[0].y,
-                         setpoint_buffer.Data.size(), 0, setpoint_buffer.Offset, 2 * sizeof(float));
+    if (ImGui::TreeNode("Measurement##OPD")) {
+      // phase unwrapping
+      static bool reset_phase_unwrap_gui = false;
+      ImGui::Checkbox("Reset phase unwrap", &reset_phase_unwrap_gui);
+      if (reset_phase_unwrap_gui) {
+        reset_phase_unwrap.store(1);
+      } else {
+        reset_phase_unwrap.store(0);
       }
-      ImPlot::EndPlot();
-    }
 
-    if (ImGui::TreeNode("FFT##OPD")) {
-      // set up fft
-      const static int fft_size = 1024 * 8 * 8;
-      static double fft_power[fft_size / 2];
-      static double fft_freq[fft_size / 2];
-      static FFT_calculator fft(fft_size, 12800., &opd_buffer, fft_power, fft_freq);
+      static float opd_history_length = 10.0f;
+      ImGui::SliderFloat("OPD History", &opd_history_length, 0.1, 5, "%.2f s", ImGuiSliderFlags_Logarithmic);
 
-      // calculate fft
-      fft.calculate();
+      // x axis: no ticks
+      static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
 
-      // calculate dither fft
-      static double fft_power_dith[fft_size / 2];
-      static double fft_freq_dith[fft_size / 2];
-      static FFT_calculator dither_fft(fft_size, 12800., &opd_dith_buffer, fft_power_dith, fft_freq_dith);
-      dither_fft.calculate();
+      // y axis: auto fit
+      static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
 
-      // plot fft_power vs fft_freq, with log scale on x and y axis
-      static float fft_thickness = 3;
-      static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
-      static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None;  // ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-      if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 400 * io.FontGlobalScale))) {
-        ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-        ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-        ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 10, 1e13);
-        ImPlot::SetNextLineStyle(fft_color, fft_thickness);
-        ImPlot::PlotLine("OPD FFT", &fft_freq_dith[0], &fft_power[0], fft_size / 2);
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), fft_thickness);
-        ImPlot::PlotLine("Dither FFT", &fft_freq_dith[0], &fft_power_dith[0], fft_size / 2);
+      static float thickness = 1;
+
+      if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
+        ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - opd_history_length, t_gui, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), thickness);
+        ImPlot::PlotLine("Measurement", &opd_buffer.Data[0].x, &opd_buffer.Data[0].y, opd_buffer.Data.size(), 0,
+                         opd_buffer.Offset, 2 * sizeof(float));
         ImPlot::EndPlot();
       }
 
-      ImGui::TreePop();
-    }
-
-    if (ImGui::TreeNode("Metrology##OPD")) {
       // calculate mean and std of OPD buffer
       static float mean = 0.0f;
       static float stddev = 0.0f;
-      const int N_points_stats = 10000;
+      const int N_points_stats = 1000;
 
       if (opd_buffer.Data.size() > N_points_stats + 2) {
         // get the last 1000 measurements using ImVector<ImVec2> GetLastN(int n)
@@ -1091,7 +1000,36 @@ void RenderUI() {
 
       // Display mean and std
       ImGui::Text("Mean: %.4f", mean);
+      ImGui::SameLine();
       ImGui::Text("Std: %.4f", stddev);
+
+      ImGui::TreePop();
+    }
+
+    if (ImGui::TreeNode("FFT##OPD")) {
+      // set up fft
+      const static int fft_size = 1024 * 8 * 8;
+      static double fft_power[fft_size / 2];
+      static double fft_freq[fft_size / 2];
+      static FFT_calculator fft(fft_size, 12800., &opd_buffer, fft_power, fft_freq);
+
+      // calculate fft
+      fft.calculate();
+
+      // plot fft_power vs fft_freq, with log scale on x and y axis
+      static float fft_thickness = 3;
+      static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
+      static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None;  // ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+      if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 400 * io.FontGlobalScale))) {
+        ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+        ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+        ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 10, 1e13);
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), fft_thickness);
+        ImPlot::PlotLine("OPD FFT", &fft_freq[0], &fft_power[0], fft_size / 2);
+        ImPlot::EndPlot();
+      }
 
       ImGui::TreePop();
     }
