@@ -28,9 +28,7 @@
 #include <thread>
 
 // Actuators
-#include "MCL_NanoDrive.hpp"       // Controller for MCL OPD Stage
 #include "PI_E727_Controller.hpp"  // Controller for PI Tip/Tilt Stages
-#include "PI_E754_Controller.hpp"  // Controller for PI OPD Stage
 #include "nF_EBD_Controller.hpp"   // Controller for nanoFaktur Tip/Tilt Stages
 
 // Data types
@@ -73,11 +71,8 @@ static void glfw_error_callback(int error, const char *description) {
 // Filters for sensor data
 Iir::Butterworth::LowPass<2> shear_x1_lpfilt, shear_x2_lpfilt, shear_y1_lpfilt, shear_y2_lpfilt;
 Iir::Butterworth::LowPass<2> point_x1_lpfilt, point_x2_lpfilt, point_y1_lpfilt, point_y2_lpfilt;
-Iir::Butterworth::LowPass<2> opd_lp_filter;
 const float shear_samplingrate = 128000.;
 const float shear_lpfilt_cutoff = 300.;
-const float opd_samplingrate = 128000.;
-const float opd_lpfilt_cutoff = 1000.;
 
 namespace NICEcontrol {
 
@@ -85,7 +80,6 @@ namespace NICEcontrol {
 std::atomic<bool> gui_control(true);
 
 // OPD control
-float opd_setpoint_gui = 0.0f;  // setpoint entered in GUI, may be out of range
 std::atomic<bool> reset_phase_unwrap(false);
 
 // shear control
@@ -102,11 +96,6 @@ float pointing_y2_setpoint_gui = 0.0f;
 
 // variables that control the measurement thread
 std::atomic<bool> RunMeasurement(false);
-
-// initialise opd stage
-// MCL_OPDStage opd_stage;
-char serial_number[1024] = "123076463";
-// PI_E754_Controller opd_stage(serial_number);
 
 // initialise tip/tilt stages
 char serial_number1[1024] = "0122040101";
@@ -151,12 +140,6 @@ void setupActuators() {
   // std::this_thread::sleep_for(std::chrono::milliseconds(100));
   // pos = nF_stage_2.read();
   // std::cout << "nF Stage 2 Position: " << pos[0] << ", " << pos[1] << std::endl;
-
-  // OPD stage
-  // opd_stage.init();
-  // opd_stage.move_to(0.f);
-  // std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  // std::cout << "\tPosition: " << opd_stage.read() << " nm" << std::endl;
 }
 
 TSCircularBuffer<SensorData> sensorDataQueue;
@@ -211,7 +194,6 @@ class ShearYActuator {
 };
 
 // controllers
-PIController opd_controller;
 PIController shear_x1_controller;
 PIController shear_x2_controller;
 PIController shear_y1_controller;
@@ -253,13 +235,9 @@ void run_calculation() {
   point_y1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
   point_y2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
 
-  opd_lp_filter.setup(opd_samplingrate, opd_lpfilt_cutoff);
-
-  // initialise null processir
-
   while (true) {
-    float opd_rad_f = 0., shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0.,
-          point_x2_f = 0., point_y1_f = 0., point_y2_f = 0., opd_nm_f = 0., sci_null = 0.;
+    float shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0., point_x2_f = 0.,
+          point_y1_f = 0., point_y2_f = 0., opd_nm = 0., sci_null = 0.;
     auto t = utils::getTime();
 
     RunMeasurement.wait(false);
@@ -315,17 +293,14 @@ void run_calculation() {
       counter[i] = receivedDataInt[num_channels * i];
 
       // check for gaps in data
-      if (counter[i] - prev_counter > 1) {
-        int n_missing_samples = counter[i] - prev_counter - 1;
-        int n_samples_between_gaps = counter[i] - prev_gap_counter - 1;
+      // if (counter[i] - prev_counter > 1) {
+      //   int n_missing_samples = counter[i] - prev_counter - 1;
+      //   int n_samples_between_gaps = counter[i] - prev_gap_counter - 1;
 
-        std::cout << "Gap in data: " << prev_counter << " -> " << counter[i] << " (" << n_missing_samples
-                  << " missing samples) " << n_samples_between_gaps << " samples between gaps" << std::endl;
-        prev_gap_counter = counter[i];
-      }
-
-      // print current counter
-      // std::cout << "Counter: " << counter[i] << std::endl;
+      //   std::cout << "Gap in data: " << prev_counter << " -> " << counter[i] << " (" << n_missing_samples
+      //             << " missing samples) " << n_samples_between_gaps << " samples between gaps" << std::endl;
+      //   prev_gap_counter = counter[i];
+      // }
 
       adc_shear1[i] = receivedDataInt[num_channels * i + 1];
       adc_shear2[i] = receivedDataInt[num_channels * i + 2];
@@ -354,11 +329,7 @@ void run_calculation() {
       prev_counter = counter[i];
     }
 
-    // print first and last counter of the package
-    // std::cout << "Counter: " << counter[0] << " -> " << counter[num_timepoints - 1] << std::endl;
-
     // phase-unwrap the OPD signal
-    // has to be done before filtering, since filtering smoothes out the jumps
     const int max_unwrap_iters = 500;
     static int unwrap_iters = 0;
 
@@ -380,10 +351,11 @@ void run_calculation() {
       opd_rad_i_prev = opd_rad[i];
     }
 
+    // convert OPD from radians to nm
+    opd_nm = opd_rad[0] * 1550 / (2 * std::numbers::pi);
+
     // filter signals
     for (int i = 0; i < num_timepoints; i++) {
-      opd_rad_f = opd_lp_filter.filter(opd_rad[i]);
-
       // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
       shear_x1_f = shear_x1_lpfilt.filter(shear_y1_um[i] + shear_x1_um[i]);
       shear_x2_f = shear_x2_lpfilt.filter(shear_y2_um[i] + shear_x2_um[i]);
@@ -395,24 +367,13 @@ void run_calculation() {
       point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
       point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
 
-      // TODO derive null intensity from science signals
+      // derive null intensity from science signals
       sci_null = null_lockin.process(adc_sci_null[i], adc_sci_mod[i]);
     }
 
-    // Clamp the OPD signal (to prevent very high values when laser is off)
-    if (opd_rad_f > 1e4) {
-      opd_rad_f = 9e3;
-    }
-    if (opd_rad_f < -1e4) {
-      opd_rad_f = -9e3;
-    }
-
-    // convert OPD from radians to nm
-    opd_nm_f = opd_rad_f * 1550 / (2 * std::numbers::pi);
-
     // enqueue sensor data
     sensorDataQueue.push(
-        {t, opd_nm_f, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
+        {t, opd_nm, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
 
     sci_null_queue.push({t, sci_null});
 
@@ -435,16 +396,12 @@ void run_calculation() {
     }
 
     // Run control loops
-    // opd_loop.control(t, opd_nm_f);
     shear_x1_loop.control(t, shear_x1_f);
     shear_x2_loop.control(t, shear_x2_f);
     shear_y1_loop.control(t, shear_y1_f);
     shear_y2_loop.control(t, shear_y2_f);
     point_1_loop.control(t, {point_x1_f, point_y1_f});
     point_2_loop.control(t, {point_x2_f, point_y2_f});
-
-    // wait until t + 7.813 us
-    // std::this_thread::sleep_until(t_chrono + std::chrono::nanoseconds(7813));
   }
 }
 
@@ -471,21 +428,6 @@ void RenderUI() {
   static float pointing_i_gui = 1e-7f;
 
   if (gui_control.load()) {
-    // OPD
-    // if (gui_opd_loop_select == 2) {
-    //   opd_loop.control_mode.store(4);
-    // } else if (gui_opd_loop_select == 1) {
-    //   opd_loop.control_mode.store(1);
-    // } else {
-    //   opd_loop.control_mode.store(0);
-    // }
-
-    // opd_loop.setpoint.store(opd_setpoint_gui);
-    // opd_loop.p.store(opd_p_gui);
-    // opd_loop.i.store(opd_i_gui);
-    // opd_loop.dither_freq.store(opd_dither_freq_gui);
-    // opd_loop.dither_amp.store(opd_dither_amp_gui);
-
     // Shear
     if (shear_loop_select == 2) {
       shear_x1_loop.control_mode.store(4);
@@ -606,7 +548,7 @@ void RenderUI() {
       point_y1_buffer.AddPoint(m.time, m.point_y1);
       point_y2_buffer.AddPoint(m.time, m.point_y2);
 
-      // TODO: if saving data, write every 12800th sample to file
+      // If saving data, write to file
       if (recording_running) {
         file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(2) << m.opd
              << "\n";
@@ -645,19 +587,140 @@ void RenderUI() {
 
   // science camera
   if (ImGui::CollapsingHeader("Science Camera")) {
-    init_camera();
-    int size = get_size();
-    std::cout << "Image sise: " << size << std::endl;
+    static CameraInterface cam;
+    static std::vector<std::string> command_list = cam.get_commands();
 
-    std::vector<unsigned short> image;
-    image = get_image();
-
-    // print 5 elements of the image
-    std::cout << "Image: ";
-    for (int i = 0; i < 5; i++) {
-      std::cout << image[i] << " ";
+    // buttons for all found commands
+    ImGui::Text("Auto-found commands:");
+    ImGui::SameLine();
+    for (const auto &command : command_list) {
+      if (ImGui::Button(command.c_str())) {
+        cam.run_command(command);
+      }
+      ImGui::SameLine();
     }
-    std::cout << std::endl;
+    ImGui::NewLine();
+
+    static int width, height;
+    width = cam.get_width();
+    height = cam.get_height();
+    ImGui::Text("Image size: %d x %d", width, height);
+
+    static std::vector<unsigned short> image;
+    image = cam.get_image();
+
+    static ImPlotColormap map = ImPlotColormap_Viridis;
+    if (ImPlot::ColormapButton(ImPlot::GetColormapName(map), ImVec2(225, 0), map)) {
+      map = (map + 1) % ImPlot::GetColormapCount();
+      // We bust the color cache of our plots so that item colors will
+      // resample the new colormap in the event that they have already
+      // been created. See documentation in implot.h.
+      ImPlot::BustColorCache("##Heatmap1");
+      ImPlot::BustColorCache("##Heatmap2");
+    }
+
+    ImPlot::PushColormap(map);
+
+    // get pointer to first element of image
+    unsigned short *values = image.data();
+
+    // calculate height and width of plot window
+    float aspect_ratio = float(width) / float(height);
+    float plot_width = 1000;
+    float plot_height = plot_width / aspect_ratio;
+
+    // selection rectangle
+    static ImPlotRect rect = {0, width / 2, 0, height / 2};  // {X.Min, X.Max, Y.Min, Y.Max}
+    static bool rect_clicked = false, rect_hovered = false, rect_held = false;
+    ImPlotDragToolFlags flags = ImPlotDragToolFlags_None;
+
+    // colormap settings
+    static int scale_min = 0;
+    static int scale_max = 16383;
+    const int scale_max_default = 16383;
+    const int scale_min_default = 0;
+    ImGui::SetNextItemWidth(400);
+    ImGui::SliderScalar("Min", ImGuiDataType_U16, &scale_min, &scale_min_default, &scale_max_default, "%u");
+    ImGui::SetNextItemWidth(400);
+    ImGui::SliderScalar("Max", ImGuiDataType_U16, &scale_max, &scale_min_default, &scale_max_default, "%u");
+
+    // clamp colormap such that min < max
+    if (scale_min > scale_max) {
+      scale_min = scale_max;
+    } else if (scale_max < scale_min) {
+      scale_max = scale_min;
+    } else if (scale_min == scale_max) {
+      scale_min = scale_max - 1;
+    }
+
+    // plot image
+    if (ImPlot::BeginPlot("##Heatmap2", ImVec2(plot_width, plot_height), ImPlotFlags_NoMouseText)) {
+      ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
+      ImPlot::PlotHeatmap("heat1", values, height, width, scale_min, scale_max, nullptr, ImPlotPoint(0, 0),
+                          ImPlotPoint(width, height));
+      ImPlot::DragRect(0, &rect.X.Min, &rect.Y.Min, &rect.X.Max, &rect.Y.Max, ImVec4(1, 0, 0, 0.5), flags,
+                       &rect_clicked, &rect_hovered, &rect_held);
+      ImPlot::EndPlot();
+    }
+    ImPlot::PopColormap();
+
+    // get rect coordinates as integers and flip y axis
+    int x_min = static_cast<int>(rect.X.Min);
+    int x_max = static_cast<int>(rect.X.Max);
+    int y_min = static_cast<int>(rect.Y.Min);
+    int y_max = static_cast<int>(rect.Y.Max);
+    int x_extent = x_max - x_min;
+    int y_extent = y_max - y_min;
+    y_min += y_extent;
+    y_max -= y_extent;
+    y_min = height - y_min;
+    y_max = height - y_max;
+
+    // Calculate mean intensity in the selected region
+    static ScrollingBufferT<double, double> mean_intensity_buffer(1000);
+    if (width > 0 && height > 0 && !image.empty()) {
+      // Ensure bounds
+      x_min = std::max(0, std::min(x_min, width - 1));
+      x_max = std::max(0, std::min(x_max, width - 1));
+      y_min = std::max(0, std::min(y_min, height - 1));
+      y_max = std::max(0, std::min(y_max, height - 1));
+
+      double sum = 0;
+      int count = 0;
+
+      for (int y = y_min; y <= y_max; y++) {
+        for (int x = x_min; x <= x_max; x++) {
+          sum += values[x + y * width];  // row major order
+          // example: to get value at (5,0), get values[5]
+          // example: to get value at (0,1), get values[width]
+          count++;
+        }
+      }
+
+      if (count > 0) {
+        double mean = sum / count;
+        ImGui::Text("Mean intensity: %.2f", mean);
+        mean_intensity_buffer.AddPoint(t_gui, mean);
+      }
+    }
+
+    ImGui::Text("Selection: (%d,%d) to (%d,%d)  Size: %d x %d pixels", x_min, y_min, x_max, y_max, x_extent, y_extent);
+
+    // plot a time series of the mean intensity
+    static float mean_intensity_history_length = 10.f;
+    ImGui::SliderFloat("Mean Intensity History", &mean_intensity_history_length, 1, 100, "%.5f s",
+                       ImGuiSliderFlags_Logarithmic);
+    if (ImPlot::BeginPlot("Mean Intensity", ImVec2(-1, 400 * io.FontGlobalScale))) {
+      ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_AutoFit);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - mean_intensity_history_length, t_gui, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(IMPLOT_AUTO_COL, 2);
+      // ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+      ImPlot::PlotLine("Mean Intensity", &mean_intensity_buffer.Data[0].time, &mean_intensity_buffer.Data[0].value,
+                       mean_intensity_buffer.Data.size(), 0, mean_intensity_buffer.Offset, 2 * sizeof(double));
+      ImPlot::EndPlot();
+    }
   }
 
   // ADC measurements
@@ -720,54 +783,6 @@ void RenderUI() {
         adc_sci_mod_buffer.AddPoint(m.time, m.value);
       }
     }
-
-    // print peak-to-peak and mean value of OPDRef
-    // if (!adc_buffers[9].Data.empty()) {
-    //   auto last_1000_measurements_data = adc_buffers[9].GetLastN(1000);
-    //   std::vector<int> last_1000_measurements;
-    //   for (auto &m : last_1000_measurements_data) {
-    //     last_1000_measurements.push_back(m.value);
-    //   }
-    //   int min = *std::min_element(last_1000_measurements.begin(), last_1000_measurements.end());
-    //   int max = *std::max_element(last_1000_measurements.begin(), last_1000_measurements.end());
-    //   float mean = std::accumulate(last_1000_measurements.begin(), last_1000_measurements.end(), 0.0) /
-    //                last_1000_measurements.size();
-    //   // print peak-to-peak as floating point number, e.g. 9.432E4
-    //   ImGui::Text("Peak-to-peak OPDRef: %.2E", float(max - min));
-    //   ImGui::Text("Mean OPDRef: %.2E", mean);
-    // }
-
-    // same for shear sum
-    // if (!adc_buffers[0].Data.empty()) {
-    //   auto last_1000_shear_sum_data = shear_sum_buffer.GetLastN(1000);
-    //   std::vector<int> last_1000_shear_sum;
-    //   for (auto &m : last_1000_shear_sum_data) {
-    //     last_1000_shear_sum.push_back(m.value);
-    //   }
-    //   int min = *std::min_element(last_1000_shear_sum.begin(), last_1000_shear_sum.end());
-    //   int max = *std::max_element(last_1000_shear_sum.begin(), last_1000_shear_sum.end());
-    //   float mean =
-    //       std::accumulate(last_1000_shear_sum.begin(), last_1000_shear_sum.end(), 0.0) / last_1000_shear_sum.size();
-    //   // print peak-to-peak as floating point number, e.g. 9.432E4
-    //   ImGui::Text("Peak-to-peak ShearSum: %.2E", float(max - min));
-    //   ImGui::Text("Mean ShearSum: %.2E", mean);
-    // }
-
-    // same for pointing sum
-    // if (!adc_buffers[4].Data.empty()) {
-    //   auto last_1000_point_sum_data = point_sum_buffer.GetLastN(1000);
-    //   std::vector<int> last_1000_point_sum;
-    //   for (auto &m : last_1000_point_sum_data) {
-    //     last_1000_point_sum.push_back(m.value);
-    //   }
-    //   int min = *std::min_element(last_1000_point_sum.begin(), last_1000_point_sum.end());
-    //   int max = *std::max_element(last_1000_point_sum.begin(), last_1000_point_sum.end());
-    //   float mean =
-    //       std::accumulate(last_1000_point_sum.begin(), last_1000_point_sum.end(), 0.0) / last_1000_point_sum.size();
-    //   // print peak-to-peak as floating point number, e.g. 9.432E4
-    //   ImGui::Text("Peak-to-peak PointSum: %.2E", float(max - min));
-    //   ImGui::Text("Mean PointSum: %.2E", mean);
-    // }
 
     static float adc_history_length = 1000.f;
     ImGui::SliderFloat("ADC History", &adc_history_length, 1, 128000, "%.5f s", ImGuiSliderFlags_Logarithmic);
@@ -1158,11 +1173,11 @@ void RenderUI() {
 
   // demo window
   // static bool show_app_metrics = true;
-  // ImGui::ShowDemoWindow();
+  ImGui::ShowDemoWindow();
   // ImGui::ShowMetricsWindow(&show_app_metrics);
 
   // implot demo window
-  // ImPlot::ShowDemoWindow();
+  ImPlot::ShowDemoWindow();
 }
 
 }  // namespace NICEcontrol
