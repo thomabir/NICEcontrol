@@ -37,6 +37,7 @@
 #include "ScrollingBuffer.hpp"
 #include "ScrollingBufferT.hpp"
 #include "SensorData.hpp"
+#include "SharedResources.hpp"
 #include "TSCircularBuffer.hpp"
 
 // Controllers (PID etc.)
@@ -144,7 +145,7 @@ void setupActuators() {
 
 TSCircularBuffer<SensorData> sensorDataQueue;
 
-TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
+// TSCircularBuffer<MeasurementT<int, int>> adc_queues[10];
 TSCircularBuffer<MeasurementT<int, int>> shear_sum_queue, point_sum_queue;
 TSCircularBuffer<MeasurementT<int, int>> adc_sci_null_queue, adc_sci_mod_queue;
 TSCircularBuffer<MeasurementT<double, double>> sci_null_queue;
@@ -217,7 +218,7 @@ MIMOControlLoop<2, DiagPIController<2>, nF_EBD_Controller> point_1_loop(point_1_
 MIMOControlLoop<2, DiagPIController<2>, nF_EBD_Controller> point_2_loop(point_2_controller, nF_stage_2);
 NullLockin null_lockin;
 
-void run_calculation() {
+void run_calculation(MetrologyResources &res) {
   int sockfd = setup_ethernet();
 
   int count = 0;
@@ -379,16 +380,16 @@ void run_calculation() {
 
     // enqueue adc measurements
     for (int i = 0; i < num_timepoints; i++) {
-      adc_queues[0].push({counter[i], adc_shear1[i]});
-      adc_queues[1].push({counter[i], adc_shear2[i]});
-      adc_queues[2].push({counter[i], adc_shear3[i]});
-      adc_queues[3].push({counter[i], adc_shear4[i]});
-      adc_queues[4].push({counter[i], adc_point1[i]});
-      adc_queues[5].push({counter[i], adc_point2[i]});
-      adc_queues[6].push({counter[i], adc_point3[i]});
-      adc_queues[7].push({counter[i], adc_point4[i]});
-      adc_queues[8].push({counter[i], adc_sine_ref[i]});
-      adc_queues[9].push({counter[i], adc_opd_ref[i]});
+      res.adc_queues[0].push({counter[i], adc_shear1[i]});
+      res.adc_queues[1].push({counter[i], adc_shear2[i]});
+      res.adc_queues[2].push({counter[i], adc_shear3[i]});
+      res.adc_queues[3].push({counter[i], adc_shear4[i]});
+      res.adc_queues[4].push({counter[i], adc_point1[i]});
+      res.adc_queues[5].push({counter[i], adc_point2[i]});
+      res.adc_queues[6].push({counter[i], adc_point3[i]});
+      res.adc_queues[7].push({counter[i], adc_point4[i]});
+      res.adc_queues[8].push({counter[i], adc_sine_ref[i]});
+      res.adc_queues[9].push({counter[i], adc_opd_ref[i]});
       shear_sum_queue.push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
       point_sum_queue.push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
       adc_sci_null_queue.push({counter[i], adc_sci_null[i]});
@@ -412,7 +413,7 @@ void startMeasurement() {
 
 void stopMeasurement() { RunMeasurement.store(false); }
 
-void RenderUI() {
+void RenderUI(SharedResources &res) {
   ImGui::Begin("NICE Control");
 
   ImGuiIO &io = ImGui::GetIO();
@@ -732,17 +733,17 @@ void RenderUI() {
 
     // get lates time in ADC queue
     if (RunMeasurement.load()) {
-      if (!adc_queues[0].isempty()) {
-        t_adc = adc_queues[0].back().time;
+      if (!res.metrology.adc_queues[0].isempty()) {
+        t_adc = res.metrology.adc_queues[0].back().time;
       }
     }
 
     // add all measurements to the plot buffers
     for (int i = 0; i < 10; i++) {
-      if (!adc_queues[i].isempty()) {
-        int N = adc_queues[i].size();
+      if (!res.metrology.adc_queues[i].isempty()) {
+        int N = res.metrology.adc_queues[i].size();
         for (int j = 0; j < N; j++) {
-          auto m = adc_queues[i].pop();
+          auto m = res.metrology.adc_queues[i].pop();
           adc_buffers[i].AddPoint(m.time, m.value);
         }
       }
@@ -1292,8 +1293,10 @@ int main(int, char **) {
   // bool show_another_window = false;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
+  SharedResources res;
+
   std::cout << "Starting run_calculation" << std::endl;
-  std::thread computeThread(NICEcontrol::run_calculation);
+  std::jthread computeThread(NICEcontrol::run_calculation, std::ref(res.metrology));
 
   // call setupActuators
   std::cout << "Starting setupActuators" << std::endl;
@@ -1319,7 +1322,7 @@ int main(int, char **) {
 
     // My code
     ImGui::PushFont(font1);
-    NICEcontrol::RenderUI();
+    NICEcontrol::RenderUI(res);
     ImGui::PopFont();
 
     // Rendering
