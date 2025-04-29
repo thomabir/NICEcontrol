@@ -4,6 +4,9 @@
 #include <cmath>
 #include <numbers>
 
+#include "ControlData.hpp"
+#include "TSCircularBuffer.hpp"
+
 template <class C, class A>  // SISO control loop
 class SISOControlLoop {
  public:
