@@ -13,6 +13,9 @@ int main() {
     return 1;
   }
 
+  // Start some of the workers
+  workers.metrology_reader.start();
+
   // Render loop
   while (!gui.ShouldClose()) {
     gui.StartFrame();

@@ -47,7 +47,8 @@
 #include "FftCalculator.hpp"         // FFT for data streams
 #include "Iir.h"                     // IIR filter from https://github.com/berndporr/iir1
 #include "MetrologyReader.hpp"       // reads metrology data and puts into queue
-#include "camera_if.hpp"             // Tango interface for camera
+#include "Workers.hpp"
+#include "camera_if.hpp"  // Tango interface for camera
 
 // functions
 #include "characterise_control_loop.hpp"
@@ -357,8 +358,8 @@ class NiceGui {
       }
     }
 
-    // non-sticky button to start/stop metrology, using workers.metrology_reader.start()/stop()
-    static bool metrology_running = false;
+    // Button to start/stop metrology_reader
+    static bool metrology_running = true;
     if (metrology_running) {
       if (ImGui::Button("Metrology: Stop")) {
         metrology_running = false;
