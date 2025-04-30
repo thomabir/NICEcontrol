@@ -538,7 +538,7 @@ class NiceGui {
       }
 
       static float adc_history_length = 1000.f;
-      ImGui::SliderFloat("ADC History", &adc_history_length, 1, 128000, "%.5f s", ImGuiSliderFlags_Logarithmic);
+      ImGui::SliderFloat("ADC History", &adc_history_length, 200, 70000, "%.0f samples", ImGuiSliderFlags_Logarithmic);
 
       // plot label names
       static const char *plot_labels[14] = {"Shear UP",   "Shear LEFT",  "Shear RIGHT", "Shear DOWN", "Point UP",
