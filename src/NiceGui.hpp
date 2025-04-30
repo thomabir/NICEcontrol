@@ -344,29 +344,18 @@ class NiceGui {
         point_x2_buffer.AddPoint(m.time, m.point_x2);
         point_y1_buffer.AddPoint(m.time, m.point_y1);
         point_y2_buffer.AddPoint(m.time, m.point_y2);
+        sci_null_buffer.AddPoint(m.time, m.sci_null);
 
         // If saving data, write to file
         if (recording_running) {
           file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(2) << m.opd
                << "\n";
         }
-      }
-    }
 
-    // add sci null measurements to the plot buffer
-    static int sci_null_sample_no = 0;
-    if (!res.metrology.sci_null_queue.isempty()) {
-      int N = res.metrology.sci_null_queue.size();
-      for (int i = 0; i < N; i++) {
-        auto m = res.metrology.sci_null_queue.pop();
-        sci_null_buffer.AddPoint(m.time, m.value);
-
-        // write to file
-        if (record_sci_null && sci_null_sample_no % 12800 == 0) {  // write every 12800th sample
+        if (record_sci_null) {
           sci_null_file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(1)
-                        << m.value << "\n";
+                        << m.sci_null << "\n";
         }
-        sci_null_sample_no++;
       }
     }
 
@@ -528,9 +517,7 @@ class NiceGui {
 
     // ADC measurements
     if (ImGui::CollapsingHeader("ADC Measurements")) {
-      static ScrollingBufferT<int, int> adc_buffers[10];
-      static ScrollingBufferT<int, int> shear_sum_buffer, point_sum_buffer;
-      static ScrollingBufferT<int, int> adc_sci_null_buffer, adc_sci_mod_buffer;
+      static ScrollingBufferT<int, int> adc_buffers[14];
       static float t_adc = 0;
 
       // get lates time in ADC queue
@@ -540,7 +527,7 @@ class NiceGui {
       }
 
       // add all measurements to the plot buffers
-      for (int i = 0; i < 10; i++) {
+      for (int i = 0; i < 14; i++) {
         if (!res.metrology.adc_queues[i].isempty()) {
           int N = res.metrology.adc_queues[i].size();
           for (int j = 0; j < N; j++) {
@@ -550,48 +537,13 @@ class NiceGui {
         }
       }
 
-      // shear sum
-      if (!res.metrology.shear_sum_queue.isempty()) {
-        int N = res.metrology.shear_sum_queue.size();
-        for (int j = 0; j < N; j++) {
-          auto m = res.metrology.shear_sum_queue.pop();
-          shear_sum_buffer.AddPoint(m.time, m.value);
-        }
-      }
-
-      // pointing
-      if (!res.metrology.point_sum_queue.isempty()) {
-        int N = res.metrology.point_sum_queue.size();
-        for (int j = 0; j < N; j++) {
-          auto m = res.metrology.point_sum_queue.pop();
-          point_sum_buffer.AddPoint(m.time, m.value);
-        }
-      }
-
-      // sci null
-      if (!res.metrology.adc_sci_null_queue.isempty()) {
-        int N = res.metrology.adc_sci_null_queue.size();
-        for (int j = 0; j < N; j++) {
-          auto m = res.metrology.adc_sci_null_queue.pop();
-          adc_sci_null_buffer.AddPoint(m.time, m.value);
-        }
-      }
-
-      // sci mod
-      if (!res.metrology.adc_sci_mod_queue.isempty()) {
-        int N = res.metrology.adc_sci_mod_queue.size();
-        for (int j = 0; j < N; j++) {
-          auto m = res.metrology.adc_sci_mod_queue.pop();
-          adc_sci_mod_buffer.AddPoint(m.time, m.value);
-        }
-      }
-
       static float adc_history_length = 1000.f;
       ImGui::SliderFloat("ADC History", &adc_history_length, 1, 128000, "%.5f s", ImGuiSliderFlags_Logarithmic);
 
       // plot label names
-      static const char *plot_labels[10] = {"Shear UP",   "Shear LEFT",  "Shear RIGHT", "Shear DOWN", "Point UP",
-                                            "Point LEFT", "Point RIGHT", "Point DOWN",  "SineRef",    "OPDRef"};
+      static const char *plot_labels[14] = {"Shear UP",   "Shear LEFT",  "Shear RIGHT", "Shear DOWN", "Point UP",
+                                            "Point LEFT", "Point RIGHT", "Point DOWN",  "SineRef",    "OPDRef",
+                                            "Shear Sum",  "Point Sum",   "SCINull",     "SCIMod"};
 
       // plot style
       static float thickness = 2;
@@ -603,32 +555,11 @@ class NiceGui {
         ImPlot::SetupAxisLimits(ImAxis_X1, t_adc - adc_history_length, t_adc, ImGuiCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 14; i++) {
           ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), thickness);
           ImPlot::PlotLine(plot_labels[i], &adc_buffers[i].Data[0].time, &adc_buffers[i].Data[0].value,
                            adc_buffers[i].Data.size(), 0, adc_buffers[i].Offset, 2 * sizeof(int));
         }
-
-        // shear sum
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(10), thickness);
-        ImPlot::PlotLine("ShearSum", &shear_sum_buffer.Data[0].time, &shear_sum_buffer.Data[0].value,
-                         shear_sum_buffer.Data.size(), 0, shear_sum_buffer.Offset, 2 * sizeof(int));
-
-        // pointing sum
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(11), thickness);
-        ImPlot::PlotLine("PointSum", &point_sum_buffer.Data[0].time, &point_sum_buffer.Data[0].value,
-                         point_sum_buffer.Data.size(), 0, point_sum_buffer.Offset, 2 * sizeof(int));
-
-        // sci null
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(12), thickness);
-        ImPlot::PlotLine("SCINull", &adc_sci_null_buffer.Data[0].time, &adc_sci_null_buffer.Data[0].value,
-                         adc_sci_null_buffer.Data.size(), 0, adc_sci_null_buffer.Offset, 2 * sizeof(int));
-
-        // sci mod
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(13), thickness);
-        ImPlot::PlotLine("SCIMod", &adc_sci_mod_buffer.Data[0].time, &adc_sci_mod_buffer.Data[0].value,
-                         adc_sci_mod_buffer.Data.size(), 0, adc_sci_mod_buffer.Offset, 2 * sizeof(int));
-
         ImPlot::EndPlot();
       }
     }

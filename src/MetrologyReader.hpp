@@ -220,10 +220,8 @@ class MetrologyReader {
       }
 
       // enqueue sensor data
-      met_res.sensorDataQueue.push(
-          {t, opd_nm, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f, point_y1_f, point_y2_f});
-
-      met_res.sci_null_queue.push({t, sci_null});
+      met_res.sensorDataQueue.push({t, opd_nm, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f,
+                                    point_y1_f, point_y2_f, sci_null});
 
       // enqueue adc measurements
       for (int i = 0; i < num_timepoints; i++) {
@@ -237,10 +235,10 @@ class MetrologyReader {
         met_res.adc_queues[7].push({counter[i], adc_point4[i]});
         met_res.adc_queues[8].push({counter[i], adc_sine_ref[i]});
         met_res.adc_queues[9].push({counter[i], adc_opd_ref[i]});
-        met_res.shear_sum_queue.push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
-        met_res.point_sum_queue.push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
-        met_res.adc_sci_null_queue.push({counter[i], adc_sci_null[i]});
-        met_res.adc_sci_mod_queue.push({counter[i], adc_sci_mod[i]});
+        met_res.adc_queues[10].push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
+        met_res.adc_queues[11].push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
+        met_res.adc_queues[12].push({counter[i], adc_sci_null[i]});
+        met_res.adc_queues[13].push({counter[i], adc_sci_mod[i]});
       }
 
       // Run control loops

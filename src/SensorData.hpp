@@ -12,9 +12,10 @@ class SensorData {
   float point_x2;
   float point_y1;
   float point_y2;
+  float sci_null;
 
   SensorData(double time, float opd, float shear_x1, float shear_x2, float shear_y1, float shear_y2, float point_x1,
-             float point_x2, float point_y1, float point_y2) {
+             float point_x2, float point_y1, float point_y2, float sci_null) {
     this->time = time;
     this->opd = opd;
     this->shear_x1 = shear_x1;
@@ -25,6 +26,7 @@ class SensorData {
     this->point_x2 = point_x2;
     this->point_y1 = point_y1;
     this->point_y2 = point_y2;
+    this->sci_null = sci_null;
   }
 
   SensorData() {
@@ -38,6 +40,7 @@ class SensorData {
     this->point_x2 = 0.0;
     this->point_y1 = 0.0;
     this->point_y2 = 0.0;
+    this->sci_null = 0.0;
   }
 
   // acces by index
@@ -61,6 +64,8 @@ class SensorData {
         return point_y1;
       case 8:
         return point_y2;
+      case 9:
+        return sci_null;
       default:
         return opd;
     }
