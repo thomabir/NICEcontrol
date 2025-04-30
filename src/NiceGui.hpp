@@ -214,6 +214,10 @@ class NiceGui {
     static float pointing_p_gui = 1e-5f;
     static float pointing_i_gui = 1e-7f;
 
+    // window management
+    static bool show_demo_window = false;
+    static bool show_app_metrics = false;
+
     // Shear
     if (shear_loop_select == 2) {
       res.metrology.shear_x1_loop.control_mode.store(4);
@@ -961,16 +965,21 @@ class NiceGui {
     if (ImGui::CollapsingHeader("Program settings")) {
       ImGui::DragFloat("GUI scale", &io.FontGlobalScale, 0.005f, 0.5, 6.0, "%.2f",
                        ImGuiSliderFlags_AlwaysClamp);  // Scale everything
+      // button to show demo windows
+      ImGui::Checkbox("Show demo windows", &show_demo_window);
+      ImGui::Checkbox("Show app metrics", &show_app_metrics);
     }
     ImGui::End();
 
     // demo window
-    // static bool show_app_metrics = true;
-    ImGui::ShowDemoWindow();
-    // ImGui::ShowMetricsWindow(&show_app_metrics);
-
-    // implot demo window
-    ImPlot::ShowDemoWindow();
+    if (show_demo_window) {
+      ImGui::ShowDemoWindow();
+      ImPlot::ShowDemoWindow();
+    }
+    if (show_app_metrics) {
+      // Show app metrics
+      ImGui::ShowMetricsWindow();
+    }
   }
 
   void Cleanup() {
