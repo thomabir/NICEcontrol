@@ -188,8 +188,16 @@ class NiceGui {
   ImVec4 clear_color;
 
   void RenderUI(SharedResources &res, Workers &workers) {
-    ImGui::Begin("NICE Control");
+    static bool use_work_area = true;
+    static ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
 
+    // Use the full window for the main NICEcontrol window
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(use_work_area ? viewport->WorkPos : viewport->Pos);
+    ImGui::SetNextWindowSize(use_work_area ? viewport->WorkSize : viewport->Size);
+
+    ImGui::Begin("NICE Control", nullptr, flags);
     ImGuiIO &io = ImGui::GetIO();
 
     // shear control
