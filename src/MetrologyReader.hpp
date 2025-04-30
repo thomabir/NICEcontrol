@@ -222,6 +222,7 @@ class MetrologyReader {
       // enqueue sensor data
       met_res.sensorDataQueue.push({t, opd_nm, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f,
                                     point_y1_f, point_y2_f, sci_null});
+      // std::cout << "Pushed data to queue: " << t << std::endl;
 
       // enqueue adc measurements
       for (int i = 0; i < num_timepoints; i++) {

@@ -43,6 +43,7 @@
 #include "SISOControlLoop.hpp"
 
 // Other
+#include "Consumer.hpp"
 #include "EthercatUdpInterface.hpp"  // EtherCAT UDP Interface
 #include "FftCalculator.hpp"         // FFT for data streams
 #include "Iir.h"                     // IIR filter from https://github.com/berndporr/iir1
@@ -330,32 +331,30 @@ class NiceGui {
       }
     }
 
-    // add the enture sensor data queue to the plot buffers
-    if (!res.metrology.sensorDataQueue.isempty()) {
-      int N = res.metrology.sensorDataQueue.size();
-      for (int i = 0; i < N; i++) {
-        auto m = res.metrology.sensorDataQueue.pop();
-        opd_buffer.AddPoint(m.time, m.opd);
-        shear_x1_buffer.AddPoint(m.time, m.shear_x1);
-        shear_x2_buffer.AddPoint(m.time, m.shear_x2);
-        shear_y1_buffer.AddPoint(m.time, m.shear_y1);
-        shear_y2_buffer.AddPoint(m.time, m.shear_y2);
-        point_x1_buffer.AddPoint(m.time, m.point_x1);
-        point_x2_buffer.AddPoint(m.time, m.point_x2);
-        point_y1_buffer.AddPoint(m.time, m.point_y1);
-        point_y2_buffer.AddPoint(m.time, m.point_y2);
-        sci_null_buffer.AddPoint(m.time, m.sci_null);
+    static SensorData sensor_data;
+    static auto consumer = res.metrology.sensorDataQueue.subscribe();
+    while (res.metrology.sensorDataQueue.try_pop(consumer, sensor_data)) {
+      auto m = sensor_data;
+      opd_buffer.AddPoint(m.time, m.opd);
+      shear_x1_buffer.AddPoint(m.time, m.shear_x1);
+      shear_x2_buffer.AddPoint(m.time, m.shear_x2);
+      shear_y1_buffer.AddPoint(m.time, m.shear_y1);
+      shear_y2_buffer.AddPoint(m.time, m.shear_y2);
+      point_x1_buffer.AddPoint(m.time, m.point_x1);
+      point_x2_buffer.AddPoint(m.time, m.point_x2);
+      point_y1_buffer.AddPoint(m.time, m.point_y1);
+      point_y2_buffer.AddPoint(m.time, m.point_y2);
+      sci_null_buffer.AddPoint(m.time, m.sci_null);
 
-        // If saving data, write to file
-        if (recording_running) {
-          file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(2) << m.opd
-               << "\n";
-        }
+      // If saving data, write to file
+      if (recording_running) {
+        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(2) << m.opd
+             << "\n";
+      }
 
-        if (record_sci_null) {
-          sci_null_file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(1)
-                        << m.sci_null << "\n";
-        }
+      if (record_sci_null) {
+        sci_null_file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(1)
+                      << m.sci_null << "\n";
       }
     }
 

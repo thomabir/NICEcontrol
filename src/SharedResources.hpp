@@ -11,10 +11,10 @@
 #include "NullLockin.hpp"
 #include "PI_E727_Controller.hpp"
 #include "SISOControlLoop.hpp"
+#include "SPMCRingBuffer.hpp"
 #include "SensorData.hpp"
 #include "TSCircularBuffer.hpp"
 #include "nF_EBD_Controller.hpp"
-
 class ShearXActuator {
  public:
   ShearXActuator(PI_E727_Controller &stage) : stage(stage) {}
@@ -54,7 +54,7 @@ struct MetrologyResources {
 
   // data queues
   TSCircularBuffer<MeasurementT<int, int>> adc_queues[14];
-  TSCircularBuffer<SensorData> sensorDataQueue;
+  SPMCRingBuffer<SensorData, 100000> sensorDataQueue;
 
   // science beam
   NullLockin null_lockin;
