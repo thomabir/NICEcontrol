@@ -5,5 +5,5 @@
 struct Workers {
   MetrologyReader metrology_reader;
 
-  Workers(SharedResources &ressources) : metrology_reader(ressources.metrology) {}
+  Workers(SharedResources &resources) : metrology_reader(resources.metrology) {}
 };
