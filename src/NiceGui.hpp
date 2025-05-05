@@ -434,7 +434,7 @@ class NiceGui {
 
       // calculate height and width of plot window
       float aspect_ratio = float(width) / float(height);
-      float plot_width = 1000;
+      float plot_width = 1000 * io.FontGlobalScale;
       float plot_height = plot_width / aspect_ratio;
 
       // selection rectangle
@@ -485,7 +485,7 @@ class NiceGui {
       y_max = height - y_max;
 
       // Calculate mean intensity in the selected region
-      static ScrollingBufferT<double, double> mean_intensity_buffer(1000);
+      static ScrollingBufferT<double, double> mean_intensity_buffer(10000);
       if (width > 0 && height > 0 && !image.empty()) {
         // Ensure bounds
         x_min = std::max(0, std::min(x_min, width - 1));
@@ -520,12 +520,12 @@ class NiceGui {
       ImGui::SliderFloat("Mean Intensity History", &mean_intensity_history_length, 1, 100, "%.5f s",
                          ImGuiSliderFlags_Logarithmic);
       if (ImPlot::BeginPlot("Mean Intensity", ImVec2(-1, 400 * io.FontGlobalScale))) {
-        ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_AutoFit);
+        static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+        ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_AutoFit, yflags);
         ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - mean_intensity_history_length, t_gui, ImGuiCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
         ImPlot::SetNextLineStyle(IMPLOT_AUTO_COL, 2);
-        // ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
         ImPlot::PlotLine("Mean Intensity", &mean_intensity_buffer.Data[0].time, &mean_intensity_buffer.Data[0].value,
                          mean_intensity_buffer.Data.size(), 0, mean_intensity_buffer.Offset, 2 * sizeof(double));
         ImPlot::EndPlot();
