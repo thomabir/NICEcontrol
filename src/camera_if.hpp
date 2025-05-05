@@ -12,18 +12,18 @@ Example of a client using the TANGO C++ api. Runs an intensity calibration routi
 #include <numeric>
 #include <vector>
 
-class CameraInterface {
+class TangoFlirCamInterface {
  private:
   Tango::DeviceProxy *cam_device;
   bool initialized;
 
  public:
-  CameraInterface() : cam_device(nullptr), initialized(false) {
+  TangoFlirCamInterface() : cam_device(nullptr), initialized(false) {
     // run init function
     init();
   }
 
-  ~CameraInterface() {
+  ~TangoFlirCamInterface() {
     if (cam_device) {
       delete cam_device;
     }

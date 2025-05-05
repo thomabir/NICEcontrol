@@ -44,10 +44,11 @@
 
 // Other
 #include "Consumer.hpp"
-#include "EthercatUdpInterface.hpp"  // EtherCAT UDP Interface
-#include "FftCalculator.hpp"         // FFT for data streams
-#include "Iir.h"                     // IIR filter from https://github.com/berndporr/iir1
-#include "MetrologyReader.hpp"       // reads metrology data and puts into queue
+#include "EthercatUdpInterface.hpp"   // EtherCAT UDP Interface
+#include "FftCalculator.hpp"          // FFT for data streams
+#include "Iir.h"                      // IIR filter from https://github.com/berndporr/iir1
+#include "MetrologyReader.hpp"        // reads metrology data and puts into queue
+#include "TangoGenericInterface.hpp"  // Tango interface for generic devices
 #include "Workers.hpp"
 #include "camera_if.hpp"  // Tango interface for camera
 
@@ -375,9 +376,26 @@ class NiceGui {
     static float t_gui = 0;
     t_gui = utils::getTime();
 
+    // shutter
+    if (ImGui::CollapsingHeader("Shutter")) {
+      static TangoGenericInterface shutter("motor/shutter/1");
+      static std::vector<std::string> command_list = shutter.get_commands();
+
+      // buttons for all found commands
+      ImGui::Text("Auto-found commands:");
+      ImGui::SameLine();
+      for (const auto &command : command_list) {
+        if (ImGui::Button(command.c_str())) {
+          shutter.run_command(command);
+        }
+        ImGui::SameLine();
+      }
+      ImGui::NewLine();
+    }
+
     // science camera
     if (ImGui::CollapsingHeader("Science Camera")) {
-      static CameraInterface cam;
+      static TangoFlirCamInterface cam;
       static std::vector<std::string> command_list = cam.get_commands();
 
       // buttons for all found commands
