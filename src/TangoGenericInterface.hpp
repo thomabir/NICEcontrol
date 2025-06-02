@@ -5,16 +5,19 @@
 #include <array>
 #include <cmath>
 #include <ctime>
+#include <vector>
+
+#include "Image.hpp"
 
 class TangoGenericInterface {
  private:
   Tango::DeviceProxy *tango_device;
-  bool initialized;
   std::string device_name;
+  Tango::DeviceProxy *get_device() { return tango_device; }
 
  public:
   TangoGenericInterface(const std::string &device_name = "detectors/flir/1")
-      : tango_device(nullptr), initialized(false), device_name(device_name) {
+      : tango_device(nullptr), device_name(device_name) {
     init();
   }
 
@@ -23,8 +26,6 @@ class TangoGenericInterface {
       delete tango_device;
     }
   }
-
-  bool is_initialized() { return initialized; }
 
   void init() {
     // Check if device is already initialized
@@ -46,40 +47,13 @@ class TangoGenericInterface {
       att_reply = tango_device->read_attribute("State");
       att_reply >> state;
 
+      // If the device is already running, we're done
       if (state != 1) {
-        std::cout << "Device is already running" << std::endl;
-        initialized = true;
         return;
       }
 
-      // Use a mutable string for the command
-      std::string init_command = "Initialise";
-      tango_device->command_inout(init_command);
-      initialized = true;
-    } catch (Tango::DevFailed &e) {
-      Tango::Except::print_exception(e);
-      return;
-    }
-  }
-
-  void run_command(std::string &command) {
-    if (!initialized) {
-      throw std::runtime_error("Device not initialized. Call init() first.");
-    }
-
-    Tango::DeviceAttribute att_reply;
-    Tango::DevState state;
-
-    try {
-      tango_device->ping();
-      att_reply = tango_device->read_attribute("State");
-      att_reply >> state;
-
-      if (state == 1) {
-        throw std::invalid_argument("Device is off");
-      }
-
-      tango_device->command_inout(command);
+      // Initialize the device
+      run_command("Initialise");
     } catch (Tango::DevFailed &e) {
       Tango::Except::print_exception(e);
       return;
@@ -87,9 +61,87 @@ class TangoGenericInterface {
   }
 
   void run_command(const std::string &command) {
-    // Create a copy internally to pass to the non-const version
+    // tango expects a non-const string
     std::string command_copy = command;
-    run_command(command_copy);
+    try {
+      tango_device->command_inout(command_copy);
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+      return;
+    }
+  }
+
+  template <typename T>
+  void run_command(const std::string &command, T &argument) {
+    Tango::DeviceData device_data;
+    device_data << argument;
+    std::string command_copy = command;
+
+    try {
+      tango_device->command_inout(command_copy, device_data);
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+      return;
+    }
+  }
+
+  template <typename T>
+  T read_attribute(const std::string &attribute_name) {
+    try {
+      Tango::DeviceAttribute att_reply;
+      std::string attribute_name_copy = attribute_name;
+      att_reply = tango_device->read_attribute(attribute_name_copy);
+      T value;
+      att_reply >> value;
+      return value;
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+      return T();
+    }
+  }
+
+  template <typename T>
+  Image<T> read_image(const std::string &attribute_name) {
+    try {
+      Tango::DeviceAttribute att_reply;
+      std::string attribute_name_copy = attribute_name;
+      att_reply = tango_device->read_attribute(attribute_name_copy);
+      std::vector<T> value;
+      att_reply >> value;
+      Image<T> image;
+      image.data = value;
+      image.width = att_reply.get_dim_x();
+      image.height = att_reply.get_dim_y();
+      return image;
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+      return Image<T>();
+    }
+  }
+
+  template <typename T>
+  void write_attribute(const std::string &attribute_name, const T &value) {
+    try {
+      std::string attribute_name_copy = attribute_name;
+      Tango::DeviceAttribute att(attribute_name_copy, T());
+      att << value;
+      tango_device->write_attribute(att);
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+    }
+  }
+
+  // strings need special treatment with tango: const strings are not allowed, so we need to copy them
+  void write_attribute(const std::string &attribute_name, const std::string &value) {
+    try {
+      std::string attribute_name_copy = attribute_name;
+      Tango::DeviceAttribute att(attribute_name_copy, "");
+      std::string value_copy = value;
+      att << value_copy;
+      tango_device->write_attribute(att);
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+    }
   }
 
   std::vector<std::string> get_commands() {
@@ -106,4 +158,80 @@ class TangoGenericInterface {
     }
     return commands;
   }
+
+  std::vector<std::string> get_attributes() {
+    std::vector<std::string> attributes;
+    try {
+      auto reply = tango_device->attribute_list_query();
+      for (const auto &att_info : reply[0]) {
+        attributes.push_back(att_info.name);
+        std::cout << att_info.name << " " << att_info.data_type << " " << att_info.data_format << " "
+                  << att_info.writable << " " << att_info.unit << " " << att_info.max_dim_x << " " << att_info.max_dim_y
+                  << " " << att_info.max_value << " " << att_info.min_value << " ";
+        // print the attribute value using get_att_details
+        // get_att_details(att_info.name, att_info.data_type);
+      }
+
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+    }
+    return attributes;
+  }
+
+  // void get_att_details(const std::string &attribute_name, int data_type) {
+  //   Tango::DeviceAttribute att_reply;
+  //   std::string att_name = attribute_name;
+  //   att_reply = cam_device->read_attribute(att_name);
+  //   if (data_type == Tango::DEV_STRING) {
+  //     std::string value;
+  //     att_reply >> value;
+  //     std::cout << "Value: " << value << std::endl;
+  //   } else if (data_type == Tango::DEV_DOUBLE) {
+  //     double value;
+  //     att_reply >> value;
+  //     std::cout << "Value: " << value << std::endl;
+  //   } else if (data_type == Tango::DEV_LONG) {
+  //     int value;
+  //     att_reply >> value;
+  //     std::cout << "Value: " << value << std::endl;
+  //   } else if (data_type == Tango::DEV_SHORT) {
+  //     short value;
+  //     att_reply >> value;
+  //     std::cout << "Value: " << value << std::endl;
+  //   } else if (data_type == Tango::DEV_ULONG) {
+  //     unsigned int value;
+  //     att_reply >> value;
+  //     std::cout << "Value: " << value << std::endl;
+  //   } else if (data_type == Tango::DEV_USHORT) {
+  //     unsigned short value;
+  //     att_reply >> value;
+  //     std::cout << "Value: " << value << std::endl;
+  //   } else if (data_type == Tango::DEV_BOOLEAN) {
+  //     bool value;
+  //     att_reply >> value;
+  //     std::cout << "Value: " << value << std::endl;
+  //   }
+  // }
+
+  //   std::vector<std::string> get_commands() {
+  //     std::vector<std::string> commands;
+  //     try {
+  //       auto reply = tango_device->command_list_query();
+  //       for (const auto &cmd_info : reply[0]) {
+  //         if (cmd_info.cmd_name != "Init") {
+  //           commands.push_back(cmd_info.cmd_name);
+  //           std::cout << cmd_info.cmd_name << " "
+  //           << cmd_info.cmd_tag << " "
+  //           << cmd_info.in_type << " "
+  //           << cmd_info.in_type_desc << " "
+  //           << cmd_info.out_type << " "
+  //           << cmd_info.out_type_desc << " "
+  //           << std::endl;
+  //         }
+  //       }
+  //     } catch (Tango::DevFailed &e) {
+  //       Tango::Except::print_exception(e);
+  //     }
+  //     return commands;
+  //   }
 };

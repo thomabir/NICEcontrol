@@ -81,6 +81,9 @@ class MetrologyReader {
 
     Iir::Butterworth::LowPass<2> shear_x1_lpfilt, shear_x2_lpfilt, shear_y1_lpfilt, shear_y2_lpfilt;
     Iir::Butterworth::LowPass<2> point_x1_lpfilt, point_x2_lpfilt, point_y1_lpfilt, point_y2_lpfilt;
+    Iir::Butterworth::LowPass<2> opd_lpfilt;
+    const float opd_samplingrate = 128000.;
+    const float opd_lpfilt_cutoff = 1000.;
     const float shear_samplingrate = 128000.;
     const float shear_lpfilt_cutoff = 300.;
 
@@ -94,6 +97,8 @@ class MetrologyReader {
     point_x2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
     point_y1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
     point_y2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
+
+    opd_lpfilt.setup(opd_samplingrate, opd_lpfilt_cutoff);
 
     while (running.load()) {
       float shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0., point_x2_f = 0.,
@@ -199,9 +204,7 @@ class MetrologyReader {
         opd_rad_i_prev = opd_rad[i];
       }
 
-      // convert OPD from radians to nm
-      opd_nm = opd_rad[0] * 1550 / (2 * std::numbers::pi);
-
+      static float opd_rad_f = 0.0f;
       // filter signals
       for (int i = 0; i < num_timepoints; i++) {
         // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
@@ -215,9 +218,14 @@ class MetrologyReader {
         point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
         point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
 
+        opd_rad_f = opd_lpfilt.filter(opd_rad[i]);
+
         // derive null intensity from science signals
         sci_null = met_res.null_lockin.process(adc_sci_null[i], adc_sci_mod[i]);
       }
+
+      // convert OPD from radians to nm
+      opd_nm = opd_rad_f * 1550 / (2 * std::numbers::pi);
 
       // enqueue sensor data
       met_res.sensorDataQueue.push({t, opd_nm, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f,
