@@ -692,7 +692,7 @@ class NiceGui {
 
     // ADC measurements
     if (ImGui::CollapsingHeader("ADC Measurements")) {
-      static ScrollingBufferT<int, int> adc_buffers[14];
+      static ScrollingBufferT<int, int> adc_buffers[15];
       static float t_adc = 0;
 
       // get lates time in ADC queue
@@ -702,7 +702,7 @@ class NiceGui {
       }
 
       // add all measurements to the plot buffers
-      for (int i = 0; i < 14; i++) {
+      for (int i = 0; i < 15; i++) {
         if (!res.metrology.adc_queues[i].isempty()) {
           int N = res.metrology.adc_queues[i].size();
           for (int j = 0; j < N; j++) {
@@ -716,9 +716,9 @@ class NiceGui {
       ImGui::SliderFloat("ADC History", &adc_history_length, 200, 70000, "%.0f samples", ImGuiSliderFlags_Logarithmic);
 
       // plot label names
-      static const char *plot_labels[14] = {"Shear UP",   "Shear LEFT",  "Shear RIGHT", "Shear DOWN", "Point UP",
-                                            "Point LEFT", "Point RIGHT", "Point DOWN",  "SineRef",    "OPDRef",
-                                            "Shear Sum",  "Point Sum",   "SCINull",     "SCIMod"};
+      static const char *plot_labels[15] = {"Shear UP",   "Shear LEFT",  "Shear RIGHT", "Shear DOWN", "Point UP",
+                                            "Point LEFT", "Point RIGHT", "Point DOWN",  "OPD Ref",    "OPD Back",
+                                            "OPD Fwd",    "Point Sum",   "SCI Null",    "SCI Ref",    "OPD PLL"};
 
       // plot style
       static float thickness = 2;
@@ -730,7 +730,7 @@ class NiceGui {
         ImPlot::SetupAxisLimits(ImAxis_X1, t_adc - adc_history_length, t_adc, ImGuiCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        for (int i = 0; i < 14; i++) {
+        for (int i = 0; i < 15; i++) {
           ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), thickness);
           ImPlot::PlotLine(plot_labels[i], &adc_buffers[i].Data[0].time, &adc_buffers[i].Data[0].value,
                            adc_buffers[i].Data.size(), 0, adc_buffers[i].Offset, 2 * sizeof(int));

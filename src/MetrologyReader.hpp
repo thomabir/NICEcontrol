@@ -122,7 +122,7 @@ class MetrologyReader {
       if (!running.load()) break;
 
       // Convert received data to vector of 10 ints
-      const static int num_channels = 22;
+      const static int num_channels = 23;
       const static int num_timepoints = 10;
       int receivedDataInt[num_channels * num_timepoints];
       std::memcpy(receivedDataInt, buffer, sizeof(int) * num_channels * num_timepoints);
@@ -136,10 +136,12 @@ class MetrologyReader {
       static int adc_point2[num_timepoints];
       static int adc_point3[num_timepoints];
       static int adc_point4[num_timepoints];
-      static int adc_sine_ref[num_timepoints];
+      // static int adc_pos_ref[num_timepoints];
       static int adc_sci_null[num_timepoints];
-      static int adc_sci_mod[num_timepoints];
+      static int adc_sci_ref[num_timepoints];
+      static int adc_opd_back[num_timepoints];
       static int adc_opd_ref[num_timepoints];
+      static int adc_opd_pll[num_timepoints];
       static float opd_rad[num_timepoints];
       static int32_t opd_int[num_timepoints];
       static float shear_x1_um[num_timepoints];
@@ -164,21 +166,23 @@ class MetrologyReader {
         adc_point2[i] = receivedDataInt[num_channels * i + 6];
         adc_point3[i] = receivedDataInt[num_channels * i + 7];
         adc_point4[i] = receivedDataInt[num_channels * i + 8];
-        adc_sine_ref[i] = receivedDataInt[num_channels * i + 9];
+        // adc_pos_ref[i] = receivedDataInt[num_channels * i + 9];
+        adc_opd_back[i] = receivedDataInt[num_channels * i + 9];
         adc_opd_ref[i] = receivedDataInt[num_channels * i + 10];
-        opd_int[i] = receivedDataInt[num_channels * i + 11];
+        adc_opd_pll[i] = receivedDataInt[num_channels * i + 11] * 128;  // ADU * 256
+        opd_int[i] = receivedDataInt[num_channels * i + 12];
         opd_rad[i] =
-            -float(opd_int[i]) * std::numbers::pi / (std::pow(2.0, 23) - 1.);    // phase (signed 24 bit int) -> rad
-        shear_x1_um[i] = float(receivedDataInt[num_channels * i + 12]) / 3000.;  // um
-        shear_x2_um[i] = float(receivedDataInt[num_channels * i + 13]) / 3000.;  // um
-        shear_y1_um[i] = float(receivedDataInt[num_channels * i + 14]) / 3000.;  // um
-        shear_y2_um[i] = float(receivedDataInt[num_channels * i + 15]) / 3000.;  // um
-        point_x1_um[i] = float(receivedDataInt[num_channels * i + 16]) / 1000.;  // urad
-        point_x2_um[i] = float(receivedDataInt[num_channels * i + 17]) / 1000.;  // urad
-        point_y1_um[i] = float(receivedDataInt[num_channels * i + 18]) / 1000.;  // urad
-        point_y2_um[i] = float(receivedDataInt[num_channels * i + 19]) / 1000.;  // urad
-        adc_sci_null[i] = receivedDataInt[num_channels * i + 20];                // ADU
-        adc_sci_mod[i] = receivedDataInt[num_channels * i + 21];                 // ADU
+            -float(opd_int[i]) * std::numbers::pi / (std::pow(2.0, 15) - 1.);    // phase (signed 16 bit int) -> rad
+        shear_x1_um[i] = float(receivedDataInt[num_channels * i + 13]) / 3000.;  // um
+        shear_x2_um[i] = float(receivedDataInt[num_channels * i + 14]) / 3000.;  // um
+        shear_y1_um[i] = float(receivedDataInt[num_channels * i + 15]) / 3000.;  // um
+        shear_y2_um[i] = float(receivedDataInt[num_channels * i + 16]) / 3000.;  // um
+        point_x1_um[i] = float(receivedDataInt[num_channels * i + 17]) / 1000.;  // urad
+        point_x2_um[i] = float(receivedDataInt[num_channels * i + 18]) / 1000.;  // urad
+        point_y1_um[i] = float(receivedDataInt[num_channels * i + 19]) / 1000.;  // urad
+        point_y2_um[i] = float(receivedDataInt[num_channels * i + 20]) / 1000.;  // urad
+        adc_sci_null[i] = receivedDataInt[num_channels * i + 21];                // ADU
+        adc_sci_ref[i] = receivedDataInt[num_channels * i + 22];                 // ADU
       }
 
       // phase-unwrap the OPD signal
@@ -221,7 +225,7 @@ class MetrologyReader {
         opd_rad_f = opd_lpfilt.filter(opd_rad[i]);
 
         // derive null intensity from science signals
-        sci_null = met_res.null_lockin.process(adc_sci_null[i], adc_sci_mod[i]);
+        sci_null = met_res.null_lockin.process(adc_sci_null[i], adc_sci_ref[i]);
       }
 
       // convert OPD from radians to nm
@@ -242,12 +246,13 @@ class MetrologyReader {
         met_res.adc_queues[5].push({counter[i], adc_point2[i]});
         met_res.adc_queues[6].push({counter[i], adc_point3[i]});
         met_res.adc_queues[7].push({counter[i], adc_point4[i]});
-        met_res.adc_queues[8].push({counter[i], adc_sine_ref[i]});
-        met_res.adc_queues[9].push({counter[i], adc_opd_ref[i]});
+        met_res.adc_queues[8].push({counter[i], adc_opd_ref[i]});
+        met_res.adc_queues[9].push({counter[i], adc_opd_back[i]});
         met_res.adc_queues[10].push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
         met_res.adc_queues[11].push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
         met_res.adc_queues[12].push({counter[i], adc_sci_null[i]});
-        met_res.adc_queues[13].push({counter[i], adc_sci_mod[i]});
+        met_res.adc_queues[13].push({counter[i], adc_sci_ref[i]});
+        met_res.adc_queues[14].push({counter[i], adc_opd_pll[i]});
       }
 
       // Run control loops
