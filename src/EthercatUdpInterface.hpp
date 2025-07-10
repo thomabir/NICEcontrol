@@ -73,21 +73,28 @@ class EthercatUdpInterface {
       return false;
     }
 
-    // Prepare the 5-byte packet
-    char buffer[4 + 1 + 4 + 4];  // 4 x 3 for floats (setpoint, p, i) + 1 for control byte
+    // Structure:
+    // byte 0: flags (bit 0 = run_control_loop, bit 1 = reset_phase_unwrap)
+    // bytes 1-3: zero-padding
+    // bytes 4-7: opd_setpoint (float)
+    // bytes 8-11: Kp gain (float)
+    // bytes 12-15: Ki gain (float)
 
-    // Convert float to binary representation and copy to buffer
-    memcpy(buffer, &opd_setpoint, sizeof(float));
+    // Prepare the 16-byte packet
+    char buffer[40] = {0};  // Initialize all bytes to zero
 
-    // Create control byte: bit 0 = run_control_loop, bit 1 = reset_phase_unwrap
-    unsigned char control_byte = 0;
-    if (run_control_loop) control_byte |= 0x01;
-    if (reset_phase_unwrap) control_byte |= 0x02;
+    // Create flags byte: bit 0 = run_control_loop, bit 1 = reset_phase_unwrap
+    unsigned char flags = 0;
+    if (run_control_loop) flags |= 0x01;
+    if (reset_phase_unwrap) flags |= 0x02;
 
-    buffer[4] = control_byte;
+    buffer[0] = flags;
+    // bytes 1-3 remain zero
 
-    memcpy(buffer + 5, &p, sizeof(float));
-    memcpy(buffer + 9, &i, sizeof(float));
+    // Copy the float values to their respective positions
+    memcpy(buffer + 4, &opd_setpoint, sizeof(float));
+    memcpy(buffer + 8, &p, sizeof(float));
+    memcpy(buffer + 12, &i, sizeof(float));
 
     // Send the packet
     ssize_t sent_bytes = sendto(sockfd_, buffer, sizeof(buffer), 0, (struct sockaddr*)&dest_addr_, sizeof(dest_addr_));
