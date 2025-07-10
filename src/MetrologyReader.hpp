@@ -75,7 +75,7 @@ class MetrologyReader {
 
   // Main calculation loop
   void run_calculation() {
-    int count = 0;
+    int prev_counter = 0;
     int buffer_size = 1024;
     char buffer[buffer_size];
 
@@ -104,9 +104,6 @@ class MetrologyReader {
       float shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0., point_x2_f = 0.,
             point_y1_f = 0., point_y2_f = 0., opd_nm = 0., sci_null = 0.;
       auto t = utils::getTime();
-
-      // read the measurement from the ethernet connection
-      count++;
 
       // Receive data
       struct sockaddr_in clientAddr;
@@ -184,6 +181,20 @@ class MetrologyReader {
         adc_sci_null[i] = receivedDataInt[num_channels * i + 21];                // ADU
         adc_sci_ref[i] = receivedDataInt[num_channels * i + 22];                 // ADU
       }
+
+      // cCheck for gaps within the package
+      for (int i = 1; i < num_timepoints; i++) {
+        if (counter[i] != counter[i - 1] + 1) {
+          std::cerr << "Gap within package: counter " << counter[i - 1] << " -> " << counter[i]
+                    << " (size of gap: " << counter[i] - counter[i - 1] - 1 << ")" << std::endl;
+        }
+      }
+
+      // Check for gaps between packages
+      if (counter[0] != prev_counter + num_timepoints) {
+        std::cerr << "Gap between packages: counter " << prev_counter << " -> " << counter[0] << std::endl;
+      }
+      prev_counter = counter[0];
 
       // phase-unwrap the OPD signal
       const int max_unwrap_iters = 500;
