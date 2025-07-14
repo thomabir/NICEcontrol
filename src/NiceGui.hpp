@@ -810,6 +810,17 @@ class NiceGui {
     static TangoFlirCamInterface cam;
     bool connected = cam.is_connected();
 
+    // static bool use_work_area = true;
+    // static ImGuiWindowFlags flags =
+    // ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
+
+    // Use the full window for the main NICEcontrol window
+    // const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    // ImGui::SetNextWindowPos(use_work_area ? viewport->WorkPos : viewport->Pos);
+    static ImVec2 window_size(600, 800);
+    ImGui::SetNextWindowSize(window_size, ImGuiCond_FirstUseEver);
+    ImGui::Begin("FlirCamWindow", nullptr, 0);
+
     // Connection buttons and status
     if (!connected) {
       if (ImGui::Button("Connect")) {
@@ -827,6 +838,7 @@ class NiceGui {
 
     // If not connected, don't show the GUI elements
     if (!connected) {
+      ImGui::End();
       return;
     }
 
@@ -1005,6 +1017,7 @@ class NiceGui {
 
     // If the image is empty, we don't display anything
     if (image.data.empty()) {
+      ImGui::End();
       return;  // No image data to display
     }
 
@@ -1012,7 +1025,8 @@ class NiceGui {
 
     // calculate height and width of plot window
     float aspect_ratio = float(image.width) / float(image.height);
-    float plot_width = 1000 * io->FontGlobalScale;
+    // float plot_width = 1000 * io->FontGlobalScale;
+    float plot_width = ImGui::GetContentRegionAvail().x - 80 * io->FontGlobalScale;  // leave space for colormap
     float plot_height = plot_width / aspect_ratio;
 
     // selection rectangle
@@ -1072,7 +1086,7 @@ class NiceGui {
       ImPlot::EndPlot();
     }
     ImGui::SameLine();
-    ImPlot::ColormapScale("##HeatScale", scale_min, scale_max, ImVec2(60, plot_height));
+    ImPlot::ColormapScale("##HeatScale", scale_min, scale_max, ImVec2(80 * io->FontGlobalScale, plot_height));
     ImPlot::PopColormap();
 
     // get rect coordinates as integers and flip y axis
@@ -1132,6 +1146,8 @@ class NiceGui {
                        mean_intensity_buffer.Data.size(), 0, mean_intensity_buffer.Offset, 2 * sizeof(double));
       ImPlot::EndPlot();
     }
+
+    ImGui::End();
   }
 
   void Cleanup() {
