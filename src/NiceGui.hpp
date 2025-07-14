@@ -190,6 +190,7 @@ class NiceGui {
   ImGuiIO *io = nullptr;
   ImFont *mainFont = nullptr;
   ImVec4 clear_color;
+  float t_gui = 0;
 
   void RenderUI(SharedResources &res, Workers &workers) {
     static bool use_work_area = true;
@@ -375,7 +376,6 @@ class NiceGui {
       }
     }
 
-    static float t_gui = 0;
     t_gui = utils::getTime();
 
     // shutter
@@ -396,298 +396,8 @@ class NiceGui {
     }
 
     // science camera
-    if (ImGui::CollapsingHeader("Science Camera")) {
-      static TangoFlirCamInterface cam;
-      static std::vector<std::string> command_list = cam.get_commands();
-
-      // buttons for all found commands
-      ImGui::Text("Auto-found commands:");
-      ImGui::SameLine();
-      for (const auto &command : command_list) {
-        if (ImGui::Button(command.c_str())) {
-          cam.run_command(command);
-        }
-        ImGui::SameLine();
-      }
-      ImGui::NewLine();
-
-      // auto-found attributes
-      //   static std::vector<std::string> attribute_list = cam.get_attributes();
-
-      // set filename
-      static char filename_char[128] = "";
-      static std::string filename_str = cam.get_filename();
-      ImGui::Text("Filename:");
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(500);
-      ImGui::InputText("##Filename", filename_char, sizeof(filename_char));
-      ImGui::SameLine();
-      if (ImGui::Button("Set##Filename")) {
-        // convert to str first
-        filename_str = std::string(filename_char);
-        cam.set_filename(filename_str);
-        std::cout << "Filename set to: " << filename_str << std::endl;
-      }
-      ImGui::SameLine();
-      if (ImGui::Button("Read##Filename")) {
-        filename_str = cam.get_filename();
-        std::cout << "Filename read: " << filename_str << std::endl;
-        // convert to char array
-        std::strncpy(filename_char, filename_str.c_str(), sizeof(filename_char) - 1);
-        filename_char[sizeof(filename_char) - 1] = '\0';
-      }
-
-      // start recording N frames (get from user)
-      static unsigned int n_frames = 1;
-      ImGui::SameLine();
-      ImGui::Text("Frames to record:");
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(100);
-      ImGui::InputScalar("##NFramesSlider", ImGuiDataType_U32, &n_frames, NULL, NULL, "%d");
-      ImGui::SameLine();
-      if (ImGui::Button("Record##NFrames")) {
-        cam.start_recording(n_frames);
-      }
-
-      // start recording background (N frames)
-      static unsigned int n_frames_bg = 1;
-      ImGui::Text("BG frames to record:");
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(100);
-      ImGui::InputScalar("##NFramesBGSlider", ImGuiDataType_U32, &n_frames_bg, NULL, NULL, "%d");
-      ImGui::SameLine();
-      if (ImGui::Button("Record BG##NFrames")) {
-        cam.start_recording_background(n_frames_bg);
-      }
-
-      // get background image
-      static std::vector<unsigned short> bg_image;
-      ImGui::SameLine();
-      if (ImGui::Button("Get BG image")) {
-        bg_image = cam.get_background();
-        std::cout << "BG image read" << std::endl;
-      }
-      ImGui::SameLine();
-
-      // checkbox whether to subtract background from image
-      static bool subtract_bg = false;
-      ImGui::Checkbox("Subtract BG", &subtract_bg);
-
-      // framerate
-      static double framerate = cam.read_framerate();
-      ImGui::Text("Framerate:");
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(100);
-      ImGui::InputScalar("##FramerateSlider", ImGuiDataType_Double, &framerate, NULL, NULL, "%.4f Hz");
-      ImGui::SameLine();
-      if (ImGui::Button("Read##Framerate")) {
-        framerate = cam.read_framerate();
-      }
-      ImGui::SameLine();
-      if (ImGui::Button("Set##Framerate")) {
-        cam.write_framerate(framerate);
-        framerate = cam.read_framerate();
-      }
-
-      // integration time
-      static double integration_time = cam.read_integration_time();
-      ImGui::SameLine();
-      ImGui::Text("Integration time:");
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(100);
-      ImGui::InputScalar("##IntegrationTimeSlider", ImGuiDataType_Double, &integration_time, NULL, NULL, "%.4f ms");
-      ImGui::SameLine();
-      if (ImGui::Button("Read##IntegrationTime")) {
-        integration_time = cam.read_integration_time();
-      }
-      ImGui::SameLine();
-      if (ImGui::Button("Set##IntegrationTime")) {
-        cam.write_integration_time(integration_time);
-        integration_time = cam.read_integration_time();
-      }
-
-      // width
-      static unsigned int gui_width = cam.get_width();
-      ImGui::SameLine();
-      ImGui::Text("Width:");
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(100);
-      ImGui::InputScalar("##WidthSlider", ImGuiDataType_S32, &gui_width, NULL, NULL, "%d px");
-      ImGui::SameLine();
-      if (ImGui::Button("Read##Width")) {
-        gui_width = cam.get_width();
-      }
-      ImGui::SameLine();
-      if (ImGui::Button("Set##Width")) {
-        cam.write_width(gui_width);
-      }
-
-      // height
-      static unsigned int gui_height = cam.get_height();
-      ImGui::SameLine();
-      ImGui::Text("Height:");
-      ImGui::SameLine();
-      ImGui::SetNextItemWidth(100);
-      ImGui::InputScalar("##HeightSlider", ImGuiDataType_S32, &gui_height, NULL, NULL, "%d px");
-      ImGui::SameLine();
-      if (ImGui::Button("Read##Height")) {
-        gui_height = cam.get_height();
-      }
-      ImGui::SameLine();
-      if (ImGui::Button("Set##Height")) {
-        cam.write_height(gui_height);
-      }
-
-      //   static int width, height;
-      //   width = cam.get_width();
-      //   height = cam.get_height();
-
-      static Image<int> image;
-      image = cam.get_image();
-
-      static ImPlotColormap map = ImPlotColormap_Viridis;
-      if (ImPlot::ColormapButton(ImPlot::GetColormapName(map), ImVec2(225, 0), map)) {
-        map = (map + 1) % ImPlot::GetColormapCount();
-        // We bust the color cache of our plots so that item colors will
-        // resample the new colormap in the event that they have already
-        // been created. See documentation in implot.h.
-        ImPlot::BustColorCache("##Heatmap1");
-        ImPlot::BustColorCache("##Heatmap2");
-      }
-
-      ImPlot::PushColormap(map);
-      ImGui::SameLine();
-      // checkbox: autoscale colormap
-      static bool autoscale_colormap = true;
-      ImGui::Checkbox("Autoscale colormap", &autoscale_colormap);
-
-      // get pointer to first element of image
-      int *values = image.data.data();
-
-      // calculate height and width of plot window
-      float aspect_ratio = float(image.width) / float(image.height);
-      float plot_width = 1000 * io.FontGlobalScale;
-      float plot_height = plot_width / aspect_ratio;
-
-      // selection rectangle
-      static ImPlotRect rect = {0, double(image.width) / 2, 0,
-                                double(image.height) / 2};  // {X.Min, X.Max, Y.Min, Y.Max}
-      static bool rect_clicked = false, rect_hovered = false, rect_held = false;
-      ImPlotDragToolFlags flags = ImPlotDragToolFlags_None;
-
-      // subtract background if requested
-      if (subtract_bg && !bg_image.empty()) {
-        // check if bg_image is the same size as image
-        if (bg_image.size() == image.data.size()) {
-          for (size_t i = 0; i < image.data.size(); i++) {
-            image.data[i] = int(image.data[i]) - int(bg_image[i]);
-          }
-        } else {
-          std::cerr << "Error: Background image size does not match image size." << std::endl;
-        }
-      }
-
-      // calculate min and max of the image, to autoscale the colormap
-      int img_min_count = *std::min_element(image.data.begin(), image.data.end());
-      int img_max_count = *std::max_element(image.data.begin(), image.data.end());
-
-      // colormap settings
-      static int scale_min = 0;
-      static int scale_max = 16383;
-      const int scale_max_default = 16383;
-      const int scale_min_default = 0;
-
-      ImGui::SetNextItemWidth(400);
-      ImGui::SliderScalar("Min", ImGuiDataType_U16, &scale_min, &scale_min_default, &scale_max_default, "%u");
-      ImGui::SetNextItemWidth(400);
-      ImGui::SameLine();
-      ImGui::SliderScalar("Max", ImGuiDataType_U16, &scale_max, &scale_min_default, &scale_max_default, "%u");
-
-      if (autoscale_colormap) {
-        scale_min = img_min_count;
-        scale_max = img_max_count;
-      }
-
-      // clamp colormap such that min < max
-      if (scale_min > scale_max) {
-        scale_min = scale_max;
-      } else if (scale_max < scale_min) {
-        scale_max = scale_min;
-      } else if (scale_min == scale_max) {
-        scale_min = scale_max - 1;
-      }
-
-      // plot image
-      if (ImPlot::BeginPlot("##Heatmap2", ImVec2(plot_width, plot_height), ImPlotFlags_NoMouseText)) {
-        ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
-        ImPlot::PlotHeatmap("heat1", values, image.height, image.width, scale_min, scale_max, nullptr,
-                            ImPlotPoint(0, 0), ImPlotPoint(image.width, image.height));
-        ImPlot::DragRect(0, &rect.X.Min, &rect.Y.Min, &rect.X.Max, &rect.Y.Max, ImVec4(1, 0, 0, 0.5), flags,
-                         &rect_clicked, &rect_hovered, &rect_held);
-        ImPlot::EndPlot();
-      }
-      ImGui::SameLine();
-      ImPlot::ColormapScale("##HeatScale", scale_min, scale_max, ImVec2(60, plot_height));
-      ImPlot::PopColormap();
-
-      // get rect coordinates as integers and flip y axis
-      int x_min = static_cast<int>(rect.X.Min);
-      int x_max = static_cast<int>(rect.X.Max);
-      int y_min = static_cast<int>(rect.Y.Min);
-      int y_max = static_cast<int>(rect.Y.Max);
-      int x_extent = x_max - x_min;
-      int y_extent = y_max - y_min;
-      y_min += y_extent;
-      y_max -= y_extent;
-      y_min = image.height - y_min;
-      y_max = image.height - y_max;
-
-      // Calculate mean intensity in the selected region
-      static ScrollingBufferT<double, double> mean_intensity_buffer(10000);
-      if (image.width > 0 && image.height > 0 && !image.data.empty()) {
-        // Ensure bounds
-        // x_min = std::max(0, std::min(x_min, static_cast<int>image.width - 1));
-        // x_max = std::max(0, std::min(x_max, static_cast<int>image.width - 1));
-        // y_min = std::max(0, std::min(y_min, static_cast<int>image.height - 1));
-        // y_max = std::max(0, std::min(y_max, static_cast<int>image.height - 1));
-
-        double sum = 0;
-        int count = 0;
-
-        for (int y = y_min; y <= y_max; y++) {
-          for (int x = x_min; x <= x_max; x++) {
-            sum += values[x + y * image.width];  // row major order
-            // example: to get value at (5,0), get values[5]
-            // example: to get value at (0,1), get values[width]
-            count++;
-          }
-        }
-
-        if (count > 0) {
-          double mean = sum;  /// count;
-          ImGui::Text("Sum intensity: %.2f", mean);
-          mean_intensity_buffer.AddPoint(t_gui, mean);
-        }
-      }
-
-      ImGui::Text("Selection: (%d,%d) to (%d,%d)  Size: %d x %d pixels", x_min, y_min, x_max, y_max, x_extent,
-                  y_extent);
-
-      // plot a time series of the mean intensity
-      static float mean_intensity_history_length = 10.f;
-      ImGui::SliderFloat("Sum Intensity History", &mean_intensity_history_length, 1, 100, "%.5f s",
-                         ImGuiSliderFlags_Logarithmic);
-      if (ImPlot::BeginPlot("Sum Intensity", ImVec2(-1, 400 * io.FontGlobalScale))) {
-        static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-        ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_AutoFit, yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - mean_intensity_history_length, t_gui, ImGuiCond_Always);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        ImPlot::SetNextLineStyle(IMPLOT_AUTO_COL, 2);
-        ImPlot::PlotLine("Sum Intensity", &mean_intensity_buffer.Data[0].time, &mean_intensity_buffer.Data[0].value,
-                         mean_intensity_buffer.Data.size(), 0, mean_intensity_buffer.Offset, 2 * sizeof(double));
-        ImPlot::EndPlot();
-      }
+    if (ImGui::CollapsingHeader("Flir Camera")) {
+      WindowFlirCam(res, workers);
     }
 
     // ADC measurements
@@ -1093,6 +803,334 @@ class NiceGui {
     if (show_app_metrics) {
       // Show app metrics
       ImGui::ShowMetricsWindow();
+    }
+  }
+
+  void WindowFlirCam(SharedResources &resources, Workers &workers) {
+    static TangoFlirCamInterface cam;
+    bool connected = cam.is_connected();
+
+    // Connection buttons and status
+    if (!connected) {
+      if (ImGui::Button("Connect")) {
+        cam.connect();
+      }
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Status: Disconnected");
+    } else {
+      if (ImGui::Button("Disconnect")) {
+        cam.disconnect();
+      }
+      ImGui::SameLine();
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Connected");
+    }
+
+    // If not connected, don't show the GUI elements
+    if (!connected) {
+      return;
+    }
+
+    // ping deviec
+    ImGui::SameLine();
+    if (ImGui::Button("Ping Device")) {
+      cam.ping_device();
+    }
+
+    // Assume the camera is connected, so we can proceed with the GUI
+
+    // Find the commands that the camera supports and display them as buttons
+    static std::vector<std::string> command_list = cam.get_commands();
+
+    ImGui::Text("Auto-found commands:");
+    ImGui::SameLine();
+    for (const auto &command : command_list) {
+      if (ImGui::Button(command.c_str())) {
+        cam.run_command(command);
+      }
+      ImGui::SameLine();
+    }
+    ImGui::NewLine();
+
+    // auto-found attributes
+    // static std::vector<std::string> attribute_list = cam.get_attributes();
+
+    // set filename
+    static char filename_char[128] = "";
+    static std::string filename_str = cam.get_filename();
+    ImGui::Text("Filename:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(500);
+    ImGui::InputText("##Filename", filename_char, sizeof(filename_char));
+    ImGui::SameLine();
+    if (ImGui::Button("Set##Filename")) {
+      // convert to str first
+      filename_str = std::string(filename_char);
+      cam.set_filename(filename_str);
+      std::cout << "Filename set to: " << filename_str << std::endl;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Read##Filename")) {
+      filename_str = cam.get_filename();
+      std::cout << "Filename read: " << filename_str << std::endl;
+      // convert to char array
+      std::strncpy(filename_char, filename_str.c_str(), sizeof(filename_char) - 1);
+      filename_char[sizeof(filename_char) - 1] = '\0';
+    }
+
+    // start recording N frames (get from user)
+    static unsigned int n_frames = 1;
+    ImGui::SameLine();
+    ImGui::Text("Frames to record:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    ImGui::InputScalar("##NFramesSlider", ImGuiDataType_U32, &n_frames, NULL, NULL, "%d");
+    ImGui::SameLine();
+    if (ImGui::Button("Record##NFrames")) {
+      cam.start_recording(n_frames);
+    }
+
+    // start recording background (N frames)
+    static unsigned int n_frames_bg = 1;
+    ImGui::Text("BG frames to record:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    ImGui::InputScalar("##NFramesBGSlider", ImGuiDataType_U32, &n_frames_bg, NULL, NULL, "%d");
+    ImGui::SameLine();
+    if (ImGui::Button("Record BG##NFrames")) {
+      cam.start_recording_background(n_frames_bg);
+    }
+
+    // get background image
+    static std::vector<unsigned short> bg_image;
+    ImGui::SameLine();
+    if (ImGui::Button("Get BG image")) {
+      bg_image = cam.get_background();
+      std::cout << "BG image read" << std::endl;
+    }
+    ImGui::SameLine();
+
+    // checkbox whether to subtract background from image
+    static bool subtract_bg = false;
+    ImGui::Checkbox("Subtract BG", &subtract_bg);
+
+    // framerate
+    static double framerate = cam.read_framerate();
+    ImGui::Text("Framerate:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    ImGui::InputScalar("##FramerateSlider", ImGuiDataType_Double, &framerate, NULL, NULL, "%.4f Hz");
+    ImGui::SameLine();
+    if (ImGui::Button("Read##Framerate")) {
+      framerate = cam.read_framerate();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Set##Framerate")) {
+      cam.write_framerate(framerate);
+      framerate = cam.read_framerate();
+    }
+
+    // integration time
+    static double integration_time = cam.read_integration_time();
+    ImGui::SameLine();
+    ImGui::Text("Integration time:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    ImGui::InputScalar("##IntegrationTimeSlider", ImGuiDataType_Double, &integration_time, NULL, NULL, "%.4f ms");
+    ImGui::SameLine();
+    if (ImGui::Button("Read##IntegrationTime")) {
+      integration_time = cam.read_integration_time();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Set##IntegrationTime")) {
+      cam.write_integration_time(integration_time);
+      integration_time = cam.read_integration_time();
+    }
+
+    // width
+    static unsigned int gui_width = cam.get_width();
+    ImGui::SameLine();
+    ImGui::Text("Width:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    ImGui::InputScalar("##WidthSlider", ImGuiDataType_S32, &gui_width, NULL, NULL, "%d px");
+    ImGui::SameLine();
+    if (ImGui::Button("Read##Width")) {
+      gui_width = cam.get_width();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Set##Width")) {
+      cam.write_width(gui_width);
+    }
+
+    // height
+    static unsigned int gui_height = cam.get_height();
+    ImGui::SameLine();
+    ImGui::Text("Height:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100);
+    ImGui::InputScalar("##HeightSlider", ImGuiDataType_S32, &gui_height, NULL, NULL, "%d px");
+    ImGui::SameLine();
+    if (ImGui::Button("Read##Height")) {
+      gui_height = cam.get_height();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Set##Height")) {
+      cam.write_height(gui_height);
+    }
+
+    //   static int width, height;
+    //   width = cam.get_width();
+    //   height = cam.get_height();
+
+    static Image<int> image;
+    image = cam.get_image();
+
+    // std::cout << "Image size: " << image.data.size() << " pixels" << std::endl;
+
+    static ImPlotColormap map = ImPlotColormap_Viridis;
+    if (ImPlot::ColormapButton(ImPlot::GetColormapName(map), ImVec2(225, 0), map)) {
+      map = (map + 1) % ImPlot::GetColormapCount();
+      // We bust the color cache of our plots so that item colors will
+      // resample the new colormap in the event that they have already
+      // been created. See documentation in implot.h.
+      ImPlot::BustColorCache("##Heatmap1");
+      ImPlot::BustColorCache("##Heatmap2");
+    }
+
+    ImPlot::PushColormap(map);
+    ImGui::SameLine();
+    // checkbox: autoscale colormap
+    static bool autoscale_colormap = true;
+    ImGui::Checkbox("Autoscale colormap", &autoscale_colormap);
+
+    // If the image is empty, we don't display anything
+    if (image.data.empty()) {
+      return;  // No image data to display
+    }
+
+    int *values = image.data.data();
+
+    // calculate height and width of plot window
+    float aspect_ratio = float(image.width) / float(image.height);
+    float plot_width = 1000 * io->FontGlobalScale;
+    float plot_height = plot_width / aspect_ratio;
+
+    // selection rectangle
+    static ImPlotRect rect = {0, double(image.width) / 2, 0, double(image.height) / 2};  // {X.Min, X.Max, Y.Min, Y.Max}
+    static bool rect_clicked = false, rect_hovered = false, rect_held = false;
+    ImPlotDragToolFlags flags = ImPlotDragToolFlags_None;
+
+    // subtract background if requested
+    if (subtract_bg && !bg_image.empty()) {
+      // check if bg_image is the same size as image
+      if (bg_image.size() == image.data.size()) {
+        for (size_t i = 0; i < image.data.size(); i++) {
+          image.data[i] = int(image.data[i]) - int(bg_image[i]);
+        }
+      } else {
+        std::cerr << "Error: Background image size does not match image size." << std::endl;
+      }
+    }
+
+    // calculate min and max of the image, to autoscale the colormap
+    int img_min_count = *std::min_element(image.data.begin(), image.data.end());
+    int img_max_count = *std::max_element(image.data.begin(), image.data.end());
+
+    // colormap settings
+    static int scale_min = 0;
+    static int scale_max = 16383;
+    const int scale_max_default = 16383;
+    const int scale_min_default = 0;
+
+    ImGui::SetNextItemWidth(400);
+    ImGui::SliderScalar("Min", ImGuiDataType_U16, &scale_min, &scale_min_default, &scale_max_default, "%u");
+    ImGui::SetNextItemWidth(400);
+    ImGui::SameLine();
+    ImGui::SliderScalar("Max", ImGuiDataType_U16, &scale_max, &scale_min_default, &scale_max_default, "%u");
+
+    if (autoscale_colormap) {
+      scale_min = img_min_count;
+      scale_max = img_max_count;
+    }
+
+    // clamp colormap such that min < max
+    if (scale_min > scale_max) {
+      scale_min = scale_max;
+    } else if (scale_max < scale_min) {
+      scale_max = scale_min;
+    } else if (scale_min == scale_max) {
+      scale_min = scale_max - 1;
+    }
+
+    // plot image
+    if (ImPlot::BeginPlot("##Heatmap2", ImVec2(plot_width, plot_height), ImPlotFlags_NoMouseText)) {
+      ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
+      ImPlot::PlotHeatmap("heat1", values, image.height, image.width, scale_min, scale_max, nullptr, ImPlotPoint(0, 0),
+                          ImPlotPoint(image.width, image.height));
+      ImPlot::DragRect(0, &rect.X.Min, &rect.Y.Min, &rect.X.Max, &rect.Y.Max, ImVec4(1, 0, 0, 0.5), flags,
+                       &rect_clicked, &rect_hovered, &rect_held);
+      ImPlot::EndPlot();
+    }
+    ImGui::SameLine();
+    ImPlot::ColormapScale("##HeatScale", scale_min, scale_max, ImVec2(60, plot_height));
+    ImPlot::PopColormap();
+
+    // get rect coordinates as integers and flip y axis
+    int x_min = static_cast<int>(rect.X.Min);
+    int x_max = static_cast<int>(rect.X.Max);
+    int y_min = static_cast<int>(rect.Y.Min);
+    int y_max = static_cast<int>(rect.Y.Max);
+    int x_extent = x_max - x_min;
+    int y_extent = y_max - y_min;
+    y_min += y_extent;
+    y_max -= y_extent;
+    y_min = image.height - y_min;
+    y_max = image.height - y_max;
+
+    // Calculate mean intensity in the selected region
+    static ScrollingBufferT<double, double> mean_intensity_buffer(10000);
+    if (image.width > 0 && image.height > 0 && !image.data.empty()) {
+      // Ensure bounds
+      // x_min = std::max(0, std::min(x_min, static_cast<int>image.width - 1));
+      // x_max = std::max(0, std::min(x_max, static_cast<int>image.width - 1));
+      // y_min = std::max(0, std::min(y_min, static_cast<int>image.height - 1));
+      // y_max = std::max(0, std::min(y_max, static_cast<int>image.height - 1));
+
+      double sum = 0;
+      int count = 0;
+
+      for (int y = y_min; y <= y_max; y++) {
+        for (int x = x_min; x <= x_max; x++) {
+          sum += values[x + y * image.width];  // row major order
+          // example: to get value at (5,0), get values[5]
+          // example: to get value at (0,1), get values[width]
+          count++;
+        }
+      }
+
+      if (count > 0) {
+        double mean = sum;  /// count;
+        ImGui::Text("Sum intensity: %.2f", mean);
+        mean_intensity_buffer.AddPoint(t_gui, mean);
+      }
+    }
+
+    ImGui::Text("Selection: (%d,%d) to (%d,%d)  Size: %d x %d pixels", x_min, y_min, x_max, y_max, x_extent, y_extent);
+
+    // plot a time series of the mean intensity
+    static float mean_intensity_history_length = 10.f;
+    ImGui::SliderFloat("Sum Intensity History", &mean_intensity_history_length, 1, 100, "%.5f s",
+                       ImGuiSliderFlags_Logarithmic);
+    if (ImPlot::BeginPlot("Sum Intensity", ImVec2(-1, 400 * io->FontGlobalScale))) {
+      static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+      ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_AutoFit, yflags);
+      ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - mean_intensity_history_length, t_gui, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+      ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+      ImPlot::SetNextLineStyle(IMPLOT_AUTO_COL, 2);
+      ImPlot::PlotLine("Sum Intensity", &mean_intensity_buffer.Data[0].time, &mean_intensity_buffer.Data[0].value,
+                       mean_intensity_buffer.Data.size(), 0, mean_intensity_buffer.Offset, 2 * sizeof(double));
+      ImPlot::EndPlot();
     }
   }
 

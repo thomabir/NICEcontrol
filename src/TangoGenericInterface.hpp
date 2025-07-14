@@ -13,13 +13,12 @@ class TangoGenericInterface {
  private:
   Tango::DeviceProxy *tango_device;
   std::string device_name;
+  bool connected = false;
   Tango::DeviceProxy *get_device() { return tango_device; }
 
  public:
   TangoGenericInterface(const std::string &device_name = "detectors/flir/1")
-      : tango_device(nullptr), device_name(device_name) {
-    init();
-  }
+      : tango_device(nullptr), device_name(device_name) {}
 
   ~TangoGenericInterface() {
     if (tango_device) {
@@ -27,37 +26,76 @@ class TangoGenericInterface {
     }
   }
 
-  void init() {
-    // Check if device is already initialized
-    if (tango_device == nullptr) {
-      try {
-        tango_device = new Tango::DeviceProxy(device_name.c_str());
-      } catch (Tango::DevFailed &e) {
-        Tango::Except::print_exception(e);
-        return;
-      }
+  bool is_connected() { return connected; }
+
+  int create_device_proxy() {
+    // If there is already a device proxy, no need to create a new one
+    if (tango_device != nullptr) {
+      return 0;
     }
 
-    // Get the state and check if it's running
+    // Create a new device proxy
     try {
-      tango_device->ping();
+      tango_device = new Tango::DeviceProxy(device_name.c_str());
+      return 0;
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+      tango_device = nullptr;
+      return -1;
+    }
+  }
+
+  int ping_device() {
+    try {
+      // tango_device->ping();  // TODO check if something comes back
+      std::cout << " device ping took " << tango_device->ping() << " microseconds" << endl;
+      return 0;
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+      return -1;
+    }
+  }
+
+  int initialise_if_not_running() {
+    try {
       Tango::DevState state;
       Tango::DeviceAttribute att_reply;
 
       att_reply = tango_device->read_attribute("State");
       att_reply >> state;
 
-      // If the device is already running, we're done
-      if (state != 1) {
-        return;
+      if (state != Tango::ON) {
+        run_command("Initialise");
       }
-
-      // Initialize the device
-      run_command("Initialise");
+      return 0;  // success
     } catch (Tango::DevFailed &e) {
       Tango::Except::print_exception(e);
-      return;
+      return -1;  // failure
     }
+  }
+
+  int disconnect() {
+    return -1;  // not implemented
+  }
+
+  int connect() {
+    // Create device proxy
+    if (create_device_proxy() < 0) {
+      return -1;
+    }
+
+    // Ping the device to check if it is reachable
+    if (ping_device() < 0) {
+      return -1;
+    }
+
+    // Initialise the device if it is not already running
+    if (initialise_if_not_running() < 0) {
+      return -1;
+    }
+
+    connected = true;
+    return 0;
   }
 
   void run_command(const std::string &command) {
@@ -147,7 +185,7 @@ class TangoGenericInterface {
   std::vector<std::string> get_commands() {
     std::vector<std::string> commands;
     try {
-      auto reply = tango_device->command_list_query();
+      auto reply = tango_device->command_list_query();  // FIXME: Segfaults if not connected to a device
       for (const auto &cmd_info : reply[0]) {
         if (cmd_info.cmd_name != "Init") {
           commands.push_back(cmd_info.cmd_name);
