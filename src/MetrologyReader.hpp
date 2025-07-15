@@ -31,22 +31,22 @@ class MetrologyReader {
   void start() {
     if (!calculation_thread.joinable()) {
       running.store(true);
-      calculation_thread = std::thread(&MetrologyReader::run_calculation, this);
+      calculation_thread = std::jthread(&MetrologyReader::run_calculation, this);
     }
   }
 
   // Stop the measurement thread
-  void stop() {
+  void request_stop() {
     if (calculation_thread.joinable()) {
       running.store(false);
-      calculation_thread.join();
+      calculation_thread.request_stop();
     }
   }
 
  private:
   MetrologyResources &met_res;
   int sockfd = -1;  // socket for UDP
-  std::thread calculation_thread;
+  std::jthread calculation_thread;
   std::atomic<bool> running{false};  // atomic flag to control calculation thread
 
   // Setup ethernet connection
@@ -75,7 +75,7 @@ class MetrologyReader {
 
   // Main calculation loop
   void run_calculation() {
-    int prev_counter = 0;
+    // int prev_counter = 0;
     int buffer_size = 1024;
     char buffer[buffer_size];
 
@@ -183,18 +183,18 @@ class MetrologyReader {
       }
 
       // cCheck for gaps within the package
-      for (int i = 1; i < num_timepoints; i++) {
-        if (counter[i] != counter[i - 1] + 1) {
-          std::cerr << "Gap within package: counter " << counter[i - 1] << " -> " << counter[i]
-                    << " (size of gap: " << counter[i] - counter[i - 1] - 1 << ")" << std::endl;
-        }
-      }
+      // for (int i = 1; i < num_timepoints; i++) {
+      //   if (counter[i] != counter[i - 1] + 1) {
+      //     std::cerr << "Gap within package: counter " << counter[i - 1] << " -> " << counter[i]
+      //               << " (size of gap: " << counter[i] - counter[i - 1] - 1 << ")" << std::endl;
+      //   }
+      // }
 
       // Check for gaps between packages
-      if (counter[0] != prev_counter + num_timepoints) {
-        std::cerr << "Gap between packages: counter " << prev_counter << " -> " << counter[0] << std::endl;
-      }
-      prev_counter = counter[0];
+      // if (counter[0] != prev_counter + num_timepoints) {
+      //   std::cerr << "Gap between packages: counter " << prev_counter << " -> " << counter[0] << std::endl;
+      // }
+      // prev_counter = counter[0];
 
       // phase-unwrap the OPD signal
       const int max_unwrap_iters = 500;
