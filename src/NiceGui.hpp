@@ -66,8 +66,69 @@
 
 class NiceGui {
  public:
-  NiceGui() = default;
+  NiceGui(SharedResources &resources, Workers &workers) : res(resources), workers(workers) {}
   ~NiceGui() { Cleanup(); }
+
+  void start() {
+    gui_thread = std::jthread([this]() {
+      // Note: GLFW is preferably at home in a single thread, splitting it up can lead to issues.
+      if (!Initialize()) {
+        std::cerr << "Failed to initialize GUI!" << std::endl;
+        return;
+      }
+      // Main GUI loop
+      while (!ShouldClose()) {
+        RenderFrame();
+      }
+    });
+  }
+
+  void wait_for_close() { gui_thread.join(); }
+
+  void
+
+      private : SharedResources &res;
+  Workers &workers;
+  std::jthread gui_thread;
+  GLFWwindow *window = nullptr;
+  const char *glsl_version = nullptr;
+  ImGuiIO *io = nullptr;
+  ImFont *mainFont = nullptr;
+  ImVec4 clear_color;
+  float t_gui = 0;
+
+  bool ShouldClose() const { return glfwWindowShouldClose(window); }
+
+  void RenderFrame() {
+    glfwPollEvents();
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::PushFont(mainFont);
+    RenderUI();
+    ImGui::PopFont();
+
+    // Rendering
+    ImGui::Render();
+    int display_w, display_h;
+    glfwGetFramebufferSize(window, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w,
+                 clear_color.w);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    // Update and Render additional Platform Windows
+    if (io->ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+      GLFWwindow *backup_current_context = glfwGetCurrentContext();
+      ImGui::UpdatePlatformWindows();
+      ImGui::RenderPlatformWindowsDefault();
+      glfwMakeContextCurrent(backup_current_context);
+    }
+
+    glfwSwapBuffers(window);
+  }
 
   bool Initialize() {
     // Set GLFW error callback
@@ -148,51 +209,7 @@ class NiceGui {
     return true;
   }
 
-  bool ShouldClose() const { return glfwWindowShouldClose(window); }
-
-  void StartFrame() {
-    glfwPollEvents();
-
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-  }
-
-  void RenderFrame(SharedResources &resources, Workers &workers) {
-    ImGui::PushFont(mainFont);
-    RenderUI(resources, workers);
-    ImGui::PopFont();
-
-    // Rendering
-    ImGui::Render();
-    int display_w, display_h;
-    glfwGetFramebufferSize(window, &display_w, &display_h);
-    glViewport(0, 0, display_w, display_h);
-    glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w,
-                 clear_color.w);
-    glClear(GL_COLOR_BUFFER_BIT);
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-    // Update and Render additional Platform Windows
-    if (io->ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-      GLFWwindow *backup_current_context = glfwGetCurrentContext();
-      ImGui::UpdatePlatformWindows();
-      ImGui::RenderPlatformWindowsDefault();
-      glfwMakeContextCurrent(backup_current_context);
-    }
-
-    glfwSwapBuffers(window);
-  }
-
- private:
-  GLFWwindow *window = nullptr;
-  const char *glsl_version = nullptr;
-  ImGuiIO *io = nullptr;
-  ImFont *mainFont = nullptr;
-  ImVec4 clear_color;
-  float t_gui = 0;
-
-  void RenderUI(SharedResources &res, Workers &workers) {
+  void RenderUI() {
     static bool use_work_area = true;
     static ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;

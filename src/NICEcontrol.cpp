@@ -50,25 +50,22 @@ void setupActuators() {
 int main() {
   SharedResources resources;
   Workers workers(resources);
-  NiceGui gui;
+  NiceGui gui(resources, workers);
 
   // Setup actuators
   // setupActuators();
 
-  // Initialize GUI
-  if (!gui.Initialize()) {
-    std::cerr << "Failed to initialize GUI" << std::endl;
-    return 1;
-  }
-
-  // Start some of the workers
+  // Start the worker threads
   workers.metrology_reader.start();
 
-  // Render loop
-  while (!gui.ShouldClose()) {
-    gui.StartFrame();
-    gui.RenderFrame(resources, workers);
-  }
+  // Start the GUI thread
+  gui.start();
+
+  // Wait for GUI to close
+  gui.wait_for_close();
+
+  // request the workers to stop
+  workers.metrology_reader.request_stop();
 
   return 0;
 }
