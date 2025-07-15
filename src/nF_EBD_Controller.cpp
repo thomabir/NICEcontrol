@@ -56,8 +56,8 @@ void nF_EBD_Controller::move_to(std::array<double, 2> target) {
   }  // stage is unreachable while moving
 
   // recalculate target positions: rotate 45 degrees
-  double x = target[0] + target[1];
-  double y = target[1] - target[0];
+  double x = target[0];  //+ target[1];
+  double y = target[1];  //- target[0];
 
   is_moving.store(true);
   std::thread([this, x, y] {

@@ -85,9 +85,8 @@ class NiceGui {
 
   void wait_for_close() { gui_thread.join(); }
 
-  void
-
-      private : SharedResources &res;
+ private:
+  SharedResources &res;
   Workers &workers;
   std::jthread gui_thread;
   GLFWwindow *window = nullptr;
@@ -384,7 +383,7 @@ class NiceGui {
     if (metrology_running) {
       if (ImGui::Button("Metrology: Stop")) {
         metrology_running = false;
-        workers.metrology_reader.stop();
+        workers.metrology_reader.request_stop();
       }
     } else {
       if (ImGui::Button("Metrology: Start")) {

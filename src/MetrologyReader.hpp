@@ -21,7 +21,7 @@ class MetrologyReader {
 
   // Destructor to clean up resources
   ~MetrologyReader() {
-    stop();
+    request_stop();
     if (sockfd >= 0) {
       close(sockfd);
     }
