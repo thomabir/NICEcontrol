@@ -11,9 +11,6 @@
 #   pacman -S --noconfirm --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-glfw
 #
 
-#CXX = g++
-#CXX = clang++
-
 EXE = bin/NICEcontrol
 IMGUI_DIR = lib/imgui
 IMPLOT_DIR = lib/implot
@@ -21,10 +18,12 @@ FONT_DIR = lib/fonts
 SRC_DIR = src
 BUILD_DIR = build
 
-SOURCES = $(SRC_DIR)/NICEcontrol.cpp
+##---------------------------------------------------------------------
+## .cpp files
+##---------------------------------------------------------------------
 
-# add rest of the SRC_DIR
-SOURCES += $(SRC_DIR)/PI_E727_Controller.cpp $(SRC_DIR)/PI_E754_Controller.cpp
+# my source files
+SOURCES = $(wildcard $(SRC_DIR)/*.cpp)
 
 # add general imgui sources
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
@@ -35,36 +34,45 @@ SOURCES += $(IMGUI_DIR)/backends/imgui_impl_glfw.cpp $(IMGUI_DIR)/backends/imgui
 # add implot sources
 SOURCES += $(IMPLOT_DIR)/implot.cpp $(IMPLOT_DIR)/implot_demo.cpp $(IMPLOT_DIR)/implot_items.cpp
 
+##---------------------------------------------------------------------
+## .o files
+##---------------------------------------------------------------------
 
-
-# all .o files are placed in the build directory
+# For each .cpp file in SOURCES, create a corresponding .o file in BUILD_DIR
 OBJS = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(notdir $(SOURCES)))
 OBJS += $(BUILD_DIR)/imgui_impl_glfw.o $(BUILD_DIR)/imgui_impl_opengl3.o
 
+##---------------------------------------------------------------------
+## Libraries
+##---------------------------------------------------------------------
+
+LIBS = -lfftw3 -lm -liir -lpi_pi_gcs2 -lnF_interface_x64
+
+LIB_TANGO_DIR = -L /usr/local/tango/lib
+LIBS += $(LIB_TANGO_DIR) -ltango \
+					-lomniORB4 \
+					-lomniDynamic4 \
+					-lCOS4 \
+					-lomnithread \
+					-lzmq \
+					-lpthread
+
+##---------------------------------------------------------------------
+## Dependency files
+##---------------------------------------------------------------------
+
+DEPENDS = $(patsubst %.cpp,$(BUILD_DIR)/%.d,$(notdir $(SOURCES)))
+
+##---------------------------------------------------------------------
+## Compiler and flags
+##---------------------------------------------------------------------
 
 UNAME_S := $(shell uname -s)
 LINUX_GL_LIBS = -lGL
 
 # compiler flags
 CXXFLAGS = -std=c++20 -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends -I/usr/local/tango/include/tango
-CXXFLAGS += -Ofast -Wall -Wformat #-g
-# CXXFLAGS += -Os
-
-LIBS = -lfftw3 -lm -liir -lpi_pi_gcs2
-
- LIB_TANGO_DIR = -L /usr/local/tango/lib
- LIBS += $(LIB_TANGO_DIR) -ltango \
-                      -lomniORB4 \
-                      -lomniDynamic4 \
-                      -lCOS4 \
-                      -lomnithread \
-                      -lzmq \
-                      -lpthread
-
-
-## nanoFaktur piezo controller
-LIBS += -lnF_interface_x64 # nanoFaktur piezo controller
-SOURCES += $(SRC_DIR)/nF_EBD_Controller.cpp # nanoFaktur piezo controller
+CXXFLAGS += -Ofast -Wall -Wformat -Wextra #-g
 
 ##---------------------------------------------------------------------
 ## OPENGL ES
@@ -75,7 +83,7 @@ SOURCES += $(SRC_DIR)/nF_EBD_Controller.cpp # nanoFaktur piezo controller
 # LINUX_GL_LIBS = -lGLESv2
 
 ##---------------------------------------------------------------------
-## BUILD FLAGS PER PLATFORM
+## Build flags per platform
 ##---------------------------------------------------------------------
 
 ifeq ($(UNAME_S), Linux) #LINUX
@@ -106,7 +114,7 @@ ifeq ($(OS), Windows_NT)
 endif
 
 ##---------------------------------------------------------------------
-## BUILD RULES
+## Build rules
 ##---------------------------------------------------------------------
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
@@ -123,6 +131,8 @@ $(BUILD_DIR)/%.o: $(IMGUI_DIR)/backends/%.cpp
 
 all: $(EXE)
 	@echo Build complete for $(ECHO_MESSAGE)
+
+-include $(DEPENDS)
 
 $(EXE): $(OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LIBS)
