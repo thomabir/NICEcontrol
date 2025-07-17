@@ -1117,6 +1117,26 @@ class NiceGui {
     y_min = image.height - y_min;
     y_max = image.height - y_max;
 
+    // UI for intensity normalization
+    static float intensity_of_one = 1.0f;
+    static bool apply_intensity_of_one = false;
+    static float nd_filter_factor = 1.0f;
+    static bool apply_nd_filter = false;
+    ImGui::Text("Intensity normalization:");
+    ImGui::SameLine();
+    ImGui::Checkbox("##Apply one", &apply_intensity_of_one);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(200);
+    ImGui::InputFloat("##I_0", &intensity_of_one, 0.01f, 0.1f, "%.2f");
+    ImGui::SameLine();
+
+    ImGui::Text("NF filter factor:");
+    ImGui::SameLine();
+    ImGui::Checkbox("##Apply ND", &apply_nd_filter);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(200);
+    ImGui::InputFloat("##ND filter factor", &nd_filter_factor, 0.01f, 0.1f, "%.2f");
+
     // Calculate mean intensity in the selected region
     static ScrollingBufferT<double, double> mean_intensity_buffer(10000);
     if (image.width > 0 && image.height > 0 && !image.data.empty()) {
@@ -1140,6 +1160,13 @@ class NiceGui {
 
       if (count > 0) {
         double mean = sum;  /// count;
+        // apply intensity normalization if requested
+        if (apply_intensity_of_one) {
+          mean /= intensity_of_one;
+        }
+        if (apply_nd_filter) {
+          mean /= nd_filter_factor;
+        }
         ImGui::Text("Sum intensity: %.2f", mean);
         mean_intensity_buffer.AddPoint(t_gui, mean);
       }
