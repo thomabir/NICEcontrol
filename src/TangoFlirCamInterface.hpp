@@ -45,14 +45,36 @@ class TangoFlirCamInterface : public TangoGenericInterface {
 
   double read_integration_time() { return read_attribute<double>("IntTime"); }
 
-  void write_integration_time(double integration_time) { write_attribute<double>("IntTime", integration_time); }
+  void write_integration_time(double integration_time) {
+    run_command("StopFrames");
+    write_attribute<double>("IntTime", integration_time);
+    run_command("StartStream");
+  }
 
   std::string get_filename() { return read_attribute<std::string>("Filename"); }
 
-  void set_filename(std::string &filename) { write_attribute("Filename", filename); }
+  void set_filename(std::string &filename) {
+    run_command("StopFrames");
+    write_attribute("Filename", filename);
+    run_command("StartStream");
+  }
 
-  void start_recording(unsigned int n_frames) { run_command<unsigned int>("RecordFrames", n_frames); }
-  void start_recording_background(unsigned int n_frames) { run_command<unsigned int>("CalcBackground", n_frames); }
+  void start_recording(unsigned int n_frames) {
+    run_command("StopFrames");
+    ping_device();  // wait for reply before starting recording
+    run_command<unsigned int>("RecordFrames", n_frames);
+    ping_device();  // wait for reply before starting stream
+    run_command("StartStream");
+  }
+
+  void start_recording_background(unsigned int n_frames) {
+    run_command("StopFrames");
+    // wait 100 ms
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    run_command<unsigned int>("CalcBackground", n_frames);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    run_command("StartStream");
+  }
 
   Image<int> get_image() {
     Image<int> image;
