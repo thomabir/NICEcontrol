@@ -635,6 +635,9 @@ class NiceGui {
         // two binary flags: Reset phase unwrap, and run control loop
         static bool reset_phase_unwrap = false;
         ImGui::Checkbox("Reset phase unwrap", &reset_phase_unwrap);
+        static bool reset_iir_memory = false;
+        ImGui::SameLine();
+        ImGui::Checkbox("Reset IIR memory", &reset_iir_memory);
 
         // Interface to EtherCAT master: Send a few bytes via UDP to the master receiver
         // 5 bytes data via UDP:
@@ -644,7 +647,7 @@ class NiceGui {
         const char *udp_ip = "192.168.88.177";
         static EthercatUdpInterface ec_udp_if(udp_ip, udp_port);
         ec_udp_if.send_commands(opd_setpoint_ethercat * 1.0e-3, opd_p_ethercat, opd_i_ethercat, reset_phase_unwrap,
-                                gui_opd_loop_select == 2);
+                                gui_opd_loop_select == 2, reset_iir_memory);
 
         ImGui::TreePop();
       }
@@ -1167,7 +1170,7 @@ class NiceGui {
         if (apply_nd_filter) {
           mean /= nd_filter_factor;
         }
-        ImGui::Text("Sum intensity: %.2f", mean);
+        ImGui::Text("Sum intensity: %.3e", mean);
         mean_intensity_buffer.AddPoint(t_gui, mean);
       }
     }
