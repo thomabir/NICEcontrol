@@ -638,12 +638,9 @@ class NiceGui {
         ImGui::SliderFloat("P##OPD EtherCAT", &opd_p_ethercat, 1e-4f, 1e0f, "%.5f", ImGuiSliderFlags_Logarithmic);
         ImGui::SliderFloat("I##OPD EtherCAT", &opd_i_ethercat, 1e-1f, 1e3f, "%.5f", ImGuiSliderFlags_Logarithmic);
 
-        // two binary flags: Reset phase unwrap, and run control loop
+        // Reset phase unwrap checkbox
         static bool reset_phase_unwrap = false;
         ImGui::Checkbox("Reset phase unwrap", &reset_phase_unwrap);
-        static bool reset_iir_memory = false;
-        ImGui::SameLine();
-        ImGui::Checkbox("Reset IIR memory", &reset_iir_memory);
 
         // Interface to EtherCAT master: Send a few bytes via UDP to the master receiver
         // 5 bytes data via UDP:
@@ -653,7 +650,7 @@ class NiceGui {
         const char *udp_ip = "192.168.88.177";
         static EthercatUdpInterface ec_udp_if(udp_ip, udp_port);
         ec_udp_if.send_commands(opd_setpoint_ethercat * 1.0e-3, opd_p_ethercat, opd_i_ethercat, reset_phase_unwrap,
-                                gui_opd_loop_select == 2, reset_iir_memory);
+                                gui_opd_loop_select == 2);
 
         ImGui::TreePop();
       }

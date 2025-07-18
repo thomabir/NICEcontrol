@@ -67,15 +67,14 @@ class EthercatUdpInterface {
    * @param run_control_loop Flag to enable/disable control loop
    * @return true if sending was successful, false otherwise
    */
-  bool send_commands(float opd_setpoint, float p, float i, bool reset_phase_unwrap, bool run_control_loop,
-                     bool reset_iir_memory) {
+  bool send_commands(float opd_setpoint, float p, float i, bool reset_phase_unwrap, bool run_control_loop) {
     if (sockfd_ < 0) {
       std::cerr << "Cannot send commands: socket not initialized" << std::endl;
       return false;
     }
 
     // Structure:
-    // byte 0: flags (bit 1 = run_control_loop, bit 2 = reset_phase_unwrap, bit 6 = reset_iir_memory)
+    // byte 0: flags (bit 1 = run_control_loop, bit 2 = reset_phase_unwrap)
     // bytes 1-3: zero-padding
     // bytes 4-7: opd_setpoint (float)
     // bytes 8-11: Kp gain (float)
@@ -88,7 +87,6 @@ class EthercatUdpInterface {
     unsigned char flags = 0;
     if (run_control_loop) flags |= 0x01;
     if (reset_phase_unwrap) flags |= 0x02;
-    if (reset_iir_memory) flags |= 0x20;  // bit 5 for reset IIR memory
 
     buffer[0] = flags;
     // bytes 1-3 remain zero
