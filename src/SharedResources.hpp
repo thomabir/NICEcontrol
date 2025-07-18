@@ -6,6 +6,7 @@
 
 #include "Controllers.hpp"
 #include "DiagPIController.hpp"
+#include "EthercatResources.hpp"
 #include "MIMOControlLoop.hpp"
 #include "MeasurementT.hpp"
 #include "NullLockin.hpp"
@@ -78,4 +79,5 @@ struct MetrologyResources {
 
 struct SharedResources {
   MetrologyResources metrology;
+  EthercatResources ethercat;
 };

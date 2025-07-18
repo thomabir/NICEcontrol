@@ -31,6 +31,7 @@
 
 // Data types
 #include "ControlData.hpp"
+#include "EthercatData.hpp"
 #include "MeasurementT.hpp"
 #include "ScrollingBuffer.hpp"
 #include "ScrollingBufferT.hpp"
@@ -465,6 +466,11 @@ class NiceGui {
       }
     }
 
+    // EtherCAT monitor
+    if (ImGui::CollapsingHeader("EtherCAT Monitor")) {
+      WindowEtheratMonitor();
+    }
+
     // Sci_null measurements
     if (ImGui::CollapsingHeader("Science beam Measurements")) {
       // history length slider
@@ -822,6 +828,76 @@ class NiceGui {
     if (show_app_metrics) {
       // Show app metrics
       ImGui::ShowMetricsWindow();
+    }
+  }
+
+  void WindowEtheratMonitor() {
+    static ScrollingBufferT<double, double> dl_meas_buffer;
+    static ScrollingBufferT<double, double> dl_cmd_buffer;
+    static ScrollingBufferT<double, double> metr_opd_rad_wrapped_buffer;
+    static ScrollingBufferT<double, double> metr_opd_nm_unwrapped_buffer;
+    static double t_ecat = 0;
+
+    // get data and transfer to scrolling buffer
+    static EthercatData ethercat_data;
+    static auto consumer = res.ethercat.data.subscribe();
+    while (res.ethercat.data.try_pop(consumer, ethercat_data)) {
+      auto m = ethercat_data;
+      t_ecat = m.timestamp_us * 1e-6;  // convert microseconds to seconds
+
+      std::cout << "timestamp:" << m.timestamp_us << " s: " << t_ecat << std::endl;
+
+      dl_meas_buffer.AddPoint(t_ecat, m.dl_position_meas);
+      dl_cmd_buffer.AddPoint(t_ecat, m.dl_position_cmd);
+      metr_opd_rad_wrapped_buffer.AddPoint(t_ecat, m.metr_opd_rad_wrapped);
+      metr_opd_nm_unwrapped_buffer.AddPoint(t_ecat, m.metr_opd_nm_unwrapped);
+    }
+
+    // plot the data
+    if (ImGui::TreeNode("Delay line##EtherCAT Monitor Delay Line")) {
+      static float history_length = 10.0f;
+      ImGui::SliderFloat("History length", &history_length, 0.1f, 10.0f, "%.2f s", ImGuiSliderFlags_Logarithmic);
+      static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+      static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+      static float thickness = 3.0f * io->FontGlobalScale;
+      if (ImPlot::BeginPlot("##EtherCAT Monitor", ImVec2(-1, 200 * io->FontGlobalScale))) {
+        ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, t_ecat - history_length, t_ecat, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
+        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), thickness);
+        ImPlot::PlotLine("DL position (um)", &dl_meas_buffer.Data[0].time, &dl_meas_buffer.Data[0].value,
+                         dl_meas_buffer.Data.size(), 0, dl_meas_buffer.Offset, 2 * sizeof(double));
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), thickness);
+        ImPlot::PlotLine("DL command (um)", &dl_cmd_buffer.Data[0].time, &dl_cmd_buffer.Data[0].value,
+                         dl_cmd_buffer.Data.size(), 0, dl_cmd_buffer.Offset, 2 * sizeof(double));
+        ImPlot::EndPlot();
+        ImGui::TreePop();
+      }
+    }
+
+    if (ImGui::TreeNode("OPD##EtherCAT Monitor OPD")) {
+      static float history_length = 10.0f;
+      ImGui::SliderFloat("History length", &history_length, 0.1f, 10.0f, "%.2f s", ImGuiSliderFlags_Logarithmic);
+      static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+      static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+      static float thickness = 3.0f * io->FontGlobalScale;
+      if (ImPlot::BeginPlot("##EtherCAT Monitor Metrology OPD", ImVec2(-1, 200 * io->FontGlobalScale))) {
+        ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, t_ecat - history_length, t_ecat, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, -1e6, 1e6);
+        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), thickness);
+        ImPlot::PlotLine("OPD phase (rad)", &metr_opd_rad_wrapped_buffer.Data[0].time,
+                         &metr_opd_rad_wrapped_buffer.Data[0].value, metr_opd_rad_wrapped_buffer.Data.size(), 0,
+                         metr_opd_rad_wrapped_buffer.Offset, 2 * sizeof(double));
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), thickness);
+        ImPlot::PlotLine("OPD unwrapped (nm)", &metr_opd_nm_unwrapped_buffer.Data[0].time,
+                         &metr_opd_nm_unwrapped_buffer.Data[0].value, metr_opd_nm_unwrapped_buffer.Data.size(), 0,
+                         metr_opd_nm_unwrapped_buffer.Offset, 2 * sizeof(double));
+        ImPlot::EndPlot();
+        ImGui::TreePop();
+      }
     }
   }
 
