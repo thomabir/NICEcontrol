@@ -414,7 +414,7 @@ class NiceGui {
 
     // science camera
     if (ImGui::CollapsingHeader("Flir Camera")) {
-      WindowFlirCam(res, workers);
+      WindowFlirCam();
     }
 
     // ADC measurements
@@ -898,7 +898,7 @@ class NiceGui {
     }
   }
 
-  void WindowFlirCam(SharedResources &resources, Workers &workers) {
+  void WindowFlirCam() {
     static TangoFlirCamInterface cam;
     bool connected = cam.is_connected();
 
