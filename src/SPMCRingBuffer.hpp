@@ -3,6 +3,8 @@
  * @brief Single-producer multi-consumer ring buffer implementation
  */
 
+#pragma once
+
 #include <array>
 #include <memory>
 #include <vector>
