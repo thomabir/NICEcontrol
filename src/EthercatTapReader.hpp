@@ -1,20 +1,5 @@
 #pragma once
 
-// #include <arpa/inet.h>   // ethernet
-// #include <netinet/in.h>  // ethernet
-// #include <sys/socket.h>  // ethernet
-
-// #include <atomic>
-// #include <cmath>
-// #include <cstring>
-// #include <iostream>
-// #include <numbers>
-
-#include <thread>
-
-#include "EthercatResources.hpp"
-// #include "utils.hpp"
-
 #include <arpa/inet.h>
 #include <linux/if_packet.h>
 #include <net/if.h>
@@ -30,7 +15,10 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <thread>
 #include <vector>
+
+#include "EthercatResources.hpp"
 
 #define ETH_P_ALL 0x0003             // Capture every packet
 #define ETH_P_ECAT 0x88A4            // EtherCAT EtherType
@@ -90,33 +78,16 @@ class EthercatTapReader {
     locations = get_slave_packet_locations();  // get the slave packet locations
   }
 
-  // // Destructor to clean up resources
-  // ~EthercatTapReader() {
-  //   request_stop();
-  //   // if (sockfd >= 0) {
-  //   //   close(sockfd);
-  //   // }
-  // }
-
   // Start the thread
   void start() {
     if (calculation_thread.joinable()) {
       return;
     }  // already running
     calculation_thread = std::jthread([this](std::stop_token st) {
-      std::cout << "Stop token state: " << st.stop_requested() << std::endl;
       while (!st.stop_requested()) {
         process_ethercat_packet();
       }
     });
-    // if (!calculation_thread.joinable()) {
-    //   running.store(true);
-    //   calculation_thread = std::jthread([this](std::stop_token st) {
-    //     while (!st.stop_requested()) {
-    //       process_ethercat_packet();
-    //     }
-    //   });
-    // }
   }
 
   // Stop the thread
