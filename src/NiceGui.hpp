@@ -235,7 +235,7 @@ class NiceGui {
     // float pointing_y2_setpoint_gui = 0.0f;
 
     // // shear control <-> GUI
-    static int shear_loop_select = 0;
+    // static int shear_loop_select = 0;
     // static float shear_p_gui = 0.4f;
     // static float shear_i_gui = 0.007f;
 
@@ -880,9 +880,6 @@ class NiceGui {
     while (res.ethercat.data.try_pop(consumer, ethercat_data)) {
       auto m = ethercat_data;
       t_ecat = m.timestamp_us * 1e-6;  // convert microseconds to seconds
-
-      std::cout << "timestamp:" << m.timestamp_us << " s: " << t_ecat << std::endl;
-
       dl_meas_buffer.AddPoint(t_ecat, m.dl_position_meas);
       dl_cmd_buffer.AddPoint(t_ecat, m.dl_position_cmd);
       metr_opd_rad_wrapped_buffer.AddPoint(t_ecat, m.metr_opd_rad_wrapped);
