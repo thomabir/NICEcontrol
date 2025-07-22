@@ -1,0 +1,46 @@
+// Flatbuffers for communication between UI PC and EtherCAT Master
+
+/*
+Functionality examples:
+- Adjust control loop parameters (Kp, Ki, Setpoint, on/off, reset) for many control loops running on the EtherCAT Master
+- Configure and start procedures on the EtherCAT Master, such as
+    - null acquisition
+    - intensity optimisation
+    - system identification
+
+A message has limited length, (tens of bytes), so some messages may be split into multiple messages.
+Messages are sent in a single direction, from the UI PC to the EtherCAT Master. (for now)
+These messages are only used for acyclic communication, i.e. for top-level control and configuration, not for process data exchange.
+*/
+
+
+// commands
+
+table MoveCmd{
+  controller: uint16; // controller ID, e.g. 0 for DL1, 1 for TT1, etc.
+  control_mode: uint8; // open-loop, closed-loop etc.
+  x: float32; // setpoint or actuator command
+}
+
+table ResetCmd {
+  controller: uint16;
+  reset: bool; // reset the controller, redundant
+}
+
+// configuration messages
+table PIConfig {
+  controller: uint16;
+  Kp: float;
+  Ki: float;
+}
+
+table SISOSysIDConfig {
+    fmin: float;  // minimum frequency (Hz)
+    fmax: float;  // maximum frequency (Hz)
+    offset: float;  // offset
+    amplitude: float;  // amplitude
+    samples_per_period: uint;  // number of samples per period
+    no_of_periods: uint;  // number of periods
+}
+
+root_type Message;
