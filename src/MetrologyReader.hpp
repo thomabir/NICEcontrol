@@ -267,12 +267,12 @@ class MetrologyReader {
       }
 
       // Run control loops
-      met_res.shear_x1_loop.control(t, shear_x1_f);
-      met_res.shear_x2_loop.control(t, shear_x2_f);
-      met_res.shear_y1_loop.control(t, shear_y1_f);
-      met_res.shear_y2_loop.control(t, shear_y2_f);
-      met_res.point_1_loop.control(t, {point_x1_f, point_y1_f});
-      met_res.point_2_loop.control(t, {point_x2_f, point_y2_f});
+      // met_res.shear_x1_loop.control(t, shear_x1_f);
+      // met_res.shear_x2_loop.control(t, shear_x2_f);
+      // met_res.shear_y1_loop.control(t, shear_y1_f);
+      // met_res.shear_y2_loop.control(t, shear_y2_f);
+      // met_res.point_1_loop.control(t, {point_x1_f, point_y1_f});
+      // met_res.point_2_loop.control(t, {point_x2_f, point_y2_f});
     }
   }
 };

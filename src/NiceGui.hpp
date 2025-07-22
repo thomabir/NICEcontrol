@@ -223,88 +223,88 @@ class NiceGui {
     ImGuiIO &io = ImGui::GetIO();
 
     // shear control
-    float shear_x1_setpoint_gui = 0.0f;
-    float shear_x2_setpoint_gui = 0.0f;
-    float shear_y1_setpoint_gui = 0.0f;
-    float shear_y2_setpoint_gui = 0.0f;
+    // float shear_x1_setpoint_gui = 0.0f;
+    // float shear_x2_setpoint_gui = 0.0f;
+    // float shear_y1_setpoint_gui = 0.0f;
+    // float shear_y2_setpoint_gui = 0.0f;
 
-    // pointing control
-    float pointing_x1_setpoint_gui = 0.0f;
-    float pointing_x2_setpoint_gui = 0.0f;
-    float pointing_y1_setpoint_gui = 0.0f;
-    float pointing_y2_setpoint_gui = 0.0f;
+    // // pointing control
+    // float pointing_x1_setpoint_gui = 0.0f;
+    // float pointing_x2_setpoint_gui = 0.0f;
+    // float pointing_y1_setpoint_gui = 0.0f;
+    // float pointing_y2_setpoint_gui = 0.0f;
 
-    // shear control <-> GUI
+    // // shear control <-> GUI
     static int shear_loop_select = 0;
-    static float shear_p_gui = 0.4f;
-    static float shear_i_gui = 0.007f;
+    // static float shear_p_gui = 0.4f;
+    // static float shear_i_gui = 0.007f;
 
-    // pointing control <-> GUI
+    // // pointing control <-> GUI
     static int pointing_loop_select = 0;
-    static float pointing_p_gui = 1e-5f;
-    static float pointing_i_gui = 1e-7f;
+    // static float pointing_p_gui = 1e-5f;
+    // static float pointing_i_gui = 1e-7f;
 
     // window management
     static bool show_demo_window = false;
     static bool show_app_metrics = false;
 
     // Shear
-    if (shear_loop_select == 2) {
-      res.metrology.shear_x1_loop.control_mode.store(4);
-      res.metrology.shear_x2_loop.control_mode.store(4);
-      res.metrology.shear_y1_loop.control_mode.store(4);
-      res.metrology.shear_y2_loop.control_mode.store(4);
-    } else if (shear_loop_select == 1) {
-      res.metrology.shear_x1_loop.control_mode.store(1);
-      res.metrology.shear_x2_loop.control_mode.store(1);
-      res.metrology.shear_y1_loop.control_mode.store(1);
-      res.metrology.shear_y2_loop.control_mode.store(1);
-    } else {
-      res.metrology.shear_x1_loop.control_mode.store(0);
-      res.metrology.shear_x2_loop.control_mode.store(0);
-      res.metrology.shear_y1_loop.control_mode.store(0);
-      res.metrology.shear_y2_loop.control_mode.store(0);
-    }
+    // if (shear_loop_select == 2) {
+    //   res.piezos.shear_x1_loop.control_mode.store(4);
+    //   res.piezos.shear_x2_loop.control_mode.store(4);
+    //   res.piezos.shear_y1_loop.control_mode.store(4);
+    //   res.piezos.shear_y2_loop.control_mode.store(4);
+    // } else if (shear_loop_select == 1) {
+    //   res.piezos.shear_x1_loop.control_mode.store(1);
+    //   res.piezos.shear_x2_loop.control_mode.store(1);
+    //   res.piezos.shear_y1_loop.control_mode.store(1);
+    //   res.piezos.shear_y2_loop.control_mode.store(1);
+    // } else {
+    //   res.piezos.shear_x1_loop.control_mode.store(0);
+    //   res.piezos.shear_x2_loop.control_mode.store(0);
+    //   res.piezos.shear_y1_loop.control_mode.store(0);
+    //   res.piezos.shear_y2_loop.control_mode.store(0);
+    // }
 
-    res.metrology.shear_x1_loop.p.store(shear_p_gui);
-    res.metrology.shear_x1_loop.i.store(shear_i_gui);
-    res.metrology.shear_x2_loop.p.store(shear_p_gui);
-    res.metrology.shear_x2_loop.i.store(shear_i_gui);
-    res.metrology.shear_y1_loop.p.store(shear_p_gui);
-    res.metrology.shear_y1_loop.i.store(shear_i_gui);
-    res.metrology.shear_y2_loop.p.store(shear_p_gui);
-    res.metrology.shear_y2_loop.i.store(shear_i_gui);
+    // res.piezos.shear_x1_loop.p.store(shear_p_gui);
+    // res.piezos.shear_x1_loop.i.store(shear_i_gui);
+    // res.piezos.shear_x2_loop.p.store(shear_p_gui);
+    // res.piezos.shear_x2_loop.i.store(shear_i_gui);
+    // res.piezos.shear_y1_loop.p.store(shear_p_gui);
+    // res.piezos.shear_y1_loop.i.store(shear_i_gui);
+    // res.piezos.shear_y2_loop.p.store(shear_p_gui);
+    // res.piezos.shear_y2_loop.i.store(shear_i_gui);
 
-    res.metrology.shear_x1_loop.setpoint.store(shear_x1_setpoint_gui);
-    res.metrology.shear_x2_loop.setpoint.store(shear_x2_setpoint_gui);
-    res.metrology.shear_y1_loop.setpoint.store(shear_y1_setpoint_gui);
-    res.metrology.shear_y2_loop.setpoint.store(shear_y2_setpoint_gui);
+    // res.piezos.shear_x1_loop.setpoint.store(shear_x1_setpoint_gui);
+    // res.piezos.shear_x2_loop.setpoint.store(shear_x2_setpoint_gui);
+    // res.piezos.shear_y1_loop.setpoint.store(shear_y1_setpoint_gui);
+    // res.piezos.shear_y2_loop.setpoint.store(shear_y2_setpoint_gui);
 
-    // Pointing
-    if (pointing_loop_select == 2) {
-      res.metrology.point_1_loop.plant_mode.store({2, 2});
-      res.metrology.point_1_loop.controller_mode.store({1, 1});
-      res.metrology.point_2_loop.plant_mode.store({2, 2});
-      res.metrology.point_2_loop.controller_mode.store({1, 1});
-    } else if (pointing_loop_select == 1) {
-      res.metrology.point_1_loop.plant_mode.store({1, 1});
-      res.metrology.point_1_loop.controller_mode.store({0, 0});
-      res.metrology.point_2_loop.plant_mode.store({1, 1});
-      res.metrology.point_2_loop.controller_mode.store({0, 0});
-    } else {
-      res.metrology.point_1_loop.plant_mode.store({0, 0});
-      res.metrology.point_1_loop.controller_mode.store({0, 0});
-      res.metrology.point_2_loop.plant_mode.store({0, 0});
-      res.metrology.point_2_loop.controller_mode.store({0, 0});
-    }
+    // // Pointing
+    // if (pointing_loop_select == 2) {
+    //   res.piezos.point_1_loop.plant_mode.store({2, 2});
+    //   res.piezos.point_1_loop.controller_mode.store({1, 1});
+    //   res.piezos.point_2_loop.plant_mode.store({2, 2});
+    //   res.piezos.point_2_loop.controller_mode.store({1, 1});
+    // } else if (pointing_loop_select == 1) {
+    //   res.piezos.point_1_loop.plant_mode.store({1, 1});
+    //   res.piezos.point_1_loop.controller_mode.store({0, 0});
+    //   res.piezos.point_2_loop.plant_mode.store({1, 1});
+    //   res.piezos.point_2_loop.controller_mode.store({0, 0});
+    // } else {
+    //   res.piezos.point_1_loop.plant_mode.store({0, 0});
+    //   res.piezos.point_1_loop.controller_mode.store({0, 0});
+    //   res.piezos.point_2_loop.plant_mode.store({0, 0});
+    //   res.piezos.point_2_loop.controller_mode.store({0, 0});
+    // }
 
-    res.metrology.point_1_loop.Ps.store({pointing_p_gui, pointing_p_gui});
-    res.metrology.point_1_loop.Is.store({pointing_i_gui, pointing_i_gui});
-    res.metrology.point_2_loop.Ps.store({pointing_p_gui, pointing_p_gui});
-    res.metrology.point_2_loop.Is.store({pointing_i_gui, pointing_i_gui});
+    // res.piezos.point_1_loop.Ps.store({pointing_p_gui, pointing_p_gui});
+    // res.piezos.point_1_loop.Is.store({pointing_i_gui, pointing_i_gui});
+    // res.piezos.point_2_loop.Ps.store({pointing_p_gui, pointing_p_gui});
+    // res.piezos.point_2_loop.Is.store({pointing_i_gui, pointing_i_gui});
 
-    res.metrology.point_1_loop.setpoint.store({{pointing_x1_setpoint_gui, pointing_y1_setpoint_gui}});
-    res.metrology.point_2_loop.setpoint.store({{pointing_x2_setpoint_gui, pointing_y2_setpoint_gui}});
+    // res.piezos.point_1_loop.setpoint.store({{pointing_x1_setpoint_gui, pointing_y1_setpoint_gui}});
+    // res.piezos.point_2_loop.setpoint.store({{pointing_x2_setpoint_gui, pointing_y2_setpoint_gui}});
 
     static ScrollingBuffer opd_buffer, shear_x1_buffer, shear_x2_buffer, shear_y1_buffer, shear_y2_buffer,
         point_x1_buffer, point_x2_buffer, point_y1_buffer, point_y2_buffer, sci_null_buffer;
@@ -656,6 +656,10 @@ class NiceGui {
       }
     }
 
+    if (ImGui::CollapsingHeader("Lateral beam control")) {
+      WindowBeamControl();
+    }
+
     if (ImGui::CollapsingHeader("Shear")) {
       static float t_gui_x = 0;
 
@@ -826,6 +830,41 @@ class NiceGui {
       // Show app metrics
       ImGui::ShowMetricsWindow();
     }
+  }
+
+  void WindowBeamControl() {
+    // control mode selector
+    // raw actuator commands, open loop, closed loop
+    static int tip_tilt_loop_select = 0;
+    ImGui::Text("Control mode:");
+    ImGui::SameLine();
+    ImGui::RadioButton("Raw actuator commands##TipTilt", &tip_tilt_loop_select, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Open loop##TipTilt", &tip_tilt_loop_select, 1);
+    ImGui::SameLine();
+    ImGui::RadioButton("Closed loop##TipTilt", &tip_tilt_loop_select, 2);
+
+    // raw actuator commands
+    static float tip_tilt_raw_x1 = 0.0f;
+    static float tip_tilt_raw_y1 = 0.0f;
+    static float tip_tilt_raw_x2 = 0.0f;
+    static float tip_tilt_raw_y2 = 0.0f;
+
+    // sliders to set raw actuator commands
+    ImGui::SliderFloat("X1##TipTiltRaw", &tip_tilt_raw_x1, -1000.0f, 1000.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SliderFloat("Y1##TipTiltRaw", &tip_tilt_raw_y1, -1000.0f, 1000.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SliderFloat("X2##TipTiltRaw", &tip_tilt_raw_x2, -1000.0f, 1000.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SliderFloat("Y2##TipTiltRaw", &tip_tilt_raw_y2, -1000.0f, 1000.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+
+    if (tip_tilt_loop_select == 0) {
+      // Send raw actuator commands to BeamController worker
+      workers.beam_controller.move_to_x1(tip_tilt_raw_x1);
+      workers.beam_controller.move_to_y1(tip_tilt_raw_y1);
+      workers.beam_controller.move_to_x2(tip_tilt_raw_x2);
+      workers.beam_controller.move_to_y2(tip_tilt_raw_y2);
+    }
+
+    // TODO control loops
   }
 
   void WindowEtheratMonitor() {
