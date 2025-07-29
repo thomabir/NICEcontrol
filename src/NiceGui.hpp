@@ -315,40 +315,54 @@ class NiceGui {
     // when "stop recording" is pressed, the file is closed and the button reads "start recording" again
     // filename is "opd_iso_date_time.csv"
     // data format: time, OPD
-    static bool recording_running = false;
-    static std::ofstream file;
-    static std::string filename;
-    if (recording_running) {
-      if (ImGui::Button("OPD: Stop recording")) {
-        recording_running = false;
-        file.close();
-      }
-    } else {
-      if (ImGui::Button("OPD: Start recording")) {
-        recording_running = true;
-        filename = "measurements/" + utils::get_iso_datestring() + "_opd.csv";
-        file.open(filename);
-        file << "Time at start of measurement: " << utils::get_iso_datestring() << "\n";
-        file << "Time (s),OPD (nm)\n";
-      }
-    }
+    // static bool recording_running = false;
+    // static std::ofstream file;
+    // static std::string filename;
+    // if (recording_running) {
+    //   if (ImGui::Button("OPD: Stop recording")) {
+    //     recording_running = false;
+    //     file.close();
+    //   }
+    // } else {
+    //   if (ImGui::Button("OPD: Start recording")) {
+    //     recording_running = true;
+    //     filename = "measurements/" + utils::get_iso_datestring() + "_opd.csv";
+    //     file.open(filename);
+    //     file << "Time at start of measurement: " << utils::get_iso_datestring() << "\n";
+    //     file << "Time (s),OPD (nm)\n";
+    //   }
+    // }
 
-    // save intensity measurements to file
-    static bool record_sci_null = false;
-    static std::ofstream sci_null_file;
-    static std::string sci_null_filename;
-    if (record_sci_null) {
-      if (ImGui::Button("Intensity: Stop recording")) {
-        record_sci_null = false;
-        sci_null_file.close();
+    // // save intensity measurements to file
+    // static bool record_sci_null = false;
+    // static std::ofstream sci_null_file;
+    // static std::string sci_null_filename;
+    // if (record_sci_null) {
+    //   if (ImGui::Button("Intensity: Stop recording")) {
+    //     record_sci_null = false;
+    //     sci_null_file.close();
+    //   }
+    // } else {
+    //   if (ImGui::Button("Intensity: Start recording")) {
+    //     record_sci_null = true;
+    //     sci_null_filename = "measurements/" + utils::get_iso_datestring() + "_sci_null.csv";
+    //     sci_null_file.open(sci_null_filename);
+    //     sci_null_file << "Time at start of measurement: " << utils::get_iso_datestring() << "\n";
+    //     sci_null_file << "Time (s),Intensity\n";
+    //   }
+    // }
+
+    // buttons for start/stop recording ethercat data
+    static bool recording_ethercat = false;
+    if (recording_ethercat) {
+      if (ImGui::Button("EtherCAT: Stop recording")) {
+        recording_ethercat = false;
+        workers.ethercat_reader.stop_recording();
       }
     } else {
-      if (ImGui::Button("Intensity: Start recording")) {
-        record_sci_null = true;
-        sci_null_filename = "measurements/" + utils::get_iso_datestring() + "_sci_null.csv";
-        sci_null_file.open(sci_null_filename);
-        sci_null_file << "Time at start of measurement: " << utils::get_iso_datestring() << "\n";
-        sci_null_file << "Time (s),Intensity\n";
+      if (ImGui::Button("EtherCAT: Start recording")) {
+        recording_ethercat = true;
+        workers.ethercat_reader.start_recording();
       }
     }
 
@@ -368,15 +382,15 @@ class NiceGui {
       sci_null_buffer.AddPoint(m.time, m.sci_null);
 
       // If saving data, write to file
-      if (recording_running) {
-        file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(2) << m.opd
-             << "\n";
-      }
+      // if (recording_running) {
+      //   file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(2) << m.opd
+      //        << "\n";
+      // }
 
-      if (record_sci_null) {
-        sci_null_file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(1)
-                      << m.sci_null << "\n";
-      }
+      // if (record_sci_null) {
+      //   sci_null_file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(1)
+      //                 << m.sci_null << "\n";
+      // }
     }
 
     // Button to start/stop metrology_reader
@@ -851,10 +865,14 @@ class NiceGui {
     static float tip_tilt_raw_y2 = 0.0f;
 
     // sliders to set raw actuator commands
-    ImGui::SliderFloat("X1##TipTiltRaw", &tip_tilt_raw_x1, -1000.0f, 1000.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
-    ImGui::SliderFloat("Y1##TipTiltRaw", &tip_tilt_raw_y1, -1000.0f, 1000.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
-    ImGui::SliderFloat("X2##TipTiltRaw", &tip_tilt_raw_x2, -1000.0f, 1000.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
-    ImGui::SliderFloat("Y2##TipTiltRaw", &tip_tilt_raw_y2, -1000.0f, 1000.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("X1##TipTiltRaw", &tip_tilt_raw_x1, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
+                     ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("Y1##TipTiltRaw", &tip_tilt_raw_y1, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
+                     ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("X2##TipTiltRaw", &tip_tilt_raw_x2, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
+                     ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("Y2##TipTiltRaw", &tip_tilt_raw_y2, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
+                     ImGuiSliderFlags_AlwaysClamp);
 
     if (tip_tilt_loop_select == 0) {
       // Send raw actuator commands to BeamController worker

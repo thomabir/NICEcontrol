@@ -97,11 +97,34 @@ class EthercatTapReader {
     }
   }
 
+  void start_recording() {
+    // prepare file
+    std::string filename = "measurements/" + utils::get_iso_datestring() + "_ethercat.csv";
+    file.open(filename);
+    file << "Buffer Index,EC timestamp (us),DL cmd (um),DL meas (um),OPD wrapped (rad),OPD unwrapped (nm)\n";
+
+    record_data.store(true);
+    std::cout << "Started recording EtherCAT data." << std::endl;
+  }
+
+  void stop_recording() {
+    record_data.store(false);
+    std::cout << "Stopped recording EtherCAT data." << std::endl;
+    if (file.is_open()) {
+      file.close();
+      std::cout << "EtherCAT data saved to file." << std::endl;
+    } else {
+      std::cerr << "Failed to close EtherCAT data file." << std::endl;
+    }
+  }
+
  private:
   EthercatResources& ecat_res;
   int sock = -1;  // socket for UDP
   std::jthread calculation_thread;
-  std::vector<int> locations;  // vector to hold slave packet locations
+  std::vector<int> locations;             // vector to hold slave packet locations
+  std::atomic<bool> record_data = false;  // flag to indicate if data should be recorded
+  std::ofstream file;                     // file to record EtherCAT data
 
   std::vector<int> get_slave_packet_locations() {
     std::vector<int> locations;
@@ -182,6 +205,15 @@ class EthercatTapReader {
     return data;
   }
 
+  void record(const EthercatData& data) {
+    if (file.is_open()) {
+      file << data.buffer_index << "," << data.timestamp_us << "," << data.dl_position_cmd << ","
+           << data.dl_position_meas << "," << data.metr_opd_rad_wrapped << "," << data.metr_opd_nm_unwrapped << "\n";
+    } else {
+      std::cerr << "File is not open for recording EtherCAT data." << std::endl;
+    }
+  }
+
   // Wait for data, parse it, put in the EthercatResources data buffer
   void process_ethercat_packet() {
     static uint8_t buffer[65535];
@@ -210,6 +242,10 @@ class EthercatTapReader {
     }
 
     EthercatData data = parse_frame(buffer, length);
+
+    if (record_data.load()) {
+      record(data);
+    }
 
     // print data for debugging
     // std::cout << "t=" << data.timestamp_us << " DL: cmd=" << data.dl_position_cmd << ", meas=" <<
