@@ -228,7 +228,7 @@ class EthercatTapReader {
       return;
     }
 
-    uint16_t eth_type = ntohs(*reinterpret_cast<uint16_t*>(buffer + 12));  // get EtherType from the packet
+    // uint16_t eth_type = ntohs(*reinterpret_cast<uint16_t*>(buffer + 12));  // get EtherType from the packet
     // if (eth_type != ETH_P_ECAT) {
     //   std::cerr << "Received packet is not EtherCAT." << std::endl;
     //   return;

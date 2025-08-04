@@ -4,18 +4,18 @@
 
 #include "ScrollingBuffer.hpp"
 
+template <typename T, typename U>
 class FFT_calculator {
  public:
   int size;
   float sampling_rate;
-  ScrollingBuffer *measurement_buffer;
+  ScrollingBufferT<T, U> *measurement_buffer;
   double *output_power;
   double *output_freq;
   fftw_complex *in, *out;
   fftw_plan fft_plan;
 
-  FFT_calculator(int size, float sampling_rate, ScrollingBuffer *measurement_buffer, double *output_power,
-                 double *output_freq) {
+  FFT_calculator(int size, float sampling_rate, auto *measurement_buffer, double *output_power, double *output_freq) {
     // initialise fftw
     in = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * size);
     out = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * size);
@@ -39,7 +39,7 @@ class FFT_calculator {
 
     if (measurement_buffer->Data.size() == max_size) {
       for (int i = 0; i < size; i++) {
-        in[i][0] = measurement_buffer->Data[(offset - size + i + max_size) % max_size].y;
+        in[i][0] = measurement_buffer->Data[(offset - size + i + max_size) % max_size].value;
         in[i][1] = 0.0f;
       }
     }
@@ -47,15 +47,17 @@ class FFT_calculator {
     // execute fft
     fftw_execute(fft_plan);
 
-    // calculate power spectrum (only the real half)
+    // calculate power spectral density (only the real half)
     for (int i = 0; i < size / 2; i++) {
       output_power[i] = out[i][0] * out[i][0] + out[i][1] * out[i][1];
+      output_power[i] = output_power[i] * 2 / size;             // normalize by size to get periodogram
+      output_power[i] = sqrt(output_power[i] / sampling_rate);  // convert to amplitude (e.g. V/sqrt(Hz))
     }
 
     // set first element to 0 (DC)
     output_power[0] = 0.0f;
 
-    // find the frequency axis, assuming a sampling rate of 6.4 kHz
+    // find the frequency axis
     for (int i = 0; i < size / 2; i++) {
       output_freq[i] = i * sampling_rate / size;
     }

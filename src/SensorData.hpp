@@ -3,7 +3,6 @@
 class SensorData {
  public:
   double time;
-  float opd;
   float shear_x1;
   float shear_x2;
   float shear_y1;
@@ -14,10 +13,9 @@ class SensorData {
   float point_y2;
   float sci_null;
 
-  SensorData(double time, float opd, float shear_x1, float shear_x2, float shear_y1, float shear_y2, float point_x1,
+  SensorData(double time, float shear_x1, float shear_x2, float shear_y1, float shear_y2, float point_x1,
              float point_x2, float point_y1, float point_y2, float sci_null) {
     this->time = time;
-    this->opd = opd;
     this->shear_x1 = shear_x1;
     this->shear_x2 = shear_x2;
     this->shear_y1 = shear_y1;
@@ -31,7 +29,6 @@ class SensorData {
 
   SensorData() {
     this->time = 0.0;
-    this->opd = 0.0;
     this->shear_x1 = 0.0;
     this->shear_x2 = 0.0;
     this->shear_y1 = 0.0;
@@ -46,8 +43,6 @@ class SensorData {
   // acces by index
   float &operator[](int i) {
     switch (i) {
-      case 0:
-        return opd;
       case 1:
         return shear_x1;
       case 2:
@@ -66,8 +61,6 @@ class SensorData {
         return point_y2;
       case 9:
         return sci_null;
-      default:
-        return opd;
     }
   }
 };

@@ -56,8 +56,6 @@
 #include "Workers.hpp"
 
 // functions
-#include "characterise_control_loop.hpp"
-#include "characterise_joint_closed_loop.hpp"
 #include "utils.hpp"
 
 // Windows
@@ -306,7 +304,7 @@ class NiceGui {
     // res.piezos.point_1_loop.setpoint.store({{pointing_x1_setpoint_gui, pointing_y1_setpoint_gui}});
     // res.piezos.point_2_loop.setpoint.store({{pointing_x2_setpoint_gui, pointing_y2_setpoint_gui}});
 
-    static ScrollingBuffer opd_buffer, shear_x1_buffer, shear_x2_buffer, shear_y1_buffer, shear_y2_buffer,
+    static ScrollingBufferT<float, float> shear_x1_buffer, shear_x2_buffer, shear_y1_buffer, shear_y2_buffer,
         point_x1_buffer, point_x2_buffer, point_y1_buffer, point_y2_buffer, sci_null_buffer;
 
     // GUI interface to save OPD measurements to file:
@@ -370,7 +368,6 @@ class NiceGui {
     static auto consumer = res.metrology.sensorDataQueue.subscribe();
     while (res.metrology.sensorDataQueue.try_pop(consumer, sensor_data)) {
       auto m = sensor_data;
-      opd_buffer.AddPoint(m.time, m.opd);
       shear_x1_buffer.AddPoint(m.time, m.shear_x1);
       shear_x2_buffer.AddPoint(m.time, m.shear_x2);
       shear_y1_buffer.AddPoint(m.time, m.shear_y1);
@@ -500,7 +497,7 @@ class NiceGui {
       // print current measurement
       if (!sci_null_buffer.Data.empty()) {
         auto m = sci_null_buffer.Data.back();
-        ImGui::Text("Current Sci_null: %.1f", m.y);
+        ImGui::Text("Current Sci_null: %.1f", m.value);
       }
 
       if (ImPlot::BeginPlot("##Sci_null", ImVec2(-1, 600 * io.FontGlobalScale))) {
@@ -509,7 +506,7 @@ class NiceGui {
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), thickness);
-        ImPlot::PlotLine("Sci_null", &sci_null_buffer.Data[0].x, &sci_null_buffer.Data[0].y,
+        ImPlot::PlotLine("Sci_null", &sci_null_buffer.Data[0].time, &sci_null_buffer.Data[0].value,
                          sci_null_buffer.Data.size(), 0, sci_null_buffer.Offset, 2 * sizeof(int));
         ImPlot::EndPlot();
       }
@@ -518,7 +515,7 @@ class NiceGui {
       const static int fft_size = 1024 * 8 * 8;
       static double fft_power[fft_size / 2];
       static double fft_freq[fft_size / 2];
-      static FFT_calculator fft(fft_size, 12800., &sci_null_buffer, fft_power, fft_freq);
+      static FFT_calculator<float, float> fft(fft_size, 12800., &sci_null_buffer, fft_power, fft_freq);
       fft.calculate();
 
       // plot fft
@@ -539,135 +536,7 @@ class NiceGui {
     }
 
     if (ImGui::CollapsingHeader("OPD")) {
-      if (ImGui::TreeNode("Measurement##OPD")) {
-        // phase unwrapping
-        static bool reset_phase_unwrap_gui = false;
-        ImGui::Checkbox("Reset phase unwrap", &reset_phase_unwrap_gui);
-        if (reset_phase_unwrap_gui) {
-          res.metrology.reset_phase_unwrap.store(1);
-        } else {
-          res.metrology.reset_phase_unwrap.store(0);
-        }
-
-        static float opd_history_length = 10.0f;
-        ImGui::SliderFloat("OPD History", &opd_history_length, 0.1, 5, "%.2f s", ImGuiSliderFlags_Logarithmic);
-
-        // x axis: no ticks
-        static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
-
-        // y axis: auto fit
-        static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-
-        static float thickness = 1;
-
-        if (ImPlot::BeginPlot("##Scrolling", ImVec2(-1, 200 * io.FontGlobalScale))) {
-          ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-          ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - opd_history_length, t_gui, ImGuiCond_Always);
-          ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-          ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-          ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), thickness);
-          ImPlot::PlotLine("Measurement", &opd_buffer.Data[0].x, &opd_buffer.Data[0].y, opd_buffer.Data.size(), 0,
-                           opd_buffer.Offset, 2 * sizeof(float));
-          ImPlot::EndPlot();
-        }
-
-        // calculate mean and std of OPD buffer
-        static float mean = 0.0f;
-        static float stddev = 0.0f;
-        const int N_points_stats = 1000;
-
-        if (opd_buffer.Data.size() > N_points_stats + 2) {
-          // get the last 1000 measurements using ImVector<ImVec2> GetLastN(int n)
-          auto last_1000_measurements_data = opd_buffer.GetLastN(N_points_stats);
-          // get the y values
-          std::vector<float> last_1000_measurements;
-          for (auto &m : last_1000_measurements_data) {
-            last_1000_measurements.push_back(m.y);
-          }
-
-          // calculate mean and stdev
-          mean = std::accumulate(last_1000_measurements.begin(), last_1000_measurements.end(), 0.0) /
-                 last_1000_measurements.size();
-          float sq_sum = std::inner_product(last_1000_measurements.begin(), last_1000_measurements.end(),
-                                            last_1000_measurements.begin(), 0.0);
-          stddev = std::sqrt(sq_sum / last_1000_measurements.size() - mean * mean);
-        }
-
-        // Display mean and std
-        ImGui::Text("Mean: %.4f", mean);
-        ImGui::SameLine();
-        ImGui::Text("Std: %.4f", stddev);
-
-        ImGui::TreePop();
-      }
-
-      if (ImGui::TreeNode("FFT##OPD")) {
-        // set up fft
-        const static int fft_size = 1024 * 8 * 8;
-        static double fft_power[fft_size / 2];
-        static double fft_freq[fft_size / 2];
-        static FFT_calculator fft(fft_size, 12800., &opd_buffer, fft_power, fft_freq);
-
-        // calculate fft
-        fft.calculate();
-
-        // plot fft_power vs fft_freq, with log scale on x and y axis
-        static float fft_thickness = 3;
-        static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
-        static ImPlotAxisFlags fft_yflags =
-            ImPlotAxisFlags_None;  // ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-        if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 400 * io.FontGlobalScale))) {
-          ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-          ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-          ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
-          ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
-          ImPlot::SetupAxisLimits(ImAxis_Y1, 10, 1e13);
-          ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), fft_thickness);
-          ImPlot::PlotLine("OPD FFT", &fft_freq[0], &fft_power[0], fft_size / 2);
-          ImPlot::EndPlot();
-        }
-
-        ImGui::TreePop();
-      }
-
-      if (ImGui::TreeNode("Control##OPD")) {
-        static int gui_opd_loop_select = 0;
-        ImGui::Text("Control mode:");
-        ImGui::SameLine();
-        ImGui::RadioButton("Off##OPD", &gui_opd_loop_select, 0);
-        ImGui::SameLine();
-        // ImGui::RadioButton("Open loop##OPD", &gui_opd_loop_select, 1);
-        // ImGui::SameLine();
-        ImGui::RadioButton("Closed loop##OPD", &gui_opd_loop_select, 2);
-
-        // OPD setpoint
-        static float opd_setpoint_ethercat = 0.0f;
-        const float opd_setpoint_min = -1e6, opd_setpoint_max = 1e6;
-        ImGui::DragFloat("OPD Setpoint", &opd_setpoint_ethercat, 0.1f, opd_setpoint_min, opd_setpoint_max, "%.2f nm",
-                         ImGuiSliderFlags_AlwaysClamp);
-
-        // P and I control loop gains
-        static float opd_p_ethercat = 0.0f;
-        static float opd_i_ethercat = 100.0f;
-        ImGui::SliderFloat("P##OPD EtherCAT", &opd_p_ethercat, 1e-4f, 1e0f, "%.5f", ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("I##OPD EtherCAT", &opd_i_ethercat, 1e-1f, 1e3f, "%.5f", ImGuiSliderFlags_Logarithmic);
-
-        // Reset phase unwrap checkbox
-        static bool reset_phase_unwrap = false;
-        ImGui::Checkbox("Reset phase unwrap", &reset_phase_unwrap);
-
-        // Interface to EtherCAT master: Send a few bytes via UDP to the master receiver
-        // 5 bytes data via UDP:
-        // 4 bytes: OPD setpoint float
-        // 1 byte: flags: X X X X X X reset_phase_unwrap run_control_loop
-        const int udp_port = 8888;
-        const char *udp_ip = "192.168.88.177";
-        static EthercatUdpInterface ec_udp_if(udp_ip, udp_port);
-        ec_udp_if.send_commands(opd_setpoint_ethercat * 1.0e-3, opd_p_ethercat, opd_i_ethercat, reset_phase_unwrap,
-                                gui_opd_loop_select == 2);
-
-        ImGui::TreePop();
-      }
+      WindowOPD();
     }
 
     if (ImGui::CollapsingHeader("Lateral beam control")) {
@@ -698,16 +567,16 @@ class NiceGui {
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), x1_thickness);
-        ImPlot::PlotLine("Shear X1", &shear_x1_buffer.Data[0].x, &shear_x1_buffer.Data[0].y,
+        ImPlot::PlotLine("Shear X1", &shear_x1_buffer.Data[0].time, &shear_x1_buffer.Data[0].value,
                          shear_x1_buffer.Data.size(), 0, shear_x1_buffer.Offset, 2 * sizeof(float));
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), x1_thickness);
-        ImPlot::PlotLine("Shear Y1", &shear_y1_buffer.Data[0].x, &shear_y1_buffer.Data[0].y,
+        ImPlot::PlotLine("Shear Y1", &shear_y1_buffer.Data[0].time, &shear_y1_buffer.Data[0].value,
                          shear_y1_buffer.Data.size(), 0, shear_y1_buffer.Offset, 2 * sizeof(float));
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), x1_thickness);
-        ImPlot::PlotLine("Shear X2", &shear_x2_buffer.Data[0].x, &shear_x2_buffer.Data[0].y,
+        ImPlot::PlotLine("Shear X2", &shear_x2_buffer.Data[0].time, &shear_x2_buffer.Data[0].value,
                          shear_x2_buffer.Data.size(), 0, shear_x2_buffer.Offset, 2 * sizeof(float));
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), x1_thickness);
-        ImPlot::PlotLine("Shear Y2", &shear_y2_buffer.Data[0].x, &shear_y2_buffer.Data[0].y,
+        ImPlot::PlotLine("Shear Y2", &shear_y2_buffer.Data[0].time, &shear_y2_buffer.Data[0].value,
                          shear_y2_buffer.Data.size(), 0, shear_y2_buffer.Offset, 2 * sizeof(float));
         ImPlot::EndPlot();
       }
@@ -722,21 +591,21 @@ class NiceGui {
         // calculate mean
         float sum = 0.0f;
         for (auto &p : shear_x1_buffer.Data) {
-          sum += p.y;
+          sum += p.value;
         }
         float mean = sum / shear_x1_buffer.Data.size();
 
         // calculate std
         float sum_sq = 0.0f;
         for (auto &p : shear_x1_buffer.Data) {
-          sum_sq += (p.y - mean) * (p.y - mean);
+          sum_sq += (p.value - mean) * (p.value - mean);
         }
         x1d_std = sqrt(sum_sq / shear_x1_buffer.Data.size());
 
         // calculate rms
         sum_sq = 0.0f;
         for (auto &p : shear_x1_buffer.Data) {
-          sum_sq += p.y * p.y;
+          sum_sq += p.value * p.value;
         }
         x1d_rms = sqrt(sum_sq / shear_x1_buffer.Data.size());
       }
@@ -751,7 +620,7 @@ class NiceGui {
         const static int fft_size = 1024 * 8 * 8;
         static double fft_power[fft_size / 2];
         static double fft_freq[fft_size / 2];
-        static FFT_calculator fft(fft_size, 12800., &shear_x1_buffer, fft_power, fft_freq);
+        static FFT_calculator<float, float> fft(fft_size, 12800., &shear_x1_buffer, fft_power, fft_freq);
 
         // calculate fft
         fft.calculate();
@@ -811,16 +680,16 @@ class NiceGui {
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), pointing_thickness);
-        ImPlot::PlotLine("Pointing X1", &point_x1_buffer.Data[0].x, &point_x1_buffer.Data[0].y,
+        ImPlot::PlotLine("Pointing X1", &point_x1_buffer.Data[0].time, &point_x1_buffer.Data[0].value,
                          point_x1_buffer.Data.size(), 0, point_x1_buffer.Offset, 2 * sizeof(float));
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), pointing_thickness);
-        ImPlot::PlotLine("Pointing Y1", &point_y1_buffer.Data[0].x, &point_y1_buffer.Data[0].y,
+        ImPlot::PlotLine("Pointing Y1", &point_y1_buffer.Data[0].time, &point_y1_buffer.Data[0].value,
                          point_y1_buffer.Data.size(), 0, point_y1_buffer.Offset, 2 * sizeof(float));
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), pointing_thickness);
-        ImPlot::PlotLine("Pointing X2", &point_x2_buffer.Data[0].x, &point_x2_buffer.Data[0].y,
+        ImPlot::PlotLine("Pointing X2", &point_x2_buffer.Data[0].time, &point_x2_buffer.Data[0].value,
                          point_x2_buffer.Data.size(), 0, point_x2_buffer.Offset, 2 * sizeof(float));
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), pointing_thickness);
-        ImPlot::PlotLine("Pointing Y2", &point_y2_buffer.Data[0].x, &point_y2_buffer.Data[0].y,
+        ImPlot::PlotLine("Pointing Y2", &point_y2_buffer.Data[0].time, &point_y2_buffer.Data[0].value,
                          point_y2_buffer.Data.size(), 0, point_y2_buffer.Offset, 2 * sizeof(float));
         ImPlot::EndPlot();
       }
@@ -843,6 +712,47 @@ class NiceGui {
     if (show_app_metrics) {
       // Show app metrics
       ImGui::ShowMetricsWindow();
+    }
+  }
+
+  void WindowOPD() {
+    if (ImGui::TreeNode("Control##OPD")) {
+      static int gui_opd_loop_select = 0;
+      ImGui::Text("Control mode:");
+      ImGui::SameLine();
+      ImGui::RadioButton("Off##OPD", &gui_opd_loop_select, 0);
+      ImGui::SameLine();
+      // ImGui::RadioButton("Open loop##OPD", &gui_opd_loop_select, 1);
+      // ImGui::SameLine();
+      ImGui::RadioButton("Closed loop##OPD", &gui_opd_loop_select, 2);
+
+      // OPD setpoint
+      static float opd_setpoint_ethercat = 0.0f;
+      const float opd_setpoint_min = -1e6, opd_setpoint_max = 1e6;
+      ImGui::DragFloat("OPD Setpoint", &opd_setpoint_ethercat, 0.1f, opd_setpoint_min, opd_setpoint_max, "%.2f nm",
+                       ImGuiSliderFlags_AlwaysClamp);
+
+      // P and I control loop gains
+      static float opd_p_ethercat = 0.0f;
+      static float opd_i_ethercat = 100.0f;
+      ImGui::SliderFloat("P##OPD EtherCAT", &opd_p_ethercat, 1e-4f, 1e0f, "%.5f", ImGuiSliderFlags_Logarithmic);
+      ImGui::SliderFloat("I##OPD EtherCAT", &opd_i_ethercat, 1e-1f, 1e3f, "%.5f", ImGuiSliderFlags_Logarithmic);
+
+      // Reset phase unwrap checkbox
+      static bool reset_phase_unwrap = false;
+      ImGui::Checkbox("Reset phase unwrap", &reset_phase_unwrap);
+
+      // Interface to EtherCAT master: Send a few bytes via UDP to the master receiver
+      // 5 bytes data via UDP:
+      // 4 bytes: OPD setpoint float
+      // 1 byte: flags: X X X X X X reset_phase_unwrap run_control_loop
+      const int udp_port = 8888;
+      const char *udp_ip = "192.168.88.177";
+      static EthercatUdpInterface ec_udp_if(udp_ip, udp_port);
+      ec_udp_if.send_commands(opd_setpoint_ethercat * 1.0e-3, opd_p_ethercat, opd_i_ethercat, reset_phase_unwrap,
+                              gui_opd_loop_select == 2);
+
+      ImGui::TreePop();
     }
   }
 
@@ -932,23 +842,71 @@ class NiceGui {
       ImGui::SliderFloat("History length", &history_length, 0.1f, 10.0f, "%.2f s", ImGuiSliderFlags_Logarithmic);
       static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
       static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-      static float thickness = 3.0f * io->FontGlobalScale;
+      static float thickness = 1.0f * io->FontGlobalScale;
       if (ImPlot::BeginPlot("##EtherCAT Monitor Metrology OPD", ImVec2(-1, 200 * io->FontGlobalScale))) {
         ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
         ImPlot::SetupAxisLimits(ImAxis_X1, t_ecat - history_length, t_ecat, ImGuiCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, -1e6, 1e6);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), thickness);
-        ImPlot::PlotLine("OPD phase (rad)", &metr_opd_rad_wrapped_buffer.Data[0].time,
-                         &metr_opd_rad_wrapped_buffer.Data[0].value, metr_opd_rad_wrapped_buffer.Data.size(), 0,
-                         metr_opd_rad_wrapped_buffer.Offset, 2 * sizeof(double));
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), thickness);
         ImPlot::PlotLine("OPD unwrapped (nm)", &metr_opd_nm_unwrapped_buffer.Data[0].time,
                          &metr_opd_nm_unwrapped_buffer.Data[0].value, metr_opd_nm_unwrapped_buffer.Data.size(), 0,
                          metr_opd_nm_unwrapped_buffer.Offset, 2 * sizeof(double));
         ImPlot::EndPlot();
+
+        static float mean = 0.0f;
+        static float stddev = 0.0f;
+        const int N_points_stats = 1000;
+
+        if (metr_opd_nm_unwrapped_buffer.Data.size() > N_points_stats + 2) {
+          // get the last 1000 measurements using ImVector<ImVec2> GetLastN(int n)
+          auto last_1000_measurements_data = metr_opd_nm_unwrapped_buffer.GetLastN(N_points_stats);
+          // get the y values
+          std::vector<float> last_1000_measurements;
+          for (auto &m : last_1000_measurements_data) {
+            last_1000_measurements.push_back(m.value);
+          }
+
+          // calculate mean and stdev
+          mean = std::accumulate(last_1000_measurements.begin(), last_1000_measurements.end(), 0.0) /
+                 last_1000_measurements.size();
+          float sq_sum = std::inner_product(last_1000_measurements.begin(), last_1000_measurements.end(),
+                                            last_1000_measurements.begin(), 0.0);
+          stddev = std::sqrt(sq_sum / last_1000_measurements.size() - mean * mean);
+        }
+
+        // Display mean and std
+        ImGui::Text("Last %d samples: Mean: %.4f, Std: %.4f", N_points_stats, mean, stddev);
+
         ImGui::TreePop();
       }
+    }
+
+    if (ImGui::TreeNode("OPD FFT##OPD")) {
+      // set up fft
+      const static int fs = 1 / 150e-6;      // sampling frequency, Hz (150 us per sample)
+      const static int fft_size = 1024 * 8;  // 1.2 s of data
+      static double fft_power[fft_size / 2];
+      static double fft_freq[fft_size / 2];
+      static FFT_calculator<double, double> fft(fft_size, fs, &metr_opd_nm_unwrapped_buffer, fft_power, fft_freq);
+
+      fft.calculate();
+
+      // Plot amplitude spectral density of OPD
+      static float fft_thickness = 3;
+      static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
+      static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+      if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 400 * io->FontGlobalScale))) {
+        ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+        ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+        ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, 1, 3333);
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), fft_thickness);
+        ImPlot::PlotLine("OPD PSD (nm/sqrtHz)", &fft_freq[0], &fft_power[0], fft_size / 2);
+        ImPlot::EndPlot();
+      }
+
+      ImGui::TreePop();
     }
   }
 

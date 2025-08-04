@@ -81,9 +81,6 @@ class MetrologyReader {
 
     Iir::Butterworth::LowPass<2> shear_x1_lpfilt, shear_x2_lpfilt, shear_y1_lpfilt, shear_y2_lpfilt;
     Iir::Butterworth::LowPass<2> point_x1_lpfilt, point_x2_lpfilt, point_y1_lpfilt, point_y2_lpfilt;
-    Iir::Butterworth::LowPass<2> opd_lpfilt;
-    const float opd_samplingrate = 128000.;
-    const float opd_lpfilt_cutoff = 1000.;
     const float shear_samplingrate = 128000.;
     const float shear_lpfilt_cutoff = 300.;
 
@@ -98,11 +95,9 @@ class MetrologyReader {
     point_y1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
     point_y2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
 
-    opd_lpfilt.setup(opd_samplingrate, opd_lpfilt_cutoff);
-
     while (running.load()) {
       float shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0., point_x2_f = 0.,
-            point_y1_f = 0., point_y2_f = 0., opd_nm = 0., sci_null = 0.;
+            point_y1_f = 0., point_y2_f = 0., sci_null = 0.;
       auto t = utils::getTime();
 
       // Receive data
@@ -133,14 +128,12 @@ class MetrologyReader {
       static int adc_point2[num_timepoints];
       static int adc_point3[num_timepoints];
       static int adc_point4[num_timepoints];
-      // static int adc_pos_ref[num_timepoints];
       static int adc_sci_null[num_timepoints];
       static int adc_sci_ref[num_timepoints];
       static int adc_opd_back[num_timepoints];
       static int adc_opd_ref[num_timepoints];
       static int adc_opd_pll[num_timepoints];
-      static float opd_rad[num_timepoints];
-      static int32_t opd_int[num_timepoints];
+      // static int32_t opd_int[num_timepoints];
       static float shear_x1_um[num_timepoints];
       static float shear_x2_um[num_timepoints];
       static float shear_y1_um[num_timepoints];
@@ -149,7 +142,6 @@ class MetrologyReader {
       static float point_x2_um[num_timepoints];
       static float point_y1_um[num_timepoints];
       static float point_y2_um[num_timepoints];
-      static float opd_rad_i_prev = 0.0f;
 
       // Process data for each timepoint
       for (int i = 0; i < num_timepoints; i++) {
@@ -163,13 +155,10 @@ class MetrologyReader {
         adc_point2[i] = receivedDataInt[num_channels * i + 6];
         adc_point3[i] = receivedDataInt[num_channels * i + 7];
         adc_point4[i] = receivedDataInt[num_channels * i + 8];
-        // adc_pos_ref[i] = receivedDataInt[num_channels * i + 9];
         adc_opd_back[i] = receivedDataInt[num_channels * i + 9];
         adc_opd_ref[i] = receivedDataInt[num_channels * i + 10];
         adc_opd_pll[i] = receivedDataInt[num_channels * i + 11] * 128;  // ADU * 256
-        opd_int[i] = receivedDataInt[num_channels * i + 12];
-        opd_rad[i] =
-            -float(opd_int[i]) * std::numbers::pi / (std::pow(2.0, 15) - 1.);    // phase (signed 16 bit int) -> rad
+        // opd_int[i] = receivedDataInt[num_channels * i + 12];
         shear_x1_um[i] = float(receivedDataInt[num_channels * i + 13]) / 3000.;  // um
         shear_x2_um[i] = float(receivedDataInt[num_channels * i + 14]) / 3000.;  // um
         shear_y1_um[i] = float(receivedDataInt[num_channels * i + 15]) / 3000.;  // um
@@ -182,7 +171,7 @@ class MetrologyReader {
         adc_sci_ref[i] = receivedDataInt[num_channels * i + 22];                 // ADU
       }
 
-      // cCheck for gaps within the package
+      // Check for gaps within the package
       // for (int i = 1; i < num_timepoints; i++) {
       //   if (counter[i] != counter[i - 1] + 1) {
       //     std::cerr << "Gap within package: counter " << counter[i - 1] << " -> " << counter[i]
@@ -196,30 +185,6 @@ class MetrologyReader {
       // }
       // prev_counter = counter[0];
 
-      // phase-unwrap the OPD signal
-      const int max_unwrap_iters = 500;
-      static int unwrap_iters = 0;
-
-      for (int i = 0; i < num_timepoints; i++) {
-        if (met_res.reset_phase_unwrap.load()) {
-          unwrap_iters = 0;
-          opd_rad_i_prev = 0;
-        }
-
-        opd_rad[i] =
-            opd_rad[i] + unwrap_iters * 2 * std::numbers::pi;  // add the current number of unwrapping iterations
-        while ((opd_rad[i] - opd_rad_i_prev > std::numbers::pi) && (unwrap_iters > -max_unwrap_iters)) {
-          opd_rad[i] -= 2 * std::numbers::pi;
-          unwrap_iters--;
-        }
-        while ((opd_rad[i] - opd_rad_i_prev < -std::numbers::pi) && (unwrap_iters < max_unwrap_iters)) {
-          opd_rad[i] += 2 * std::numbers::pi;
-          unwrap_iters++;
-        }
-        opd_rad_i_prev = opd_rad[i];
-      }
-
-      static float opd_rad_f = 0.0f;
       // filter signals
       for (int i = 0; i < num_timepoints; i++) {
         // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
@@ -233,19 +198,13 @@ class MetrologyReader {
         point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
         point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
 
-        opd_rad_f = opd_lpfilt.filter(opd_rad[i]);
-
         // derive null intensity from science signals
         sci_null = met_res.null_lockin.process(adc_sci_null[i], adc_sci_ref[i]);
       }
 
-      // convert OPD from radians to nm
-      opd_nm = opd_rad_f * 1550 / (2 * std::numbers::pi);
-
       // enqueue sensor data
-      met_res.sensorDataQueue.push({t, opd_nm, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f,
+      met_res.sensorDataQueue.push({t, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f,
                                     point_y1_f, point_y2_f, sci_null});
-      // std::cout << "Pushed data to queue: " << t << std::endl;
 
       // enqueue adc measurements
       for (int i = 0; i < num_timepoints; i++) {

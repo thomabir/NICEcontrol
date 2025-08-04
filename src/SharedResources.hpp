@@ -14,7 +14,7 @@
 
 struct MetrologyResources {
   // control loop
-  std::atomic<bool> reset_phase_unwrap = false;
+  // std::atomic<bool> reset_phase_unwrap = false;
 
   // data queues
   TSCircularBuffer<MeasurementT<int, int>> adc_queues[15];
