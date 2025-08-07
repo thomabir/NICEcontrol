@@ -3,14 +3,11 @@
 #include <sys/socket.h>  // ethernet
 
 #include <atomic>
-#include <cmath>
 #include <cstring>
 #include <iostream>
-#include <numbers>
 #include <thread>
 
 #include "SharedResources.hpp"
-#include "utils.hpp"
 
 #pragma once
 
@@ -79,26 +76,10 @@ class MetrologyReader {
     int buffer_size = 1024;
     char buffer[buffer_size];
 
-    Iir::Butterworth::LowPass<2> shear_x1_lpfilt, shear_x2_lpfilt, shear_y1_lpfilt, shear_y2_lpfilt;
-    Iir::Butterworth::LowPass<2> point_x1_lpfilt, point_x2_lpfilt, point_y1_lpfilt, point_y2_lpfilt;
-    const float shear_samplingrate = 128000.;
-    const float shear_lpfilt_cutoff = 300.;
-
-    // setup filters
-    shear_x1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
-    shear_x2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
-    shear_y1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
-    shear_y2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
-
-    point_x1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
-    point_x2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
-    point_y1_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
-    point_y2_lpfilt.setup(shear_samplingrate, shear_lpfilt_cutoff);
-
     while (running.load()) {
-      float shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0., point_x2_f = 0.,
-            point_y1_f = 0., point_y2_f = 0., sci_null = 0.;
-      auto t = utils::getTime();
+      // float shear_x1_f = 0., shear_x2_f = 0., shear_y1_f = 0., shear_y2_f = 0., point_x1_f = 0., point_x2_f = 0.,
+      //       point_y1_f = 0., point_y2_f = 0., sci_null = 0.;
+      // auto t = utils::getTime();
 
       // Receive data
       struct sockaddr_in clientAddr;
@@ -113,66 +94,25 @@ class MetrologyReader {
 
       if (!running.load()) break;
 
-      // Convert received data to vector of 10 ints
-      const static int num_channels = 23;
-      const static int num_timepoints = 10;
-      int receivedDataInt[num_channels * num_timepoints];
-      std::memcpy(receivedDataInt, buffer, sizeof(int) * num_channels * num_timepoints);
+      // Convert received data to vector of ints
+      const static int num_ch = 17;  // num of signals in received data
+      const static int num_tp = 10;  // num of timepoints in received data
+      int recvd_data[num_ch * num_tp];
 
-      static int counter[num_timepoints];
-      static int adc_shear1[num_timepoints];
-      static int adc_shear2[num_timepoints];
-      static int adc_shear3[num_timepoints];
-      static int adc_shear4[num_timepoints];
-      static int adc_point1[num_timepoints];
-      static int adc_point2[num_timepoints];
-      static int adc_point3[num_timepoints];
-      static int adc_point4[num_timepoints];
-      static int adc_sci_null[num_timepoints];
-      static int adc_sci_ref[num_timepoints];
-      static int adc_opd_back[num_timepoints];
-      static int adc_opd_ref[num_timepoints];
-      static int adc_opd_pll[num_timepoints];
-      // static int32_t opd_int[num_timepoints];
-      static float shear_x1_um[num_timepoints];
-      static float shear_x2_um[num_timepoints];
-      static float shear_y1_um[num_timepoints];
-      static float shear_y2_um[num_timepoints];
-      static float point_x1_um[num_timepoints];
-      static float point_x2_um[num_timepoints];
-      static float point_y1_um[num_timepoints];
-      static float point_y2_um[num_timepoints];
+      std::memcpy(recvd_data, buffer, sizeof(int) * num_ch * num_tp);
 
       // Process data for each timepoint
-      for (int i = 0; i < num_timepoints; i++) {
-        counter[i] = receivedDataInt[num_channels * i];
+      static int32_t counter;
+      for (int i = 0; i < num_tp; i++) {
+        counter = recvd_data[num_ch * i];
 
-        adc_shear1[i] = receivedDataInt[num_channels * i + 1];
-        adc_shear2[i] = receivedDataInt[num_channels * i + 2];
-        adc_shear3[i] = receivedDataInt[num_channels * i + 3];
-        adc_shear4[i] = receivedDataInt[num_channels * i + 4];
-        adc_point1[i] = receivedDataInt[num_channels * i + 5];
-        adc_point2[i] = receivedDataInt[num_channels * i + 6];
-        adc_point3[i] = receivedDataInt[num_channels * i + 7];
-        adc_point4[i] = receivedDataInt[num_channels * i + 8];
-        adc_opd_back[i] = receivedDataInt[num_channels * i + 9];
-        adc_opd_ref[i] = receivedDataInt[num_channels * i + 10];
-        adc_opd_pll[i] = receivedDataInt[num_channels * i + 11] * 128;  // ADU * 256
-        // opd_int[i] = receivedDataInt[num_channels * i + 12];
-        shear_x1_um[i] = float(receivedDataInt[num_channels * i + 13]) / 3000.;  // um
-        shear_x2_um[i] = float(receivedDataInt[num_channels * i + 14]) / 3000.;  // um
-        shear_y1_um[i] = float(receivedDataInt[num_channels * i + 15]) / 3000.;  // um
-        shear_y2_um[i] = float(receivedDataInt[num_channels * i + 16]) / 3000.;  // um
-        point_x1_um[i] = float(receivedDataInt[num_channels * i + 17]) / 1000.;  // urad
-        point_x2_um[i] = float(receivedDataInt[num_channels * i + 18]) / 1000.;  // urad
-        point_y1_um[i] = float(receivedDataInt[num_channels * i + 19]) / 1000.;  // urad
-        point_y2_um[i] = float(receivedDataInt[num_channels * i + 20]) / 1000.;  // urad
-        adc_sci_null[i] = receivedDataInt[num_channels * i + 21];                // ADU
-        adc_sci_ref[i] = receivedDataInt[num_channels * i + 22];                 // ADU
+        for (int j = 0; j < num_ch - 1; j++) {
+          met_res.adc_queues[j].push({counter, recvd_data[num_ch * i + j + 1]});
+        }
       }
 
       // Check for gaps within the package
-      // for (int i = 1; i < num_timepoints; i++) {
+      // for (int i = 1; i < num_tp; i++) {
       //   if (counter[i] != counter[i - 1] + 1) {
       //     std::cerr << "Gap within package: counter " << counter[i - 1] << " -> " << counter[i]
       //               << " (size of gap: " << counter[i] - counter[i - 1] - 1 << ")" << std::endl;
@@ -180,58 +120,10 @@ class MetrologyReader {
       // }
 
       // Check for gaps between packages
-      // if (counter[0] != prev_counter + num_timepoints) {
+      // if (counter[0] != prev_counter + num_tp) {
       //   std::cerr << "Gap between packages: counter " << prev_counter << " -> " << counter[0] << std::endl;
       // }
       // prev_counter = counter[0];
-
-      // filter signals
-      for (int i = 0; i < num_timepoints; i++) {
-        // coordinate system of quad cell is rotated by 45 degrees, hence the combination of basis vectors
-        shear_x1_f = shear_x1_lpfilt.filter(shear_y1_um[i] + shear_x1_um[i]);
-        shear_x2_f = shear_x2_lpfilt.filter(shear_y2_um[i] + shear_x2_um[i]);
-        shear_y1_f = shear_y1_lpfilt.filter(shear_x1_um[i] - shear_y1_um[i]);
-        shear_y2_f = shear_y2_lpfilt.filter(shear_x2_um[i] - shear_y2_um[i]);
-
-        point_x1_f = point_x1_lpfilt.filter(point_y1_um[i] + point_x1_um[i]);
-        point_x2_f = point_x2_lpfilt.filter(point_y2_um[i] + point_x2_um[i]);
-        point_y1_f = point_y1_lpfilt.filter(point_x1_um[i] - point_y1_um[i]);
-        point_y2_f = point_y2_lpfilt.filter(point_x2_um[i] - point_y2_um[i]);
-
-        // derive null intensity from science signals
-        sci_null = met_res.null_lockin.process(adc_sci_null[i], adc_sci_ref[i]);
-      }
-
-      // enqueue sensor data
-      met_res.sensorDataQueue.push({t, shear_x1_f, shear_x2_f, shear_y1_f, shear_y2_f, point_x1_f, point_x2_f,
-                                    point_y1_f, point_y2_f, sci_null});
-
-      // enqueue adc measurements
-      for (int i = 0; i < num_timepoints; i++) {
-        met_res.adc_queues[0].push({counter[i], adc_shear1[i]});
-        met_res.adc_queues[1].push({counter[i], adc_shear2[i]});
-        met_res.adc_queues[2].push({counter[i], adc_shear3[i]});
-        met_res.adc_queues[3].push({counter[i], adc_shear4[i]});
-        met_res.adc_queues[4].push({counter[i], adc_point1[i]});
-        met_res.adc_queues[5].push({counter[i], adc_point2[i]});
-        met_res.adc_queues[6].push({counter[i], adc_point3[i]});
-        met_res.adc_queues[7].push({counter[i], adc_point4[i]});
-        met_res.adc_queues[8].push({counter[i], adc_opd_ref[i]});
-        met_res.adc_queues[9].push({counter[i], adc_opd_back[i]});
-        met_res.adc_queues[10].push({counter[i], adc_shear1[i] + adc_shear2[i] + adc_shear3[i] + adc_shear4[i]});
-        met_res.adc_queues[11].push({counter[i], adc_point1[i] + adc_point2[i] + adc_point3[i] + adc_point4[i]});
-        met_res.adc_queues[12].push({counter[i], adc_sci_null[i]});
-        met_res.adc_queues[13].push({counter[i], adc_sci_ref[i]});
-        met_res.adc_queues[14].push({counter[i], adc_opd_pll[i]});
-      }
-
-      // Run control loops
-      // met_res.shear_x1_loop.control(t, shear_x1_f);
-      // met_res.shear_x2_loop.control(t, shear_x2_f);
-      // met_res.shear_y1_loop.control(t, shear_y1_f);
-      // met_res.shear_y2_loop.control(t, shear_y2_f);
-      // met_res.point_1_loop.control(t, {point_x1_f, point_y1_f});
-      // met_res.point_2_loop.control(t, {point_x2_f, point_y2_f});
     }
   }
 };

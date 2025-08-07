@@ -220,135 +220,9 @@ class NiceGui {
     ImGui::Begin("NICE Control", nullptr, flags);
     ImGuiIO &io = ImGui::GetIO();
 
-    // shear control
-    // float shear_x1_setpoint_gui = 0.0f;
-    // float shear_x2_setpoint_gui = 0.0f;
-    // float shear_y1_setpoint_gui = 0.0f;
-    // float shear_y2_setpoint_gui = 0.0f;
-
-    // // pointing control
-    // float pointing_x1_setpoint_gui = 0.0f;
-    // float pointing_x2_setpoint_gui = 0.0f;
-    // float pointing_y1_setpoint_gui = 0.0f;
-    // float pointing_y2_setpoint_gui = 0.0f;
-
-    // // shear control <-> GUI
-    // static int shear_loop_select = 0;
-    // static float shear_p_gui = 0.4f;
-    // static float shear_i_gui = 0.007f;
-
-    // // pointing control <-> GUI
-    static int pointing_loop_select = 0;
-    // static float pointing_p_gui = 1e-5f;
-    // static float pointing_i_gui = 1e-7f;
-
     // window management
     static bool show_demo_window = false;
     static bool show_app_metrics = false;
-
-    // Shear
-    // if (shear_loop_select == 2) {
-    //   res.piezos.shear_x1_loop.control_mode.store(4);
-    //   res.piezos.shear_x2_loop.control_mode.store(4);
-    //   res.piezos.shear_y1_loop.control_mode.store(4);
-    //   res.piezos.shear_y2_loop.control_mode.store(4);
-    // } else if (shear_loop_select == 1) {
-    //   res.piezos.shear_x1_loop.control_mode.store(1);
-    //   res.piezos.shear_x2_loop.control_mode.store(1);
-    //   res.piezos.shear_y1_loop.control_mode.store(1);
-    //   res.piezos.shear_y2_loop.control_mode.store(1);
-    // } else {
-    //   res.piezos.shear_x1_loop.control_mode.store(0);
-    //   res.piezos.shear_x2_loop.control_mode.store(0);
-    //   res.piezos.shear_y1_loop.control_mode.store(0);
-    //   res.piezos.shear_y2_loop.control_mode.store(0);
-    // }
-
-    // res.piezos.shear_x1_loop.p.store(shear_p_gui);
-    // res.piezos.shear_x1_loop.i.store(shear_i_gui);
-    // res.piezos.shear_x2_loop.p.store(shear_p_gui);
-    // res.piezos.shear_x2_loop.i.store(shear_i_gui);
-    // res.piezos.shear_y1_loop.p.store(shear_p_gui);
-    // res.piezos.shear_y1_loop.i.store(shear_i_gui);
-    // res.piezos.shear_y2_loop.p.store(shear_p_gui);
-    // res.piezos.shear_y2_loop.i.store(shear_i_gui);
-
-    // res.piezos.shear_x1_loop.setpoint.store(shear_x1_setpoint_gui);
-    // res.piezos.shear_x2_loop.setpoint.store(shear_x2_setpoint_gui);
-    // res.piezos.shear_y1_loop.setpoint.store(shear_y1_setpoint_gui);
-    // res.piezos.shear_y2_loop.setpoint.store(shear_y2_setpoint_gui);
-
-    // // Pointing
-    // if (pointing_loop_select == 2) {
-    //   res.piezos.point_1_loop.plant_mode.store({2, 2});
-    //   res.piezos.point_1_loop.controller_mode.store({1, 1});
-    //   res.piezos.point_2_loop.plant_mode.store({2, 2});
-    //   res.piezos.point_2_loop.controller_mode.store({1, 1});
-    // } else if (pointing_loop_select == 1) {
-    //   res.piezos.point_1_loop.plant_mode.store({1, 1});
-    //   res.piezos.point_1_loop.controller_mode.store({0, 0});
-    //   res.piezos.point_2_loop.plant_mode.store({1, 1});
-    //   res.piezos.point_2_loop.controller_mode.store({0, 0});
-    // } else {
-    //   res.piezos.point_1_loop.plant_mode.store({0, 0});
-    //   res.piezos.point_1_loop.controller_mode.store({0, 0});
-    //   res.piezos.point_2_loop.plant_mode.store({0, 0});
-    //   res.piezos.point_2_loop.controller_mode.store({0, 0});
-    // }
-
-    // res.piezos.point_1_loop.Ps.store({pointing_p_gui, pointing_p_gui});
-    // res.piezos.point_1_loop.Is.store({pointing_i_gui, pointing_i_gui});
-    // res.piezos.point_2_loop.Ps.store({pointing_p_gui, pointing_p_gui});
-    // res.piezos.point_2_loop.Is.store({pointing_i_gui, pointing_i_gui});
-
-    // res.piezos.point_1_loop.setpoint.store({{pointing_x1_setpoint_gui, pointing_y1_setpoint_gui}});
-    // res.piezos.point_2_loop.setpoint.store({{pointing_x2_setpoint_gui, pointing_y2_setpoint_gui}});
-
-    static ScrollingBufferT<float, float> shear_x1_buffer, shear_x2_buffer, shear_y1_buffer, shear_y2_buffer,
-        point_x1_buffer, point_x2_buffer, point_y1_buffer, point_y2_buffer, sci_null_buffer;
-
-    // GUI interface to save OPD measurements to file:
-    // a button "start recording", which when pressed starts recording OPD measurements to a file
-    // the same button reads "stop recording" when recording is active
-    // when "stop recording" is pressed, the file is closed and the button reads "start recording" again
-    // filename is "opd_iso_date_time.csv"
-    // data format: time, OPD
-    // static bool recording_running = false;
-    // static std::ofstream file;
-    // static std::string filename;
-    // if (recording_running) {
-    //   if (ImGui::Button("OPD: Stop recording")) {
-    //     recording_running = false;
-    //     file.close();
-    //   }
-    // } else {
-    //   if (ImGui::Button("OPD: Start recording")) {
-    //     recording_running = true;
-    //     filename = "measurements/" + utils::get_iso_datestring() + "_opd.csv";
-    //     file.open(filename);
-    //     file << "Time at start of measurement: " << utils::get_iso_datestring() << "\n";
-    //     file << "Time (s),OPD (nm)\n";
-    //   }
-    // }
-
-    // // save intensity measurements to file
-    // static bool record_sci_null = false;
-    // static std::ofstream sci_null_file;
-    // static std::string sci_null_filename;
-    // if (record_sci_null) {
-    //   if (ImGui::Button("Intensity: Stop recording")) {
-    //     record_sci_null = false;
-    //     sci_null_file.close();
-    //   }
-    // } else {
-    //   if (ImGui::Button("Intensity: Start recording")) {
-    //     record_sci_null = true;
-    //     sci_null_filename = "measurements/" + utils::get_iso_datestring() + "_sci_null.csv";
-    //     sci_null_file.open(sci_null_filename);
-    //     sci_null_file << "Time at start of measurement: " << utils::get_iso_datestring() << "\n";
-    //     sci_null_file << "Time (s),Intensity\n";
-    //   }
-    // }
 
     // buttons for start/stop recording ethercat data
     static bool recording_ethercat = false;
@@ -362,32 +236,6 @@ class NiceGui {
         recording_ethercat = true;
         workers.ethercat_reader.start_recording();
       }
-    }
-
-    static SensorData sensor_data;
-    static auto consumer = res.metrology.sensorDataQueue.subscribe();
-    while (res.metrology.sensorDataQueue.try_pop(consumer, sensor_data)) {
-      auto m = sensor_data;
-      shear_x1_buffer.AddPoint(m.time, m.shear_x1);
-      shear_x2_buffer.AddPoint(m.time, m.shear_x2);
-      shear_y1_buffer.AddPoint(m.time, m.shear_y1);
-      shear_y2_buffer.AddPoint(m.time, m.shear_y2);
-      point_x1_buffer.AddPoint(m.time, m.point_x1);
-      point_x2_buffer.AddPoint(m.time, m.point_x2);
-      point_y1_buffer.AddPoint(m.time, m.point_y1);
-      point_y2_buffer.AddPoint(m.time, m.point_y2);
-      sci_null_buffer.AddPoint(m.time, m.sci_null);
-
-      // If saving data, write to file
-      // if (recording_running) {
-      //   file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(2) << m.opd
-      //        << "\n";
-      // }
-
-      // if (record_sci_null) {
-      //   sci_null_file << std::fixed << std::setprecision(6) << m.time << "," << std::fixed << std::setprecision(1)
-      //                 << m.sci_null << "\n";
-      // }
     }
 
     // Button to start/stop metrology_reader
@@ -430,7 +278,7 @@ class NiceGui {
 
     // ADC measurements
     if (ImGui::CollapsingHeader("ADC Measurements")) {
-      static ScrollingBufferT<int, int> adc_buffers[15];
+      static ScrollingBufferT<int, int> adc_buffers[16];
       static float t_adc = 0;
 
       // get lates time in ADC queue
@@ -440,7 +288,7 @@ class NiceGui {
       }
 
       // add all measurements to the plot buffers
-      for (int i = 0; i < 15; i++) {
+      for (int i = 0; i < 16; i++) {
         if (!res.metrology.adc_queues[i].isempty()) {
           int N = res.metrology.adc_queues[i].size();
           for (int j = 0; j < N; j++) {
@@ -454,9 +302,9 @@ class NiceGui {
       ImGui::SliderFloat("ADC History", &adc_history_length, 200, 70000, "%.0f samples", ImGuiSliderFlags_Logarithmic);
 
       // plot label names
-      static const char *plot_labels[15] = {"Shear UP",   "Shear LEFT",  "Shear RIGHT", "Shear DOWN", "Point UP",
-                                            "Point LEFT", "Point RIGHT", "Point DOWN",  "OPD Ref",    "OPD Back",
-                                            "OPD Fwd",    "Point Sum",   "SCI Null",    "SCI Ref",    "OPD PLL"};
+      static const char *plot_labels[16] = {
+          "Shear UP", "Shear LEFT", "Shear RIGHT", "Shear DOWN", "OPD back", "OPD ref", "Pos ref", "NC1",
+          "Point UP", "Point LEFT", "Point RIGHT", "Point DOWN", "NC2",      "NC3",     "SCI ref", "SCI null"};
 
       // plot style
       static float thickness = 2;
@@ -468,7 +316,7 @@ class NiceGui {
         ImPlot::SetupAxisLimits(ImAxis_X1, t_adc - adc_history_length, t_adc, ImGuiCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        for (int i = 0; i < 15; i++) {
+        for (int i = 0; i < 16; i++) {
           ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), thickness);
           ImPlot::PlotLine(plot_labels[i], &adc_buffers[i].Data[0].time, &adc_buffers[i].Data[0].value,
                            adc_buffers[i].Data.size(), 0, adc_buffers[i].Offset, 2 * sizeof(int));
@@ -482,217 +330,12 @@ class NiceGui {
       WindowEtheratMonitor();
     }
 
-    // Sci_null measurements
-    if (ImGui::CollapsingHeader("Science beam Measurements")) {
-      // history length slider
-      static float sci_null_history_length = 5.0;
-      ImGui::SliderFloat("Sci_null History", &sci_null_history_length, 1e-3, 50., "%.3f s",
-                         ImGuiSliderFlags_Logarithmic);
-
-      // plot time series
-      static float thickness = 3;
-      static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
-      static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-
-      // print current measurement
-      if (!sci_null_buffer.Data.empty()) {
-        auto m = sci_null_buffer.Data.back();
-        ImGui::Text("Current Sci_null: %.1f", m.value);
-      }
-
-      if (ImPlot::BeginPlot("##Sci_null", ImVec2(-1, 600 * io.FontGlobalScale))) {
-        ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - sci_null_history_length, t_gui, ImGuiCond_Always);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), thickness);
-        ImPlot::PlotLine("Sci_null", &sci_null_buffer.Data[0].time, &sci_null_buffer.Data[0].value,
-                         sci_null_buffer.Data.size(), 0, sci_null_buffer.Offset, 2 * sizeof(int));
-        ImPlot::EndPlot();
-      }
-
-      // calculate fft
-      const static int fft_size = 1024 * 8 * 8;
-      static double fft_power[fft_size / 2];
-      static double fft_freq[fft_size / 2];
-      static FFT_calculator<float, float> fft(fft_size, 12800., &sci_null_buffer, fft_power, fft_freq);
-      fft.calculate();
-
-      // plot fft
-      static ImVec4 fft_color = ImVec4(1, 1, 0, 1);
-      static float fft_thickness = 3;
-      static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
-      static ImPlotAxisFlags fft_yflags = ImPlotAxisFlags_None;  // ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-      if (ImPlot::BeginPlot("##FFT", ImVec2(-1, 400 * io.FontGlobalScale))) {
-        ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-        ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-        ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, 0.1, 2000);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 10, 1e13);
-        ImPlot::SetNextLineStyle(fft_color, fft_thickness);
-        ImPlot::PlotLine("Sci Null FFT", &fft_freq[0], &fft_power[0], fft_size / 2, 0, 0, 8);
-        ImPlot::EndPlot();
-      }
-    }
-
     if (ImGui::CollapsingHeader("OPD")) {
       WindowOPD();
     }
 
     if (ImGui::CollapsingHeader("Lateral beam control")) {
       WindowBeamControl();
-    }
-
-    if (ImGui::CollapsingHeader("Shear")) {
-      static float t_gui_x = 0;
-
-      // if measurement is running, update gui time.
-      t_gui_x = utils::getTime();
-
-      static float x1_history_length = 10.0f;
-      ImGui::SliderFloat("History", &x1_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
-
-      // x axis: no ticks
-      static ImPlotAxisFlags x1_xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
-
-      // y axis: auto fit
-      static ImPlotAxisFlags x1_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-
-      float x1_thickness = 3 * io.FontGlobalScale;
-
-      // plot shear
-      if (ImPlot::BeginPlot("##X1", ImVec2(-1, 200 * io.FontGlobalScale))) {
-        ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - x1_history_length, t_gui_x, ImGuiCond_Always);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), x1_thickness);
-        ImPlot::PlotLine("Shear X1", &shear_x1_buffer.Data[0].time, &shear_x1_buffer.Data[0].value,
-                         shear_x1_buffer.Data.size(), 0, shear_x1_buffer.Offset, 2 * sizeof(float));
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), x1_thickness);
-        ImPlot::PlotLine("Shear Y1", &shear_y1_buffer.Data[0].time, &shear_y1_buffer.Data[0].value,
-                         shear_y1_buffer.Data.size(), 0, shear_y1_buffer.Offset, 2 * sizeof(float));
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), x1_thickness);
-        ImPlot::PlotLine("Shear X2", &shear_x2_buffer.Data[0].time, &shear_x2_buffer.Data[0].value,
-                         shear_x2_buffer.Data.size(), 0, shear_x2_buffer.Offset, 2 * sizeof(float));
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), x1_thickness);
-        ImPlot::PlotLine("Shear Y2", &shear_y2_buffer.Data[0].time, &shear_y2_buffer.Data[0].value,
-                         shear_y2_buffer.Data.size(), 0, shear_y2_buffer.Offset, 2 * sizeof(float));
-        ImPlot::EndPlot();
-      }
-
-      // calculate std and rms of x1d over last 1000 points
-      static float x1d_std = 0.0f;
-      static float x1d_rms = 0.0f;
-      // static float x2d_std = 0.0f;
-      // static float x2d_rms = 0.0f;
-
-      if (shear_x1_buffer.Data.size() > 1000) {
-        // calculate mean
-        float sum = 0.0f;
-        for (auto &p : shear_x1_buffer.Data) {
-          sum += p.value;
-        }
-        float mean = sum / shear_x1_buffer.Data.size();
-
-        // calculate std
-        float sum_sq = 0.0f;
-        for (auto &p : shear_x1_buffer.Data) {
-          sum_sq += (p.value - mean) * (p.value - mean);
-        }
-        x1d_std = sqrt(sum_sq / shear_x1_buffer.Data.size());
-
-        // calculate rms
-        sum_sq = 0.0f;
-        for (auto &p : shear_x1_buffer.Data) {
-          sum_sq += p.value * p.value;
-        }
-        x1d_rms = sqrt(sum_sq / shear_x1_buffer.Data.size());
-      }
-
-      // print it
-      ImGui::Text("x1d std: %.4f", x1d_std);
-      ImGui::Text("x1d rms: %.4f", x1d_rms);
-
-      // FFT
-      if (ImGui::TreeNode("FFT##Shear")) {
-        // set up fft of x1d
-        const static int fft_size = 1024 * 8 * 8;
-        static double fft_power[fft_size / 2];
-        static double fft_freq[fft_size / 2];
-        static FFT_calculator<float, float> fft(fft_size, 12800., &shear_x1_buffer, fft_power, fft_freq);
-
-        // calculate fft
-        fft.calculate();
-
-        static float fft_thickness = 3;
-        ImVec4 fft_color = ImVec4(1, 1, 0, 1);
-
-        // x axis: no flags
-        static ImPlotAxisFlags fft_xflags = ImPlotAxisFlags_None;
-        static ImPlotAxisFlags fft_yflags =
-            ImPlotAxisFlags_None;  // ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-        // plot fft_power vs fft_freq, with log scale on x and y axis
-        if (ImPlot::BeginPlot("##FFT_x1d", ImVec2(-1, 300 * io.FontGlobalScale))) {
-          ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-          // ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-          // yflags
-          ImPlot::SetupAxes(nullptr, nullptr, fft_xflags, fft_yflags);
-          ImPlot::SetupAxisLimits(ImAxis_X1, 10, 3200);
-          ImPlot::SetupAxisLimits(ImAxis_Y1, 0.1, 1e8);
-          // ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-          ImPlot::SetNextLineStyle(fft_color, fft_thickness);
-          ImPlot::PlotLine("FFT", &fft_freq[0], &fft_power[0], fft_size / 2);
-          ImPlot::EndPlot();
-        }
-        ImGui::TreePop();
-      }
-
-    }  // end of x position
-
-    if (ImGui::CollapsingHeader("Pointing")) {
-      // control mode selector
-      ImGui::Text("Control mode:");
-      ImGui::SameLine();
-      ImGui::RadioButton("Off##Pointing", &pointing_loop_select, 0);
-      ImGui::SameLine();
-      ImGui::RadioButton("Open loop##Pointing", &pointing_loop_select, 1);
-      ImGui::SameLine();
-      ImGui::RadioButton("Closed loop##Pointing", &pointing_loop_select, 2);
-
-      static float t_gui_x = 0;
-
-      // if measurement is running, update gui time.
-      t_gui_x = utils::getTime();
-
-      static float pointing_history_length = 10.0f;
-      ImGui::SliderFloat("History", &pointing_history_length, 0.1, 10, "%.2f s", ImGuiSliderFlags_Logarithmic);
-
-      static ImPlotAxisFlags x1_xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
-      static ImPlotAxisFlags x1_yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-
-      float pointing_thickness = 3 * io.FontGlobalScale;
-
-      // plot
-      if (ImPlot::BeginPlot("##Pointing", ImVec2(-1, 200 * io.FontGlobalScale))) {
-        ImPlot::SetupAxes(nullptr, nullptr, x1_xflags, x1_yflags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, t_gui_x - pointing_history_length, t_gui_x, ImGuiCond_Always);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
-        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(0), pointing_thickness);
-        ImPlot::PlotLine("Pointing X1", &point_x1_buffer.Data[0].time, &point_x1_buffer.Data[0].value,
-                         point_x1_buffer.Data.size(), 0, point_x1_buffer.Offset, 2 * sizeof(float));
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), pointing_thickness);
-        ImPlot::PlotLine("Pointing Y1", &point_y1_buffer.Data[0].time, &point_y1_buffer.Data[0].value,
-                         point_y1_buffer.Data.size(), 0, point_y1_buffer.Offset, 2 * sizeof(float));
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(2), pointing_thickness);
-        ImPlot::PlotLine("Pointing X2", &point_x2_buffer.Data[0].time, &point_x2_buffer.Data[0].value,
-                         point_x2_buffer.Data.size(), 0, point_x2_buffer.Offset, 2 * sizeof(float));
-        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(3), pointing_thickness);
-        ImPlot::PlotLine("Pointing Y2", &point_y2_buffer.Data[0].time, &point_y2_buffer.Data[0].value,
-                         point_y2_buffer.Data.size(), 0, point_y2_buffer.Offset, 2 * sizeof(float));
-        ImPlot::EndPlot();
-      }
     }
 
     if (ImGui::CollapsingHeader("Program settings")) {
@@ -798,8 +441,8 @@ class NiceGui {
   void WindowEtheratMonitor() {
     static ScrollingBufferT<double, double> dl_meas_buffer;
     static ScrollingBufferT<double, double> dl_cmd_buffer;
-    static ScrollingBufferT<double, double> metr_opd_rad_wrapped_buffer;
-    static ScrollingBufferT<double, double> metr_opd_nm_unwrapped_buffer;
+    static ScrollingBufferT<double, double> metr_opd_nm_buffer;
+    static ScrollingBufferT<double, double> metr_qpd_buffer[6];
     static double t_ecat = 0;
 
     // get data and transfer to scrolling buffer
@@ -810,8 +453,11 @@ class NiceGui {
       t_ecat = m.timestamp_us * 1e-6;  // convert microseconds to seconds
       dl_meas_buffer.AddPoint(t_ecat, m.dl_position_meas);
       dl_cmd_buffer.AddPoint(t_ecat, m.dl_position_cmd);
-      metr_opd_rad_wrapped_buffer.AddPoint(t_ecat, m.metr_opd_rad_wrapped);
-      metr_opd_nm_unwrapped_buffer.AddPoint(t_ecat, m.metr_opd_nm_unwrapped);
+      metr_opd_nm_buffer.AddPoint(t_ecat, m.metr_opd_nm_unwrapped);
+      for (int i = 0; i < 6; i++) {
+        metr_qpd_buffer[i].AddPoint(t_ecat, m.metr_qpd[i]);
+      }
+      // metr_qpd1_x1_buffer.AddPoint(t_ecat, m.metr_qpd1_x1);
     }
 
     // plot the data
@@ -833,8 +479,8 @@ class NiceGui {
         ImPlot::PlotLine("DL command (um)", &dl_cmd_buffer.Data[0].time, &dl_cmd_buffer.Data[0].value,
                          dl_cmd_buffer.Data.size(), 0, dl_cmd_buffer.Offset, 2 * sizeof(double));
         ImPlot::EndPlot();
-        ImGui::TreePop();
       }
+      ImGui::TreePop();
     }
 
     if (ImGui::TreeNode("OPD##EtherCAT Monitor OPD")) {
@@ -849,18 +495,17 @@ class NiceGui {
         ImPlot::SetupAxisLimits(ImAxis_Y1, -1e6, 1e6);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), thickness);
-        ImPlot::PlotLine("OPD unwrapped (nm)", &metr_opd_nm_unwrapped_buffer.Data[0].time,
-                         &metr_opd_nm_unwrapped_buffer.Data[0].value, metr_opd_nm_unwrapped_buffer.Data.size(), 0,
-                         metr_opd_nm_unwrapped_buffer.Offset, 2 * sizeof(double));
+        ImPlot::PlotLine("OPD unwrapped (nm)", &metr_opd_nm_buffer.Data[0].time, &metr_opd_nm_buffer.Data[0].value,
+                         metr_opd_nm_buffer.Data.size(), 0, metr_opd_nm_buffer.Offset, 2 * sizeof(double));
         ImPlot::EndPlot();
 
         static float mean = 0.0f;
         static float stddev = 0.0f;
         const int N_points_stats = 1000;
 
-        if (metr_opd_nm_unwrapped_buffer.Data.size() > N_points_stats + 2) {
+        if (metr_opd_nm_buffer.Data.size() > N_points_stats + 2) {
           // get the last 1000 measurements using ImVector<ImVec2> GetLastN(int n)
-          auto last_1000_measurements_data = metr_opd_nm_unwrapped_buffer.GetLastN(N_points_stats);
+          auto last_1000_measurements_data = metr_opd_nm_buffer.GetLastN(N_points_stats);
           // get the y values
           std::vector<float> last_1000_measurements;
           for (auto &m : last_1000_measurements_data) {
@@ -877,9 +522,8 @@ class NiceGui {
 
         // Display mean and std
         ImGui::Text("Last %d samples: Mean: %.4f, Std: %.4f", N_points_stats, mean, stddev);
-
-        ImGui::TreePop();
       }
+      ImGui::TreePop();
     }
 
     if (ImGui::TreeNode("OPD FFT##OPD")) {
@@ -888,7 +532,7 @@ class NiceGui {
       const static int fft_size = 1024 * 8;  // 1.2 s of data
       static double fft_power[fft_size / 2];
       static double fft_freq[fft_size / 2];
-      static FFT_calculator<double, double> fft(fft_size, fs, &metr_opd_nm_unwrapped_buffer, fft_power, fft_freq);
+      static FFT_calculator<double, double> fft(fft_size, fs, &metr_opd_nm_buffer, fft_power, fft_freq);
 
       fft.calculate();
 
@@ -903,6 +547,30 @@ class NiceGui {
         ImPlot::SetupAxisLimits(ImAxis_X1, 1, 3333);
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), fft_thickness);
         ImPlot::PlotLine("OPD PSD (nm/sqrtHz)", &fft_freq[0], &fft_power[0], fft_size / 2);
+        ImPlot::EndPlot();
+      }
+
+      ImGui::TreePop();
+    }
+
+    if (ImGui::TreeNode("QPD##EtherCAT Monitor")) {
+      static const char *plot_labels[12] = {"QPD1 X1", "QPD1 Y1", "QPD1 I1", "QPD1 X2", "QPD1 Y2", "QPD1 I2",
+                                            "QPD2 X1", "QPD2 Y1", "QPD2 I1", "QPD2 X2", "QPD2 Y2", "QPD2 I2"};
+      static float history_length = 10.0f;
+      ImGui::SliderFloat("History length", &history_length, 0.1f, 10.0f, "%.2f s", ImGuiSliderFlags_Logarithmic);
+      static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+      static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+      static float thickness = 1.0f * io->FontGlobalScale;
+      if (ImPlot::BeginPlot("##EtherCAT Monitor Metrology QPD1", ImVec2(-1, 200 * io->FontGlobalScale))) {
+        ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, t_ecat - history_length, t_ecat, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, -1e6, 1e6);
+        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+        for (int i = 0; i < 6; i++) {
+          ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), thickness);
+          ImPlot::PlotLine(plot_labels[i], &metr_qpd_buffer[i].Data[0].time, &metr_qpd_buffer[i].Data[0].value,
+                           metr_qpd_buffer[i].Data.size(), 0, metr_qpd_buffer[i].Offset, 2 * sizeof(double));
+        }
         ImPlot::EndPlot();
       }
 

@@ -28,10 +28,10 @@ class BeamController {
   void request_stop() {}
 
   // beam control, coordinates at the spatial filter collimator entrance
-  void move_to_x1(float position) { piezos.tt1.move_to_x(position); }
-  void move_to_y1(float position) { piezos.tt1.move_to_y(position); }
-  void move_to_x2(float position) { piezos.tt2.move_to_x(position); }
-  void move_to_y2(float position) { piezos.tt2.move_to_y(position); }
+  void move_to_x1(float position) { piezos.tt1.move_to_y(position); }
+  void move_to_y1(float position) { piezos.tt1.move_to_x(-position); }
+  void move_to_x2(float position) { piezos.tt2.move_to_y(-position); }
+  void move_to_y2(float position) { piezos.tt2.move_to_x(position); }
 
  private:
   PiezoActuators &piezos;

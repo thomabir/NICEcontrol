@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "EthercatResources.hpp"
+#include "utils.hpp"
 
 #define ETH_P_ALL 0x0003             // Capture every packet
 #define ETH_P_ECAT 0x88A4            // EtherCAT EtherType
@@ -101,7 +102,8 @@ class EthercatTapReader {
     // prepare file
     std::string filename = "measurements/" + utils::get_iso_datestring() + "_ethercat.csv";
     file.open(filename);
-    file << "Buffer Index,EC timestamp (us),DL cmd (um),DL meas (um),OPD wrapped (rad),OPD unwrapped (nm)\n";
+    file << "Buffer Index,EC timestamp (us),DL cmd (um),DL meas (um),OPD (nm), X1 (um), Y1 (um), I1 (a.u.), X2 (um), "
+            "Y2 (um), I2 (a.u.)\n";
 
     record_data.store(true);
     std::cout << "Started recording EtherCAT data." << std::endl;
@@ -187,20 +189,43 @@ class EthercatTapReader {
 
     // metrology
     float metr_opd_nm_unwrapped = get_float(packet + locations[2] + 4);
-    int metr_opd_int = get_int(packet + locations[TOTAL_SLAVES + 2]);
+    // int metr_opd_int = get_int(packet + locations[TOTAL_SLAVES + 2]);
+    int metr_qpd1_x1 = get_int(packet + locations[TOTAL_SLAVES + 2] + 4);
+    int metr_qpd1_y1 = get_int(packet + locations[TOTAL_SLAVES + 2] + 8);
+    int metr_qpd1_i1 = get_int(packet + locations[TOTAL_SLAVES + 2] + 12);
+    int metr_qpd1_x2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 16);
+    int metr_qpd1_y2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 20);
+    int metr_qpd1_i2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 24);
 
     // int working_counter = get_int(packet + length - 2); // Last 2 bytes of the packet
 
     // process
-    float metr_opd_rad_wrapped = -signed16BitToFloat(metr_opd_int);
+    // float metr_opd_rad_wrapped = -signed16BitToFloat(metr_opd_int);
+    float metr_qpd1_x1_corr = (metr_qpd1_x1 + metr_qpd1_y1) / (1500.f);   // convert to um
+    float metr_qpd1_y1_corr = (metr_qpd1_y1 - metr_qpd1_x1) / (1500.f);   // convert to um
+    float metr_qpd1_x2_corr = -(metr_qpd1_x2 + metr_qpd1_y2) / (1500.f);  // convert to um
+    float metr_qpd1_y2_corr = (metr_qpd1_x2 - metr_qpd1_y2) / (1500.f);   // convert to um
+    float metr_qpd1_i1_corr = metr_qpd1_i1 * -1e-6f;                      // intensity is positive, approx. 1.0
+    float metr_qpd1_i2_corr = metr_qpd1_i2 * 1e-6f;                       // approx 1.0
+
+    // normalize with intensity
+    metr_qpd1_x1_corr /= metr_qpd1_i1_corr;
+    metr_qpd1_y1_corr /= metr_qpd1_i1_corr;
+    metr_qpd1_x2_corr /= metr_qpd1_i2_corr;
+    metr_qpd1_y2_corr /= metr_qpd1_i2_corr;
 
     static EthercatData data;
     data.buffer_index = buffer_index;
     data.timestamp_us = timestamp_us;
     data.dl_position_cmd = dl_position_cmd;
     data.dl_position_meas = dl_position_meas;
-    data.metr_opd_rad_wrapped = metr_opd_rad_wrapped;
     data.metr_opd_nm_unwrapped = metr_opd_nm_unwrapped;
+    data.metr_qpd[0] = metr_qpd1_x1_corr;
+    data.metr_qpd[1] = metr_qpd1_y1_corr;
+    data.metr_qpd[2] = metr_qpd1_i1_corr;
+    data.metr_qpd[3] = metr_qpd1_x2_corr;
+    data.metr_qpd[4] = metr_qpd1_y2_corr;
+    data.metr_qpd[5] = metr_qpd1_i2_corr;
 
     return data;
   }
@@ -208,7 +233,9 @@ class EthercatTapReader {
   void record(const EthercatData& data) {
     if (file.is_open()) {
       file << data.buffer_index << "," << data.timestamp_us << "," << data.dl_position_cmd << ","
-           << data.dl_position_meas << "," << data.metr_opd_rad_wrapped << "," << data.metr_opd_nm_unwrapped << "\n";
+           << data.dl_position_meas << "," << data.metr_opd_nm_unwrapped << "," << data.metr_qpd[0] << ","
+           << data.metr_qpd[1] << "," << data.metr_qpd[2] << "," << data.metr_qpd[3] << "," << data.metr_qpd[4] << ","
+           << data.metr_qpd[5] << "\n";
     } else {
       std::cerr << "File is not open for recording EtherCAT data." << std::endl;
     }
