@@ -405,11 +405,11 @@ class NiceGui {
     static int tip_tilt_loop_select = 0;
     ImGui::Text("Control mode:");
     ImGui::SameLine();
-    ImGui::RadioButton("Raw actuator commands##TipTilt", &tip_tilt_loop_select, 0);
+    ImGui::RadioButton("Open loop##TipTilt", &tip_tilt_loop_select, 0);
     ImGui::SameLine();
-    ImGui::RadioButton("Open loop##TipTilt", &tip_tilt_loop_select, 1);
+    ImGui::RadioButton("Closed loop##TipTilt", &tip_tilt_loop_select, 1);
     ImGui::SameLine();
-    ImGui::RadioButton("Closed loop##TipTilt", &tip_tilt_loop_select, 2);
+    ImGui::RadioButton("Hold still", &tip_tilt_loop_select, 2);
 
     // raw actuator commands
     static float tip_tilt_raw_x1 = 0.0f;
@@ -418,6 +418,7 @@ class NiceGui {
     static float tip_tilt_raw_y2 = 0.0f;
 
     // sliders to set raw actuator commands
+    ImGui::Text("Open loop commands:");
     ImGui::DragFloat("X1##TipTiltRaw", &tip_tilt_raw_x1, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
                      ImGuiSliderFlags_AlwaysClamp);
     ImGui::DragFloat("Y1##TipTiltRaw", &tip_tilt_raw_y1, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
@@ -427,15 +428,44 @@ class NiceGui {
     ImGui::DragFloat("Y2##TipTiltRaw", &tip_tilt_raw_y2, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
                      ImGuiSliderFlags_AlwaysClamp);
 
-    if (tip_tilt_loop_select == 0) {
-      // Send raw actuator commands to BeamController worker
-      workers.beam_controller.move_to_x1(tip_tilt_raw_x1);
-      workers.beam_controller.move_to_y1(tip_tilt_raw_y1);
-      workers.beam_controller.move_to_x2(tip_tilt_raw_x2);
-      workers.beam_controller.move_to_y2(tip_tilt_raw_y2);
-    }
+    // control loop configuration
+    static float shear_x1_sp = 0.0f;
+    static float shear_y1_sp = 0.0f;
+    static float shear_x2_sp = 0.0f;
+    static float shear_y2_sp = 0.0f;
 
-    // TODO control loops
+    // sliders to set shear setpoints
+    ImGui::Text("Closed loop setpoints:");
+    ImGui::DragFloat("X1##TipTiltShear", &shear_x1_sp, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
+                     ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("Y1##TipTiltShear", &shear_y1_sp, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
+                     ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("X2##TipTiltShear", &shear_x2_sp, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
+                     ImGuiSliderFlags_AlwaysClamp);
+    ImGui::DragFloat("Y2##TipTiltShear", &shear_y2_sp, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
+                     ImGuiSliderFlags_AlwaysClamp);
+
+    // P and I control loop gains
+    static float shear_p = 1e-3f;
+    static float shear_i = 1e-3f;
+    ImGui::Text("Control loop config:");
+    ImGui::SliderFloat("P##TipTiltShear", &shear_p, 1e-4f, 1e0f, "%.5f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("I##TipTiltShear", &shear_i, 1e-6f, 1e-2f, "%.7f", ImGuiSliderFlags_Logarithmic);
+
+    workers.beam_controller.set_shear_loop_select(tip_tilt_loop_select);
+    // if (tip_tilt_loop_select == 0) {
+    // Send raw actuator commands to ControlManager worker
+    workers.beam_controller.move_to_x1(tip_tilt_raw_x1);
+    workers.beam_controller.move_to_y1(tip_tilt_raw_y1);
+    workers.beam_controller.move_to_x2(tip_tilt_raw_x2);
+    workers.beam_controller.move_to_y2(tip_tilt_raw_y2);
+    // } else if (tip_tilt_loop_select == 1) {
+    // Send shear setpoints to ControlManager worker
+    workers.beam_controller.set_shear_setpoints(shear_x1_sp, shear_y1_sp, shear_x2_sp, shear_y2_sp);
+    // Send P and I gains to ControlManager worker
+    workers.beam_controller.set_shear_gains(shear_p, shear_i);
+
+    // }
   }
 
   void WindowEtheratMonitor() {
