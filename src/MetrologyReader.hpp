@@ -107,7 +107,16 @@ class MetrologyReader {
         counter = recvd_data[num_ch * i];
 
         for (int j = 0; j < num_ch - 1; j++) {
-          met_res.adc_queues[j].push({counter, recvd_data[num_ch * i + j + 1]});
+          if (j != 7) {
+            met_res.adc_queues[j].push({counter, recvd_data[num_ch * i + j + 1]});
+          } else {
+            // sum of all shear signals in adc channel 7
+            int shear_sum = 0;
+            for (int k = 1; k <= 4; k++) {
+              shear_sum += recvd_data[num_ch * i + k + 1];
+            }
+            met_res.adc_queues[j].push({counter, shear_sum});
+          }
         }
       }
 
