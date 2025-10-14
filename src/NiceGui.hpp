@@ -303,8 +303,8 @@ class NiceGui {
 
       // plot label names
       static const char *plot_labels[16] = {
-          "Shear UP", "Shear LEFT", "Shear RIGHT", "Shear DOWN", "OPD back", "OPD ref", "Pos ref", "NC1",
-          "Point UP", "Point LEFT", "Point RIGHT", "Point DOWN", "NC2",      "NC3",     "SCI ref", "SCI null"};
+          "Shear UP", "Shear LEFT", "Shear RIGHT", "Shear DOWN", "OPD back", "OPD ref",    "Pos ref",     "NC1",
+          "NC2",      "NC3",        "NC4",         "NC5",        "Point UP", "Point LEFT", "Point RIGHT", "Point DOWN"};
 
       // plot style
       static float thickness = 2;
