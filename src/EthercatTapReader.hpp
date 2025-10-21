@@ -39,8 +39,8 @@ const int SLAVE_2_INPUT_BYTES = 5;
 const int SLAVE_2_OUTPUT_BYTES = 4;
 
 // SLAVE #3 - Metrology
-const int SLAVE_3_INPUT_BYTES = 32;
-const int SLAVE_3_OUTPUT_BYTES = 32;
+const int SLAVE_3_INPUT_BYTES = 12;
+const int SLAVE_3_OUTPUT_BYTES = 52;
 
 // Vector to hold the number of bytes for each slave's input and output
 // Note: The frame first contains all the input bytes of all slaves, followed by all the output bytes of all slaves.
@@ -189,30 +189,53 @@ class EthercatTapReader {
 
     // metrology
     float metr_opd_nm_unwrapped = get_float(packet + locations[2] + 4);
-    // int metr_opd_int = get_int(packet + locations[TOTAL_SLAVES + 2]);
     int metr_qpd1_x1 = get_int(packet + locations[TOTAL_SLAVES + 2] + 4);
     int metr_qpd1_y1 = get_int(packet + locations[TOTAL_SLAVES + 2] + 8);
     int metr_qpd1_i1 = get_int(packet + locations[TOTAL_SLAVES + 2] + 12);
     int metr_qpd1_x2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 16);
     int metr_qpd1_y2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 20);
     int metr_qpd1_i2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 24);
+    int metr_qpd2_x1 = get_int(packet + locations[TOTAL_SLAVES + 2] + 28);
+    int metr_qpd2_y1 = get_int(packet + locations[TOTAL_SLAVES + 2] + 32);
+    int metr_qpd2_i1 = get_int(packet + locations[TOTAL_SLAVES + 2] + 36);
+    int metr_qpd2_x2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 40);
+    int metr_qpd2_y2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 44);
+    int metr_qpd2_i2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 48);
+
+    std::cout << "qpd2: " << metr_qpd2_x1 << ", " << metr_qpd2_y1 << ", " << metr_qpd2_i1 << ", " << metr_qpd2_x2
+              << ", " << metr_qpd2_y2 << ", " << metr_qpd2_i2 << std::endl;
 
     // int working_counter = get_int(packet + length - 2); // Last 2 bytes of the packet
 
     // process
-    // float metr_opd_rad_wrapped = -signed16BitToFloat(metr_opd_int);
     float metr_qpd1_x1_corr = (metr_qpd1_x1 + metr_qpd1_y1) / (1500.f);   // convert to um
     float metr_qpd1_y1_corr = (metr_qpd1_y1 - metr_qpd1_x1) / (1500.f);   // convert to um
     float metr_qpd1_x2_corr = -(metr_qpd1_x2 + metr_qpd1_y2) / (1500.f);  // convert to um
     float metr_qpd1_y2_corr = (metr_qpd1_x2 - metr_qpd1_y2) / (1500.f);   // convert to um
     float metr_qpd1_i1_corr = metr_qpd1_i1 * -1e-6f;                      // intensity is positive, approx. 1.0
     float metr_qpd1_i2_corr = metr_qpd1_i2 * 1e-6f;                       // approx 1.0
+    float metr_qpd2_x1_corr = metr_qpd2_x1;
+    float metr_qpd2_y1_corr = metr_qpd2_y1;
+    float metr_qpd2_x2_corr = metr_qpd2_x2;
+    float metr_qpd2_y2_corr = metr_qpd2_y2;
+    float metr_qpd2_i1_corr = metr_qpd2_i1;
+    float metr_qpd2_i2_corr = metr_qpd2_i2;
+    // float metr_qpd2_x1_corr = (metr_qpd2_x1 + metr_qpd2_y1) / (1500.f);   // convert to um
+    // float metr_qpd2_y1_corr = (metr_qpd2_y1 - metr_qpd2_x1) / (1500.f);   // convert to um
+    // float metr_qpd2_x2_corr = -(metr_qpd2_x2 + metr_qpd2_y2) / (1500.f);  // convert to um
+    // float metr_qpd2_y2_corr = (metr_qpd2_x2 - metr_qpd2_y2) / (1500.f);   // convert to um
+    // float metr_qpd2_i1_corr = metr_qpd2_i1 * -1e-6f;                      // intensity is positive, approx. 1.0
+    // float metr_qpd2_i2_corr = metr_qpd2_i2 * 1e-6f;                       // approx 1.0
 
     // normalize with intensity
     metr_qpd1_x1_corr /= metr_qpd1_i1_corr;
     metr_qpd1_y1_corr /= metr_qpd1_i1_corr;
     metr_qpd1_x2_corr /= metr_qpd1_i2_corr;
     metr_qpd1_y2_corr /= metr_qpd1_i2_corr;
+    // metr_qpd2_x1_corr /= metr_qpd2_i1_corr;
+    // metr_qpd2_y1_corr /= metr_qpd2_i1_corr;
+    // metr_qpd2_x2_corr /= metr_qpd2_i2_corr;
+    // metr_qpd2_y2_corr /= metr_qpd2_i2_corr;
 
     static EthercatData data;
     data.buffer_index = buffer_index;
@@ -226,6 +249,12 @@ class EthercatTapReader {
     data.metr_qpd[3] = metr_qpd1_x2_corr;
     data.metr_qpd[4] = metr_qpd1_y2_corr;
     data.metr_qpd[5] = metr_qpd1_i2_corr;
+    data.metr_qpd[6] = metr_qpd2_x1_corr;
+    data.metr_qpd[7] = metr_qpd2_y1_corr;
+    data.metr_qpd[8] = metr_qpd2_i1_corr;
+    data.metr_qpd[9] = metr_qpd2_x2_corr;
+    data.metr_qpd[10] = metr_qpd2_y2_corr;
+    data.metr_qpd[11] = metr_qpd2_i2_corr;
 
     return data;
   }

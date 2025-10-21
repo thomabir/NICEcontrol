@@ -303,8 +303,9 @@ class NiceGui {
 
       // plot label names
       static const char *plot_labels[16] = {
-          "Shear UP", "Shear LEFT", "Shear RIGHT", "Shear DOWN", "OPD back", "OPD ref",    "Pos ref",     "NC1",
-          "NC2",      "NC3",        "NC4",         "NC5",        "Point UP", "Point LEFT", "Point RIGHT", "Point DOWN"};
+          "QOD1 UP",        "QPD1 LEFT", "QPD1 RIGHT",     "QPD1 DOWN", "OPD back", "OPD ref",
+          "Pos ref (QPD1)", "NC1",       "Pos ref (QPD2)", "NC3",       "NC4",      "NC5",
+          "QPD2 UP",        "QPD2 LEFT", "QPD2 RIGHT",     "QPD2 DOWN"};
 
       // plot style
       static float thickness = 2;
@@ -472,7 +473,7 @@ class NiceGui {
     static ScrollingBufferT<double, double> dl_meas_buffer;
     static ScrollingBufferT<double, double> dl_cmd_buffer;
     static ScrollingBufferT<double, double> metr_opd_nm_buffer;
-    static ScrollingBufferT<double, double> metr_qpd_buffer[6];
+    static ScrollingBufferT<double, double> metr_qpd_buffer[12];
     static double t_ecat = 0;
 
     // get data and transfer to scrolling buffer
@@ -484,7 +485,7 @@ class NiceGui {
       dl_meas_buffer.AddPoint(t_ecat, m.dl_position_meas);
       dl_cmd_buffer.AddPoint(t_ecat, m.dl_position_cmd);
       metr_opd_nm_buffer.AddPoint(t_ecat, m.metr_opd_nm_unwrapped);
-      for (int i = 0; i < 6; i++) {
+      for (int i = 0; i < 12; i++) {
         metr_qpd_buffer[i].AddPoint(t_ecat, m.metr_qpd[i]);
       }
       // metr_qpd1_x1_buffer.AddPoint(t_ecat, m.metr_qpd1_x1);
@@ -596,7 +597,7 @@ class NiceGui {
         ImPlot::SetupAxisLimits(ImAxis_X1, t_ecat - history_length, t_ecat, ImGuiCond_Always);
         ImPlot::SetupAxisLimits(ImAxis_Y1, -1e6, 1e6);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 12; i++) {
           ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), thickness);
           ImPlot::PlotLine(plot_labels[i], &metr_qpd_buffer[i].Data[0].time, &metr_qpd_buffer[i].Data[0].value,
                            metr_qpd_buffer[i].Data.size(), 0, metr_qpd_buffer[i].Offset, 2 * sizeof(double));
