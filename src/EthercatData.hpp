@@ -13,6 +13,7 @@ struct EthercatData {
   // metrology
   float metr_opd_nm_unwrapped;
   std::array<float, 12> metr_qpd;  // QPD measurements for all 12 channels
+  std::array<float, 4> metr_pointing;
 
   // TODO: Gateway to monitor control loop flags and configurations:
   // Control flag

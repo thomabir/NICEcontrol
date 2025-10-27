@@ -17,7 +17,7 @@ class TangoGenericInterface {
   Tango::DeviceProxy *get_device() { return tango_device; }
 
  public:
-  TangoGenericInterface(const std::string &device_name = "detectors/flir/1")
+  TangoGenericInterface(const std::string &device_name = "motor/shutter/1")
       : tango_device(nullptr), device_name(device_name) {}
 
   ~TangoGenericInterface() {
@@ -184,6 +184,8 @@ class TangoGenericInterface {
 
   std::vector<std::string> get_commands() {
     std::vector<std::string> commands;
+
+    // connect
     try {
       auto reply = tango_device->command_list_query();  // FIXME: Segfaults if not connected to a device
       for (const auto &cmd_info : reply[0]) {

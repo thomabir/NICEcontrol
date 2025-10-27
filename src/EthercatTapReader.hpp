@@ -102,8 +102,10 @@ class EthercatTapReader {
     // prepare file
     std::string filename = "measurements/" + utils::get_iso_datestring() + "_ethercat.csv";
     file.open(filename);
-    file << "Buffer Index,EC timestamp (us),DL cmd (um),DL meas (um),OPD (nm), X1 (um), Y1 (um), I1 (a.u.), X2 (um), "
-            "Y2 (um), I2 (a.u.)\n";
+    file << "Buffer Index,EC timestamp (us),DL cmd (um),DL meas (um),OPD (nm), QPD1_X1 (um), QPD1_Y1 (um), QPD1_I1 "
+            "(a.u.), QPD1_X2 (um), "
+            "QPD1_Y2 (um), QPD1_I2 (a.u.), QPD2_X1 (um), QPD2_Y1 (um), QPD2_I1 (a.u.), QPD2_X2 (um), QPD2_Y2 (um), "
+            "QPD2_I2 (a.u.)\n";
 
     record_data.store(true);
     std::cout << "Started recording EtherCAT data." << std::endl;
@@ -202,40 +204,47 @@ class EthercatTapReader {
     int metr_qpd2_y2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 44);
     int metr_qpd2_i2 = get_int(packet + locations[TOTAL_SLAVES + 2] + 48);
 
-    std::cout << "qpd2: " << metr_qpd2_x1 << ", " << metr_qpd2_y1 << ", " << metr_qpd2_i1 << ", " << metr_qpd2_x2
-              << ", " << metr_qpd2_y2 << ", " << metr_qpd2_i2 << std::endl;
+    // std::cout << "qpd2: " << metr_qpd2_x1 << ", " << metr_qpd2_y1 << ", " << metr_qpd2_i1 << ", " << metr_qpd2_x2
+    //           << ", " << metr_qpd2_y2 << ", " << metr_qpd2_i2 << std::endl;
 
     // int working_counter = get_int(packet + length - 2); // Last 2 bytes of the packet
 
     // process
-    float metr_qpd1_x1_corr = (metr_qpd1_x1 + metr_qpd1_y1) / (1500.f);   // convert to um
+    float metr_qpd1_x1_corr = -(metr_qpd1_x1 + metr_qpd1_y1) / (1500.f);  // convert to um
     float metr_qpd1_y1_corr = (metr_qpd1_y1 - metr_qpd1_x1) / (1500.f);   // convert to um
-    float metr_qpd1_x2_corr = -(metr_qpd1_x2 + metr_qpd1_y2) / (1500.f);  // convert to um
+    float metr_qpd1_x2_corr = (metr_qpd1_x2 + metr_qpd1_y2) / (1500.f);   // convert to um
     float metr_qpd1_y2_corr = (metr_qpd1_x2 - metr_qpd1_y2) / (1500.f);   // convert to um
     float metr_qpd1_i1_corr = metr_qpd1_i1 * -1e-6f;                      // intensity is positive, approx. 1.0
     float metr_qpd1_i2_corr = metr_qpd1_i2 * 1e-6f;                       // approx 1.0
-    float metr_qpd2_x1_corr = metr_qpd2_x1;
-    float metr_qpd2_y1_corr = metr_qpd2_y1;
-    float metr_qpd2_x2_corr = metr_qpd2_x2;
-    float metr_qpd2_y2_corr = metr_qpd2_y2;
-    float metr_qpd2_i1_corr = metr_qpd2_i1;
-    float metr_qpd2_i2_corr = metr_qpd2_i2;
-    // float metr_qpd2_x1_corr = (metr_qpd2_x1 + metr_qpd2_y1) / (1500.f);   // convert to um
-    // float metr_qpd2_y1_corr = (metr_qpd2_y1 - metr_qpd2_x1) / (1500.f);   // convert to um
-    // float metr_qpd2_x2_corr = -(metr_qpd2_x2 + metr_qpd2_y2) / (1500.f);  // convert to um
-    // float metr_qpd2_y2_corr = (metr_qpd2_x2 - metr_qpd2_y2) / (1500.f);   // convert to um
-    // float metr_qpd2_i1_corr = metr_qpd2_i1 * -1e-6f;                      // intensity is positive, approx. 1.0
-    // float metr_qpd2_i2_corr = metr_qpd2_i2 * 1e-6f;                       // approx 1.0
+    // float metr_qpd2_x1_corr = metr_qpd2_x1;
+    // float metr_qpd2_y1_corr = metr_qpd2_y1;
+    // float metr_qpd2_x2_corr = metr_qpd2_x2;
+    // float metr_qpd2_y2_corr = metr_qpd2_y2;
+    // float metr_qpd2_i1_corr = metr_qpd2_i1;
+    // float metr_qpd2_i2_corr = metr_qpd2_i2;
+    float metr_qpd2_x1_corr = (metr_qpd2_x1 + metr_qpd2_y1) / (1500.f);   // convert to um
+    float metr_qpd2_y1_corr = (metr_qpd2_y1 - metr_qpd2_x1) / (1500.f);   // convert to um
+    float metr_qpd2_x2_corr = -(metr_qpd2_x2 + metr_qpd2_y2) / (1500.f);  // convert to um
+    float metr_qpd2_y2_corr = (metr_qpd2_x2 - metr_qpd2_y2) / (1500.f);   // convert to um
+    float metr_qpd2_i1_corr = metr_qpd2_i1 * -1e-6f;                      // intensity is positive, approx. 1.0
+    float metr_qpd2_i2_corr = metr_qpd2_i2 * 1e-6f;                       // approx 1.0
 
     // normalize with intensity
     metr_qpd1_x1_corr /= metr_qpd1_i1_corr;
     metr_qpd1_y1_corr /= metr_qpd1_i1_corr;
     metr_qpd1_x2_corr /= metr_qpd1_i2_corr;
     metr_qpd1_y2_corr /= metr_qpd1_i2_corr;
-    // metr_qpd2_x1_corr /= metr_qpd2_i1_corr;
-    // metr_qpd2_y1_corr /= metr_qpd2_i1_corr;
-    // metr_qpd2_x2_corr /= metr_qpd2_i2_corr;
-    // metr_qpd2_y2_corr /= metr_qpd2_i2_corr;
+    metr_qpd2_x1_corr /= metr_qpd2_i1_corr;
+    metr_qpd2_y1_corr /= metr_qpd2_i1_corr;
+    metr_qpd2_x2_corr /= metr_qpd2_i2_corr;
+    metr_qpd2_y2_corr /= metr_qpd2_i2_corr;
+
+    // calculate pointings
+    const float qpd_sep = 0.20f;                                              // separation between QPD1 and QPD2 in m
+    float metr_point_1x = (metr_qpd2_x1_corr - metr_qpd1_x1_corr) / qpd_sep;  // urad
+    float metr_point_1y = (metr_qpd2_y1_corr - metr_qpd1_y1_corr) / qpd_sep;  // urad
+    float metr_point_2x = (metr_qpd2_x2_corr - metr_qpd1_x2_corr) / qpd_sep;  // urad
+    float metr_point_2y = (metr_qpd2_y2_corr - metr_qpd1_y2_corr) / qpd_sep;  // urad
 
     static EthercatData data;
     data.buffer_index = buffer_index;
@@ -255,6 +264,13 @@ class EthercatTapReader {
     data.metr_qpd[9] = metr_qpd2_x2_corr;
     data.metr_qpd[10] = metr_qpd2_y2_corr;
     data.metr_qpd[11] = metr_qpd2_i2_corr;
+    data.metr_pointing[0] = metr_point_1x;
+    data.metr_pointing[1] = metr_point_1y;
+    data.metr_pointing[2] = metr_point_2x;
+    data.metr_pointing[3] = metr_point_2y;
+
+    // debug: print buffer index
+    // std::cout << "EtherCAT Buffer Index: " << buffer_index << std::endl;
 
     return data;
   }
@@ -264,7 +280,8 @@ class EthercatTapReader {
       file << data.buffer_index << "," << data.timestamp_us << "," << data.dl_position_cmd << ","
            << data.dl_position_meas << "," << data.metr_opd_nm_unwrapped << "," << data.metr_qpd[0] << ","
            << data.metr_qpd[1] << "," << data.metr_qpd[2] << "," << data.metr_qpd[3] << "," << data.metr_qpd[4] << ","
-           << data.metr_qpd[5] << "\n";
+           << data.metr_qpd[5] << "," << data.metr_qpd[6] << "," << data.metr_qpd[7] << "," << data.metr_qpd[8] << ","
+           << data.metr_qpd[9] << "," << data.metr_qpd[10] << "," << data.metr_qpd[11] << "\n";
     } else {
       std::cerr << "File is not open for recording EtherCAT data." << std::endl;
     }

@@ -257,6 +257,7 @@ class NiceGui {
     // shutter
     if (ImGui::CollapsingHeader("Shutter")) {
       static TangoGenericInterface shutter("motor/shutter/1");
+      shutter.create_device_proxy();
       static std::vector<std::string> command_list = shutter.get_commands();
 
       // buttons for all found commands
@@ -303,8 +304,8 @@ class NiceGui {
 
       // plot label names
       static const char *plot_labels[16] = {
-          "QOD1 UP",        "QPD1 LEFT", "QPD1 RIGHT",     "QPD1 DOWN", "OPD back", "OPD ref",
-          "Pos ref (QPD1)", "NC1",       "Pos ref (QPD2)", "NC3",       "NC4",      "NC5",
+          "QOD1 UP",        "QPD1 LEFT", "QPD1 RIGHT",     "QPD1 DOWN", "QPD1 sum", "OPD ref",
+          "Pos ref (QPD1)", "OPD back",  "Pos ref (QPD2)", "NC3",       "NC4",      "NC5",
           "QPD2 UP",        "QPD2 LEFT", "QPD2 RIGHT",     "QPD2 DOWN"};
 
       // plot style
@@ -474,6 +475,7 @@ class NiceGui {
     static ScrollingBufferT<double, double> dl_cmd_buffer;
     static ScrollingBufferT<double, double> metr_opd_nm_buffer;
     static ScrollingBufferT<double, double> metr_qpd_buffer[12];
+    static ScrollingBufferT<double, double> metr_pointing_buffer[4];
     static double t_ecat = 0;
 
     // get data and transfer to scrolling buffer
@@ -488,7 +490,9 @@ class NiceGui {
       for (int i = 0; i < 12; i++) {
         metr_qpd_buffer[i].AddPoint(t_ecat, m.metr_qpd[i]);
       }
-      // metr_qpd1_x1_buffer.AddPoint(t_ecat, m.metr_qpd1_x1);
+      for (int i = 0; i < 4; i++) {
+        metr_pointing_buffer[i].AddPoint(t_ecat, m.metr_pointing[i]);
+      }
     }
 
     // plot the data
@@ -601,6 +605,30 @@ class NiceGui {
           ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), thickness);
           ImPlot::PlotLine(plot_labels[i], &metr_qpd_buffer[i].Data[0].time, &metr_qpd_buffer[i].Data[0].value,
                            metr_qpd_buffer[i].Data.size(), 0, metr_qpd_buffer[i].Offset, 2 * sizeof(double));
+        }
+        ImPlot::EndPlot();
+      }
+
+      ImGui::TreePop();
+    }
+
+    if (ImGui::TreeNode("Pointing##EtherCAT Monitor")) {
+      static const char *plot_labels[4] = {"Beam 1 X", "Beam 1 Y", "Beam 2 X", "Beam 2 Y"};
+      static float history_length = 10.0f;
+      ImGui::SliderFloat("History length", &history_length, 0.1f, 10.0f, "%.2f s", ImGuiSliderFlags_Logarithmic);
+      static ImPlotAxisFlags xflags = ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels;
+      static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
+      static float thickness = 1.0f * io->FontGlobalScale;
+      if (ImPlot::BeginPlot("##EtherCAT Monitor Metrology Pointing", ImVec2(-1, 200 * io->FontGlobalScale))) {
+        ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, t_ecat - history_length, t_ecat, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, -1e6, 1e6);
+        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+        for (int i = 0; i < 4; i++) {
+          ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i), thickness);
+          ImPlot::PlotLine(plot_labels[i], &metr_pointing_buffer[i].Data[0].time,
+                           &metr_pointing_buffer[i].Data[0].value, metr_pointing_buffer[i].Data.size(), 0,
+                           metr_pointing_buffer[i].Offset, 2 * sizeof(double));
         }
         ImPlot::EndPlot();
       }
