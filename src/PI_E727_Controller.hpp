@@ -22,7 +22,7 @@ class PI_E727_Controller {
   char serialNumberString[1024];
   char name[1024];
   double offset = 1000.0;         // urad
-  double min_pos = 0.;            // urad
+  double min_pos = -2000.;        // urad
   double max_pos = 2000.;         // urad
   std::atomic<bool> is_moving_x;  // stage is unreachable while moving
   std::atomic<bool> is_moving_y;
