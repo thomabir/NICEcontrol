@@ -209,35 +209,24 @@ class EthercatTapReader {
 
     // int working_counter = get_int(packet + length - 2); // Last 2 bytes of the packet
 
-    // process
-    float metr_qpd1_x1_corr = -(metr_qpd1_x1 + metr_qpd1_y1) / (1500.f);  // convert to um
-    float metr_qpd1_y1_corr = (metr_qpd1_y1 - metr_qpd1_x1) / (1500.f);   // convert to um
-    float metr_qpd1_x2_corr = (metr_qpd1_x2 + metr_qpd1_y2) / (1500.f);   // convert to um
-    float metr_qpd1_y2_corr = (metr_qpd1_x2 - metr_qpd1_y2) / (1500.f);   // convert to um
-    float metr_qpd1_i1_corr = metr_qpd1_i1 * -1e-6f;                      // intensity is positive, approx. 1.0
-    float metr_qpd1_i2_corr = metr_qpd1_i2 * 1e-6f;                       // approx 1.0
-    // float metr_qpd2_x1_corr = metr_qpd2_x1;
-    // float metr_qpd2_y1_corr = metr_qpd2_y1;
-    // float metr_qpd2_x2_corr = metr_qpd2_x2;
-    // float metr_qpd2_y2_corr = metr_qpd2_y2;
-    // float metr_qpd2_i1_corr = metr_qpd2_i1;
-    // float metr_qpd2_i2_corr = metr_qpd2_i2;
-    float metr_qpd2_x1_corr = (metr_qpd2_x1 + metr_qpd2_y1) / (1500.f);   // convert to um
-    float metr_qpd2_y1_corr = (metr_qpd2_y1 - metr_qpd2_x1) / (1500.f);   // convert to um
-    float metr_qpd2_x2_corr = -(metr_qpd2_x2 + metr_qpd2_y2) / (1500.f);  // convert to um
-    float metr_qpd2_y2_corr = (metr_qpd2_x2 - metr_qpd2_y2) / (1500.f);   // convert to um
-    float metr_qpd2_i1_corr = metr_qpd2_i1 * -1e-6f;                      // intensity is positive, approx. 1.0
-    float metr_qpd2_i2_corr = metr_qpd2_i2 * 1e-6f;                       // approx 1.0
+    const float power_scale = 1e-6f;          // conversion factor from raw intensity to approx. 1.0
+    const float qpd_scale = 1500.f / 1.628f;  // scale factor to convert raw QPD values to um
 
-    // normalize with intensity
-    metr_qpd1_x1_corr /= metr_qpd1_i1_corr;
-    metr_qpd1_y1_corr /= metr_qpd1_i1_corr;
-    metr_qpd1_x2_corr /= metr_qpd1_i2_corr;
-    metr_qpd1_y2_corr /= metr_qpd1_i2_corr;
-    metr_qpd2_x1_corr /= metr_qpd2_i1_corr;
-    metr_qpd2_y1_corr /= metr_qpd2_i1_corr;
-    metr_qpd2_x2_corr /= metr_qpd2_i2_corr;
-    metr_qpd2_y2_corr /= metr_qpd2_i2_corr;
+    // process
+    float metr_qpd1_i1_corr = metr_qpd1_i1 * power_scale;                      // approx. 1.0
+    float metr_qpd1_i2_corr = metr_qpd1_i2 * power_scale;                      // approx 1.0
+    float metr_qpd1_x1_corr = metr_qpd1_x1 / (qpd_scale * metr_qpd1_i1_corr);  // convert to um
+    float metr_qpd1_y1_corr = metr_qpd1_y1 / (qpd_scale * metr_qpd1_i1_corr);  // convert to um
+    float metr_qpd1_x2_corr = metr_qpd1_x2 / (qpd_scale * metr_qpd1_i2_corr);  // convert to um
+    float metr_qpd1_y2_corr = metr_qpd1_y2 / (qpd_scale * metr_qpd1_i2_corr);  // convert to um
+
+    // note that x values are inverted, since there is an additional reflection in the setup
+    float metr_qpd2_i1_corr = metr_qpd2_i1 * power_scale;                       // approx. 1.0
+    float metr_qpd2_i2_corr = metr_qpd2_i2 * power_scale;                       // approx 1.0
+    float metr_qpd2_x1_corr = -metr_qpd2_x1 / (qpd_scale * metr_qpd2_i1_corr);  // convert to um
+    float metr_qpd2_y1_corr = metr_qpd2_y1 / (qpd_scale * metr_qpd2_i1_corr);   // convert to um
+    float metr_qpd2_x2_corr = -metr_qpd2_x2 / (qpd_scale * metr_qpd2_i2_corr);  // convert to um
+    float metr_qpd2_y2_corr = metr_qpd2_y2 / (qpd_scale * metr_qpd2_i2_corr);   // convert to um
 
     // calculate pointings
     const float qpd_sep = 0.20f;                                              // separation between QPD1 and QPD2 in m
