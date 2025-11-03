@@ -28,8 +28,8 @@ class ShearYActuator {
 };
 
 struct PiezoActuators {
-  char serial_number1[1024] = "0122040101";
-  char serial_number2[1024] = "0122042007";
+  char serial_number1[1024] = "0122042007";
+  char serial_number2[1024] = "0122040101";
   PI_E727_Controller tt1{serial_number1};
   PI_E727_Controller tt2{serial_number2};
   nF_EBD_Controller tt3{"/dev/ttyUSB2"};
