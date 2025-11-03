@@ -63,10 +63,11 @@ class ControlManager {
     }
   }
 
-  // beam control, coordinates at the spatial filter collimator entrance
-  void move_to_x1(float position) { shear_y1_cmd.store(position); }
+  // beam control, coordinates axes are at the spatial filter collimator entrance
+  // The minus sign is due to field inversion in the periscope
+  void move_to_x1(float position) { shear_y1_cmd.store(-position); }
   void move_to_y1(float position) { shear_x1_cmd.store(-position); }
-  void move_to_x2(float position) { shear_y2_cmd.store(-position); }
+  void move_to_x2(float position) { shear_y2_cmd.store(position); }
   void move_to_y2(float position) { shear_x2_cmd.store(position); }
 
   void set_shear_setpoints(float shear_x1, float shear_y1, float shear_x2, float shear_y2) {
