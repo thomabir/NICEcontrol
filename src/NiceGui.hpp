@@ -256,7 +256,7 @@ class NiceGui {
 
     // shutter
     if (ImGui::CollapsingHeader("Shutter")) {
-      static TangoGenericInterface shutter("motor/shutter/1");
+      static TangoGenericInterface shutter("motor/shutter/2");
       shutter.create_device_proxy();
       static std::vector<std::string> command_list = shutter.get_commands();
 
@@ -266,6 +266,24 @@ class NiceGui {
       for (const auto &command : command_list) {
         if (ImGui::Button(command.c_str())) {
           shutter.run_command(command);
+        }
+        ImGui::SameLine();
+      }
+      ImGui::NewLine();
+    }
+
+    // ND Filter
+    if (ImGui::CollapsingHeader("ND Filter")) {
+      static TangoGenericInterface ndfilter("motor/ndfilter/1");
+      ndfilter.create_device_proxy();
+      static std::vector<std::string> command_list = ndfilter.get_commands();
+
+      // buttons for all found commands
+      ImGui::Text("Auto-found commands:");
+      ImGui::SameLine();
+      for (const auto &command : command_list) {
+        if (ImGui::Button(command.c_str())) {
+          ndfilter.run_command(command);
         }
         ImGui::SameLine();
       }
@@ -423,12 +441,20 @@ class NiceGui {
     ImGui::Text("Open loop commands:");
     ImGui::DragFloat("X1##TipTiltRaw", &tip_tilt_raw_x1, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
                      ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SameLine();
+    ImGui::Text("(Encoder: %.0f)", res.piezos.tt1.readx());
     ImGui::DragFloat("Y1##TipTiltRaw", &tip_tilt_raw_y1, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
                      ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SameLine();
+    ImGui::Text("(Encoder: %.0f)", res.piezos.tt1.ready());
     ImGui::DragFloat("X2##TipTiltRaw", &tip_tilt_raw_x2, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
                      ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SameLine();
+    ImGui::Text("(Encoder: %.0f)", res.piezos.tt2.readx());
     ImGui::DragFloat("Y2##TipTiltRaw", &tip_tilt_raw_y2, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
                      ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SameLine();
+    ImGui::Text("(Encoder: %.0f)", res.piezos.tt2.ready());
 
     // control loop configuration
     static float shear_x1_sp = 0.0f;
