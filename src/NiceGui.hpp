@@ -63,6 +63,8 @@
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif
 
+class PlcConnection;
+
 class NiceGui {
  public:
   NiceGui(SharedResources &resources, Workers &workers) : res(resources), workers(workers) {}
@@ -94,8 +96,16 @@ class NiceGui {
   ImFont *mainFont = nullptr;
   ImVec4 clear_color;
   float t_gui = 0;
+  PlcConnection *plc_cached = nullptr;
 
   bool ShouldClose() const { return glfwWindowShouldClose(window); }
+
+  PlcConnection &plc() {
+    if (!plc_cached) {
+      plc_cached = &res.ethercat_ads.plc();
+    }
+    return *plc_cached;
+  }
 
   void RenderFrame() {
     glfwPollEvents();
@@ -390,16 +400,16 @@ class NiceGui {
       ImGui::RadioButton("Closed loop##OPD", &gui_opd_loop_select, 2);
 
       // OPD setpoint
-      static float opd_setpoint_ethercat = 0.0f;
-      const float opd_setpoint_min = -1e6, opd_setpoint_max = 1e6;
-      ImGui::DragFloat("OPD Setpoint", &opd_setpoint_ethercat, 0.1f, opd_setpoint_min, opd_setpoint_max, "%.2f nm",
+      static float opd_setpoint_um = 0.0f;
+      const float opd_setpoint_min = -1e3, opd_setpoint_max = 1e3;
+      ImGui::DragFloat("OPD Setpoint", &opd_setpoint_um, 1e-4, opd_setpoint_min, opd_setpoint_max, "%.4f um",
                        ImGuiSliderFlags_AlwaysClamp);
 
       // P and I control loop gains
-      static float opd_p_ethercat = 0.0f;
-      static float opd_i_ethercat = 100.0f;
-      ImGui::SliderFloat("P##OPD EtherCAT", &opd_p_ethercat, 1e-4f, 1e0f, "%.5f", ImGuiSliderFlags_Logarithmic);
-      ImGui::SliderFloat("I##OPD EtherCAT", &opd_i_ethercat, 1e-1f, 1e3f, "%.5f", ImGuiSliderFlags_Logarithmic);
+      static float opd_kp = 0.0f;
+      static float opd_ki = 100.0f;
+      ImGui::SliderFloat("P##OPD EtherCAT", &opd_kp, 1e-4f, 1e0f, "%.5f", ImGuiSliderFlags_Logarithmic);
+      ImGui::SliderFloat("I##OPD EtherCAT", &opd_ki, 1e-1f, 1e3f, "%.5f", ImGuiSliderFlags_Logarithmic);
 
       // Reset phase unwrap checkbox
       static bool reset_phase_unwrap = false;
@@ -412,8 +422,10 @@ class NiceGui {
       const int udp_port = 8888;
       const char *udp_ip = "192.168.88.177";
       static EthercatUdpInterface ec_udp_if(udp_ip, udp_port);
-      ec_udp_if.send_commands(opd_setpoint_ethercat * 1.0e-3, opd_p_ethercat, opd_i_ethercat, reset_phase_unwrap,
-                              gui_opd_loop_select == 2);
+      ec_udp_if.send_commands(opd_setpoint_um * 1.0e-3, opd_kp, opd_ki, reset_phase_unwrap, gui_opd_loop_select == 2);
+
+      // send reset_phase_unwrap as an ADS write
+      plc().write<bool>("MAIN.reset_unwrap", reset_phase_unwrap);
 
       ImGui::TreePop();
     }
@@ -509,16 +521,26 @@ class NiceGui {
     static auto consumer = res.ethercat.data.subscribe();
     while (res.ethercat.data.try_pop(consumer, ethercat_data)) {
       auto m = ethercat_data;
-      t_ecat = m.timestamp_us * 1e-6;  // convert microseconds to seconds
-      dl_meas_buffer.AddPoint(t_ecat, m.dl_position_meas);
+      // t_ecat = m.timestamp_us * 1e-6;  // convert microseconds to seconds
+      // dl_meas_buffer.AddPoint(t_ecat, m.dl_position_meas);
       dl_cmd_buffer.AddPoint(t_ecat, m.dl_position_cmd);
-      metr_opd_nm_buffer.AddPoint(t_ecat, m.metr_opd_nm_unwrapped);
+      // metr_opd_nm_buffer.AddPoint(t_ecat, m.metr_opd_nm_unwrapped);
       for (int i = 0; i < 12; i++) {
         metr_qpd_buffer[i].AddPoint(t_ecat, m.metr_qpd[i]);
       }
       for (int i = 0; i < 4; i++) {
         metr_pointing_buffer[i].AddPoint(t_ecat, m.metr_pointing[i]);
       }
+    }
+
+    // alternative source: ADS reader
+    static auto ads_consumer = res.ethercat_ads.data.subscribe();
+    PlcSample plc_sample;
+    while (res.ethercat_ads.data.try_pop(ads_consumer, plc_sample)) {
+      t_ecat = plc_sample.timestamp_ns * 1e-9;  // convert nanoseconds to seconds
+      dl_meas_buffer.AddPoint(t_ecat, plc_sample.dl_pos_um);
+      // dl_cmd_buffer.AddPoint(t_ecat, plc_sample.dl_cmd_um);
+      metr_opd_nm_buffer.AddPoint(t_ecat, plc_sample.opd_um * 1e3);  // convert microns to nanometers
     }
 
     // plot the data

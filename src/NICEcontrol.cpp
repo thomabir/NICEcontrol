@@ -10,6 +10,7 @@ int main() {
   // Start the worker threads
   workers.metrology_reader.start();
   workers.ethercat_reader.start();
+  workers.ethercat_ads_reader.start();
   workers.beam_controller.start();
 
   // Start the GUI thread
@@ -21,6 +22,7 @@ int main() {
   // request the workers to stop
   workers.metrology_reader.request_stop();
   workers.ethercat_reader.request_stop();
+  workers.ethercat_ads_reader.request_stop();
   // workers.beam_controller.request_stop();
 
   return 0;
