@@ -69,6 +69,51 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
 
     In `nF_interface.h`, add the line `#define LINUX` at the beginning
 
+- Install the [Beckhoff ADS library](https://github.com/Beckhoff/ADS) to communicate with the PLC:
+
+  ```sh
+  git clone https://github.com/Beckhoff/ADS.git
+  cd ADS
+  ```
+
+  In the `meson.build`, delete the lines
+
+  ```txt
+  'AdsLib/TwinCAT/AdsDef.h',
+  'AdsLib/TwinCAT/AdsLib.h',
+  'AdsLib/standalone/AdsDef.h',
+  'AdsLib/standalone/AdsLib.h',
+  ```
+
+  and add the lines
+
+```txt
+  install_headers(
+    'AdsLib/standalone/AdsDef.h',
+    'AdsLib/standalone/AdsLib.h',
+    subdir: 'AdsLib/standalone'
+  )
+
+  install_headers(
+    'AdsLib/TwinCAT/AdsDef.h',
+    'AdsLib/TwinCAT/AdsLib.h',
+    subdir: 'AdsLib/TwinCAT'
+  )
+```
+
+Reason: cannot use `AdsSetLocalAddress` otherwise.
+The default installation of the library overwrites the TwinCAT headers with the standalone ones, which do not have the `AdsSetLocalAddress` function.
+Probably a bug in the `meson.build` file of the library.
+
+Then, compile and install the library:
+
+```sh
+meson setup build
+ninja -C build
+sudo meson install -C build
+sudo ldconfig
+```
+
 ### NICEcontrol
 
 Clone the `NICEcontrol` repository and its submodules

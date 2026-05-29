@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 
+#include "EthercatAdsResources.hpp"
 #include "EthercatResources.hpp"
 #include "MeasurementT.hpp"
 #include "PiezoActuators.hpp"
@@ -16,5 +17,6 @@ struct MetrologyResources {
 struct SharedResources {
   MetrologyResources metrology;
   EthercatResources ethercat;
+  EthercatAdsResources ethercat_ads;
   PiezoActuators piezos;
 };

@@ -55,7 +55,8 @@ LIBS += $(LIB_TANGO_DIR) -ltango \
 					-lCOS4 \
 					-lomnithread \
 					-lzmq \
-					-lpthread
+					-lpthread \
+					-lAdsLib # Beckhoff ADS to communicate with PLC
 
 ##---------------------------------------------------------------------
 ## Dependency files
