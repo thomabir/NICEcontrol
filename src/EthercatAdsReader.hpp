@@ -12,7 +12,7 @@
 #include "PlcSample.hpp"
 #include "SPMCRingBuffer.hpp"
 
-static constexpr size_t PLC_BUF_SIZE = 2024;  // must match PLC's STREAM_BUF_SIZE
+static constexpr size_t PLC_BUF_SIZE = 512;  // must match PLC's STREAM_BUF_SIZE
 #pragma pack(push, 1)
 struct PlcBuffer {
   uint32_t buffer_no;  // most recent sample index
