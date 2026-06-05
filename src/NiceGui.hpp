@@ -98,6 +98,16 @@ class NiceGui {
   float t_gui = 0;
   PlcConnection *plc_cached = nullptr;
 
+  struct PhotometryResult {
+    double sum = 0.0;
+    int x_min = 0;
+    int x_max = 0;
+    int y_min = 0;
+    int y_max = 0;
+    int x_extent = 0;
+    int y_extent = 0;
+  };
+
   bool ShouldClose() const { return glfwWindowShouldClose(window); }
 
   PlcConnection &plc() {
@@ -136,6 +146,52 @@ class NiceGui {
     }
 
     glfwSwapBuffers(window);
+  }
+
+  static std::vector<PhotometryResult> CalculatePhotometry(const Image<int> &img,
+                                                           const std::vector<ImPlotRect> &rects_in) {
+    std::vector<PhotometryResult> results;
+    results.reserve(rects_in.size());
+    if (img.data.empty() || img.width == 0 || img.height == 0) {
+      return results;
+    }
+    for (const auto &rect_in : rects_in) {
+      PhotometryResult result;
+      int x0 = static_cast<int>(std::floor(rect_in.X.Min));
+      int x1 = static_cast<int>(std::floor(rect_in.X.Max));
+      int y0_plot = static_cast<int>(std::floor(rect_in.Y.Min));
+      int y1_plot = static_cast<int>(std::floor(rect_in.Y.Max));
+      if (x0 > x1) {
+        std::swap(x0, x1);
+      }
+      if (y0_plot > y1_plot) {
+        std::swap(y0_plot, y1_plot);
+      }
+      int y0 = img.height - 1 - y1_plot;
+      int y1 = img.height - 1 - y0_plot;
+      if (y0 > y1) {
+        std::swap(y0, y1);
+      }
+      x0 = std::max(0, std::min(x0, static_cast<int>(img.width - 1)));
+      x1 = std::max(0, std::min(x1, static_cast<int>(img.width - 1)));
+      y0 = std::max(0, std::min(y0, static_cast<int>(img.height - 1)));
+      y1 = std::max(0, std::min(y1, static_cast<int>(img.height - 1)));
+      result.x_min = x0;
+      result.x_max = x1;
+      result.y_min = y0;
+      result.y_max = y1;
+      result.x_extent = x1 - x0;
+      result.y_extent = y1 - y0;
+      double sum = 0.0;
+      for (int y = y0; y <= y1; y++) {
+        for (int x = x0; x <= x1; x++) {
+          sum += img.data[x + y * img.width];
+        }
+      }
+      result.sum = sum;
+      results.push_back(result);
+    }
+    return results;
   }
 
   bool Initialize() {
@@ -923,9 +979,10 @@ class NiceGui {
     float plot_width = ImGui::GetContentRegionAvail().x - 80 * io->FontGlobalScale;  // leave space for colormap
     float plot_height = plot_width / aspect_ratio;
 
-    // selection rectangle
-    static ImPlotRect rect = {0, double(image.width) / 2, 0, double(image.height) / 2};  // {X.Min, X.Max, Y.Min, Y.Max}
-    static bool rect_clicked = false, rect_hovered = false, rect_held = false;
+    // selection rectangles
+    static int rect_count = 1;
+    static int rect_count_last = rect_count;
+    static std::vector<ImPlotRect> rects;
     ImPlotDragToolFlags flags = ImPlotDragToolFlags_None;
 
     // subtract background if requested
@@ -975,37 +1032,70 @@ class NiceGui {
       ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
       ImPlot::PlotHeatmap("heat1", values, image.height, image.width, scale_min, scale_max, nullptr, ImPlotPoint(0, 0),
                           ImPlotPoint(image.width, image.height));
-      ImPlot::DragRect(0, &rect.X.Min, &rect.Y.Min, &rect.X.Max, &rect.Y.Max, ImVec4(1, 0, 0, 0.5), flags,
-                       &rect_clicked, &rect_hovered, &rect_held);
+      if (rect_count != rect_count_last) {
+        rect_count_last = rect_count;
+        rects.resize(rect_count);
+      }
+      if (rects.empty()) {
+        rects.resize(rect_count);
+      }
+      for (int i = 0; i < rect_count; i++) {
+        if (rects[i].X.Min == rects[i].X.Max && rects[i].Y.Min == rects[i].Y.Max) {
+          const double x_offset = (image.width * 0.05) * i;
+          const double y_offset = (image.height * 0.05) * i;
+          rects[i] = {0 + x_offset, double(image.width) / 2 + x_offset, 0 + y_offset,
+                      double(image.height) / 2 + y_offset};
+        }
+        bool rect_clicked = false;
+        bool rect_hovered = false;
+        bool rect_held = false;
+        // const ImVec4 rect_color = ImPlot::GetColormapColor(i % ImPlot::GetColormapCount());
+        // white
+        const ImVec4 rect_color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+        ImPlot::DragRect(i, &rects[i].X.Min, &rects[i].Y.Min, &rects[i].X.Max, &rects[i].Y.Max,
+                         ImVec4(rect_color.x, rect_color.y, rect_color.z, 1.0f), flags, &rect_clicked, &rect_hovered,
+                         &rect_held);
+        const ImPlotPoint rect_min(rects[i].X.Min, rects[i].Y.Min);
+        const ImPlotPoint rect_max(rects[i].X.Max, rects[i].Y.Max);
+        ImVec2 pixel_min = ImPlot::PlotToPixels(rect_min);
+        ImVec2 pixel_max = ImPlot::PlotToPixels(rect_max);
+        if (pixel_min.x > pixel_max.x) {
+          std::swap(pixel_min.x, pixel_max.x);
+        }
+        if (pixel_min.y > pixel_max.y) {
+          std::swap(pixel_min.y, pixel_max.y);
+        }
+        const ImU32 border_color =
+            ImGui::ColorConvertFloat4ToU32(ImVec4(rect_color.x, rect_color.y, rect_color.z, 1.0f));
+        ImPlot::PushPlotClipRect();
+        ImPlot::GetPlotDrawList()->AddRect(pixel_min, pixel_max, border_color, 0.0f, 0, 2.5f);
+        ImPlot::PopPlotClipRect();
+        const double label_x = rects[i].X.Min;
+        const double label_y = rects[i].Y.Max;
+        const std::string label = std::to_string(i + 1);
+        ImGui::SetWindowFontScale(2.0f);
+        ImPlot::PlotText(label.c_str(), label_x, label_y, ImVec2(24.0f, 24.0f));
+        ImGui::SetWindowFontScale(1.0f);
+      }
       ImPlot::EndPlot();
     }
     ImGui::SameLine();
     ImPlot::ColormapScale("##HeatScale", scale_min, scale_max, ImVec2(80 * io->FontGlobalScale, plot_height));
     ImPlot::PopColormap();
 
-    // get rect coordinates as integers and flip y axis
-    int x_min = static_cast<int>(rect.X.Min);
-    int x_max = static_cast<int>(rect.X.Max);
-    int y_min = static_cast<int>(rect.Y.Min);
-    int y_max = static_cast<int>(rect.Y.Max);
-    int x_extent = x_max - x_min;
-    int y_extent = y_max - y_min;
-    y_min += y_extent;
-    y_max -= y_extent;
-    y_min = image.height - y_min;
-    y_max = image.height - y_max;
+    ImGui::Text("Photometry rectangles:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(120);
+    ImGui::InputInt("##PhotometryRectCount", &rect_count, 1, 1);
+    rect_count = std::max(1, std::min(rect_count, 8));
 
     // UI for intensity normalization
-    static float intensity_of_one = 1.0f;
     static bool apply_intensity_of_one = false;
-    static float nd_filter_factor = 1.0f;
     static bool apply_nd_filter = false;
+    static float nd_filter_factor = 1.0f;
     ImGui::Text("Intensity normalization:");
     ImGui::SameLine();
     ImGui::Checkbox("##Apply one", &apply_intensity_of_one);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(200);
-    ImGui::InputFloat("##I_0", &intensity_of_one, 0.01f, 0.1f, "%.2f");
     ImGui::SameLine();
 
     ImGui::Text("NF filter factor:");
@@ -1015,42 +1105,34 @@ class NiceGui {
     ImGui::SetNextItemWidth(200);
     ImGui::InputFloat("##ND filter factor", &nd_filter_factor, 0.01f, 0.1f, "%.2f");
 
-    // Calculate mean intensity in the selected region
-    static ScrollingBufferT<double, double> mean_intensity_buffer(10000);
-    if (image.width > 0 && image.height > 0 && !image.data.empty()) {
-      // Ensure bounds
-      // x_min = std::max(0, std::min(x_min, static_cast<int>image.width - 1));
-      // x_max = std::max(0, std::min(x_max, static_cast<int>image.width - 1));
-      // y_min = std::max(0, std::min(y_min, static_cast<int>image.height - 1));
-      // y_max = std::max(0, std::min(y_max, static_cast<int>image.height - 1));
-
-      double sum = 0;
-      int count = 0;
-
-      for (int y = y_min; y <= y_max; y++) {
-        for (int x = x_min; x <= x_max; x++) {
-          sum += values[x + y * image.width];  // row major order
-          // example: to get value at (5,0), get values[5]
-          // example: to get value at (0,1), get values[width]
-          count++;
-        }
-      }
-
-      if (count > 0) {
-        double mean = sum;  /// count;
-        // apply intensity normalization if requested
-        if (apply_intensity_of_one) {
-          mean /= intensity_of_one;
-        }
-        if (apply_nd_filter) {
-          mean /= nd_filter_factor;
-        }
-        ImGui::Text("Sum intensity: %.3e", mean);
-        mean_intensity_buffer.AddPoint(t_gui, mean);
-      }
+    static std::vector<ScrollingBufferT<double, double>> photometry_buffers;
+    static std::vector<float> intensity_of_one_per_rect;
+    if (photometry_buffers.size() != static_cast<size_t>(rect_count)) {
+      photometry_buffers.resize(rect_count, ScrollingBufferT<double, double>(10000));
     }
-
-    ImGui::Text("Selection: (%d,%d) to (%d,%d)  Size: %d x %d pixels", x_min, y_min, x_max, y_max, x_extent, y_extent);
+    if (intensity_of_one_per_rect.size() != static_cast<size_t>(rect_count)) {
+      intensity_of_one_per_rect.resize(rect_count, 1.0f);
+    }
+    const auto photometry_results = CalculatePhotometry(image, rects);
+    for (size_t i = 0; i < photometry_results.size(); i++) {
+      double sum = photometry_results[i].sum;
+      if (apply_intensity_of_one) {
+        sum /= intensity_of_one_per_rect[i];
+      }
+      if (apply_nd_filter) {
+        sum /= nd_filter_factor;
+      }
+      ImGui::Text("Rect %zu: %.3e counts, ", i + 1, sum);
+      ImGui::SameLine();
+      ImGui::Text("I_0:");
+      ImGui::SameLine();
+      ImGui::SetNextItemWidth(120);
+      ImGui::InputFloat(("##I_0_" + std::to_string(i)).c_str(), &intensity_of_one_per_rect[i], 0.01f, 0.1f, "%.2f");
+      photometry_buffers[i].AddPoint(t_gui, sum);
+      // ImGui::Text("Rect %zu selection: (%d,%d) to (%d,%d)  Size: %d x %d pixels", i + 1,
+      //             photometry_results[i].x_min, photometry_results[i].y_min, photometry_results[i].x_max,
+      //             photometry_results[i].y_max, photometry_results[i].x_extent, photometry_results[i].y_extent);
+    }
 
     // plot a time series of the mean intensity
     static float mean_intensity_history_length = 10.f;
@@ -1062,9 +1144,15 @@ class NiceGui {
       ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - mean_intensity_history_length, t_gui, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      ImPlot::SetNextLineStyle(IMPLOT_AUTO_COL, 2);
-      ImPlot::PlotLine("Sum Intensity", &mean_intensity_buffer.Data[0].time, &mean_intensity_buffer.Data[0].value,
-                       mean_intensity_buffer.Data.size(), 0, mean_intensity_buffer.Offset, 2 * sizeof(double));
+      for (size_t i = 0; i < photometry_buffers.size(); i++) {
+        if (photometry_buffers[i].Data.empty()) {
+          continue;
+        }
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i % ImPlot::GetColormapCount()), 2);
+        const std::string label = std::to_string(i + 1);
+        ImPlot::PlotLine(label.c_str(), &photometry_buffers[i].Data[0].time, &photometry_buffers[i].Data[0].value,
+                         photometry_buffers[i].Data.size(), 0, photometry_buffers[i].Offset, 2 * sizeof(double));
+      }
       ImPlot::EndPlot();
     }
 
