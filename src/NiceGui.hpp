@@ -1049,14 +1049,33 @@ class NiceGui {
         bool rect_clicked = false;
         bool rect_hovered = false;
         bool rect_held = false;
-        const ImVec4 rect_color = ImPlot::GetColormapColor(i % ImPlot::GetColormapCount());
+        // const ImVec4 rect_color = ImPlot::GetColormapColor(i % ImPlot::GetColormapCount());
+        // white
+        const ImVec4 rect_color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
         ImPlot::DragRect(i, &rects[i].X.Min, &rects[i].Y.Min, &rects[i].X.Max, &rects[i].Y.Max,
-                         ImVec4(rect_color.x, rect_color.y, rect_color.z, 0.5f), flags, &rect_clicked, &rect_hovered,
+                         ImVec4(rect_color.x, rect_color.y, rect_color.z, 1.0f), flags, &rect_clicked, &rect_hovered,
                          &rect_held);
-        const double label_x = 0.5 * (rects[i].X.Min + rects[i].X.Max);
-        const double label_y = 0.5 * (rects[i].Y.Min + rects[i].Y.Max);
+        const ImPlotPoint rect_min(rects[i].X.Min, rects[i].Y.Min);
+        const ImPlotPoint rect_max(rects[i].X.Max, rects[i].Y.Max);
+        ImVec2 pixel_min = ImPlot::PlotToPixels(rect_min);
+        ImVec2 pixel_max = ImPlot::PlotToPixels(rect_max);
+        if (pixel_min.x > pixel_max.x) {
+          std::swap(pixel_min.x, pixel_max.x);
+        }
+        if (pixel_min.y > pixel_max.y) {
+          std::swap(pixel_min.y, pixel_max.y);
+        }
+        const ImU32 border_color =
+            ImGui::ColorConvertFloat4ToU32(ImVec4(rect_color.x, rect_color.y, rect_color.z, 1.0f));
+        ImPlot::PushPlotClipRect();
+        ImPlot::GetPlotDrawList()->AddRect(pixel_min, pixel_max, border_color, 0.0f, 0, 2.5f);
+        ImPlot::PopPlotClipRect();
+        const double label_x = rects[i].X.Min;
+        const double label_y = rects[i].Y.Max;
         const std::string label = std::to_string(i + 1);
-        ImPlot::PlotText(label.c_str(), label_x, label_y);
+        ImGui::SetWindowFontScale(2.0f);
+        ImPlot::PlotText(label.c_str(), label_x, label_y, ImVec2(24.0f, 24.0f));
+        ImGui::SetWindowFontScale(1.0f);
       }
       ImPlot::EndPlot();
     }
