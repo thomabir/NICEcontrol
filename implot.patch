@@ -1,0 +1,23 @@
+diff --git a/implot.cpp b/implot.cpp
+index effc52f..7f371bb 100644
+--- a/implot.cpp
++++ b/implot.cpp
+@@ -3900,7 +3900,7 @@ IMPLOT_API void TagYV(double y, const ImVec4& color, const char* fmt, va_list ar
+     TagV(gp.CurrentPlot->CurrentY, y, color, fmt, args);
+ }
+
+-static const float DRAG_GRAB_HALF_SIZE = 4.0f;
++static const float DRAG_GRAB_HALF_SIZE = 8.0f;
+
+ bool DragPoint(int n_id, double* x, double* y, const ImVec4& col, float radius, ImPlotDragToolFlags flags, bool* out_clicked, bool* out_hovered, bool* out_held) {
+     ImGui::PushID("#IMPLOT_DRAG_POINT");
+@@ -4095,8 +4095,7 @@ bool DragRect(int n_id, double* x_min, double* y_min, double* x_max, double* y_m
+
+     ImVec4 color = IsColorAuto(col) ? ImGui::GetStyleColorVec4(ImGuiCol_Text) : col;
+     ImU32 col32 = ImGui::ColorConvertFloat4ToU32(color);
+-    color.w *= 0.25f;
+-    ImU32 col32_a = ImGui::ColorConvertFloat4ToU32(color);
++    ImU32 col32_a = ImGui::ColorConvertFloat4ToU32(ImVec4(color.x, color.y, color.z, 0.0f));
+     const ImGuiID id = ImGui::GetCurrentWindow()->GetID(n_id);
+
+     bool modified = false;

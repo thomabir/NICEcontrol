@@ -14,6 +14,7 @@
 EXE = bin/NICEcontrol
 IMGUI_DIR = lib/imgui
 IMPLOT_DIR = lib/implot
+IMPLOT_PATCH = implot.patch
 FONT_DIR = lib/fonts
 SRC_DIR = src
 BUILD_DIR = build
@@ -131,7 +132,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(GLFW34_LIB)
 $(BUILD_DIR)/%.o: $(IMGUI_DIR)/%.cpp | $(GLFW34_LIB)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(BUILD_DIR)/%.o: $(IMPLOT_DIR)/%.cpp | $(GLFW34_LIB)
+$(BUILD_DIR)/%.o: $(IMPLOT_DIR)/%.cpp | $(GLFW34_LIB) $(BUILD_DIR)/.implot_patched
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/%.o: $(IMGUI_DIR)/backends/%.cpp | $(GLFW34_LIB)
@@ -153,7 +154,6 @@ $(GLFW34_DIR)/include/GLFW/glfw3.h: $(GLFW34_LIB)
 	@:
 
 # Build GLFW 3.4 from source, applying our monitor-hotplug null-check patch.
-# Clones from the upstream 3.4 tag if not present; idempotent on re-runs.
 $(GLFW34_LIB): $(GLFW34_PATCH)
 	@if [ ! -f "$(GLFW34_DIR)/CMakeLists.txt" ]; then \
 		echo "Cloning GLFW 3.4..."; \
@@ -167,6 +167,14 @@ $(GLFW34_LIB): $(GLFW34_PATCH)
 		-DGLFW_BUILD_DOCS=OFF -DBUILD_SHARED_LIBS=OFF \
 		-DCMAKE_BUILD_TYPE=Release -Wno-dev --log-level=ERROR
 	@$(MAKE) -C $(GLFW34_DIR)/build -j$$(nproc) --no-print-directory
+
+# Patch implot: double the drag-handle grab radius and make DragRect fill transparent.
+$(BUILD_DIR)/.implot_patched: $(IMPLOT_PATCH)
+	@mkdir -p $(BUILD_DIR)
+	@git -C $(IMPLOT_DIR) apply --check $(CURDIR)/$(IMPLOT_PATCH) 2>/dev/null \
+		&& git -C $(IMPLOT_DIR) apply $(CURDIR)/$(IMPLOT_PATCH) \
+		|| true
+	@touch $@
 
 clean:
 	rm -f $(EXE) $(OBJS)
