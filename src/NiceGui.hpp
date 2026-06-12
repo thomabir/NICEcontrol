@@ -26,20 +26,6 @@
 #endif
 #include <GLFW/glfw3.h>
 
-#ifdef __linux__
-#include <X11/Xlib.h>
-// GLFW 3.3.x bug: XRRGetCrtcInfo() is called for newly-added CRTCs during
-// monitor hotplug before the X server finishes initializing them, triggering
-// a BadRRCrtc error. The default X11 error handler calls exit(), causing a
-// crash. We suppress RANDR errors to keep the app alive through hotplug events.
-static int g_x11RandrOpcode = 0;
-static int GlfwX11ErrorHandler(Display *, XErrorEvent *ev) {
-  if (ev->request_code == g_x11RandrOpcode) return 0;
-  fprintf(stderr, "X11 error: request_code=%d error_code=%d\n", ev->request_code, ev->error_code);
-  return 0;
-}
-#endif
-
 #include "../lib/fonts/SourceSans3Regular.cpp"
 #include "../lib/implot/implot.h"
 
@@ -212,19 +198,9 @@ class NiceGui {
     // Set GLFW error callback
     glfwSetErrorCallback(glfw_error_callback);
 
-#ifdef __linux__
-    // Install X11 error handler before glfwInit() to survive monitor hotplug.
-    // Query the RANDR extension opcode so we can filter specifically.
-    {
-      Display *dpy = XOpenDisplay(nullptr);
-      if (dpy) {
-        int event_base, error_base;
-        XQueryExtension(dpy, "RANDR", &g_x11RandrOpcode, &event_base, &error_base);
-        XCloseDisplay(dpy);
-      }
-      XSetErrorHandler(GlfwX11ErrorHandler);
-    }
-#endif
+    // GLFW 3.4 probes Wayland before X11, printing "XDG_RUNTIME_DIR not set"
+    // on systems where Wayland is not running. Force X11 directly.
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
 
     // Setup window
     if (!glfwInit()) return false;

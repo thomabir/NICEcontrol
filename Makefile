@@ -89,9 +89,15 @@ CXXFLAGS += -Ofast -Wall -Wformat -Wextra #-g
 
 ifeq ($(UNAME_S), Linux) #LINUX
 	ECHO_MESSAGE = "Linux"
-	LIBS += $(LINUX_GL_LIBS) `pkg-config --static --libs glfw3` -lX11
+	# Build GLFW 3.4 from source to fix BadRRCrtc NULL-deref crash on monitor hotplug.
+	# The source is cloned from the upstream 3.4 tag and patched via glfw34_x11monitor.patch.
+	GLFW34_DIR = lib/glfw34
+	GLFW34_LIB = $(GLFW34_DIR)/build/src/libglfw3.a
+	GLFW34_PATCH = glfw34_x11monitor.patch
+	CXXFLAGS += -I$(GLFW34_DIR)/include
+	LIBS += $(LINUX_GL_LIBS) $(GLFW34_LIB) \
+	        -lrt -lm -ldl -lX11 -lXrandr -lXi -lXcursor -lXinerama
 
-	CXXFLAGS += `pkg-config --cflags glfw3`
 	CFLAGS = $(CXXFLAGS)
 endif
 
@@ -118,16 +124,17 @@ endif
 ## Build rules
 ##---------------------------------------------------------------------
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+# Order-only dep on $(GLFW34_LIB) ensures GLFW is cloned before headers are needed.
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(GLFW34_LIB)
 	$(CXX) $(CXXFLAGS) -c -MMD -o $@ $<
 
-$(BUILD_DIR)/%.o: $(IMGUI_DIR)/%.cpp
+$(BUILD_DIR)/%.o: $(IMGUI_DIR)/%.cpp | $(GLFW34_LIB)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(BUILD_DIR)/%.o: $(IMPLOT_DIR)/%.cpp
+$(BUILD_DIR)/%.o: $(IMPLOT_DIR)/%.cpp | $(GLFW34_LIB)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(BUILD_DIR)/%.o: $(IMGUI_DIR)/backends/%.cpp
+$(BUILD_DIR)/%.o: $(IMGUI_DIR)/backends/%.cpp | $(GLFW34_LIB)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 all: $(EXE)
@@ -135,8 +142,35 @@ all: $(EXE)
 
 -include $(DEPENDS)
 
+# $^ deduplicates $(OBJS) (the Makefile lists imgui backends twice).
+# $(GLFW34_LIB) is included via $(LIBS); the order-only dep above ensures it's built first.
 $(EXE): $(OBJS)
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LIBS)
 
+# Rule so that stale dependency files referencing GLFW headers don't block
+# a clean build: rebuild GLFW (which clones the source) to satisfy the header.
+$(GLFW34_DIR)/include/GLFW/glfw3.h: $(GLFW34_LIB)
+	@:
+
+# Build GLFW 3.4 from source, applying our monitor-hotplug null-check patch.
+# Clones from the upstream 3.4 tag if not present; idempotent on re-runs.
+$(GLFW34_LIB): $(GLFW34_PATCH)
+	@if [ ! -f "$(GLFW34_DIR)/CMakeLists.txt" ]; then \
+		echo "Cloning GLFW 3.4..."; \
+		git clone --depth=1 --branch 3.4 https://github.com/glfw/glfw.git $(GLFW34_DIR); \
+	fi
+	@git -C $(GLFW34_DIR) apply --check $(CURDIR)/$(GLFW34_PATCH) 2>/dev/null \
+		&& git -C $(GLFW34_DIR) apply $(CURDIR)/$(GLFW34_PATCH) \
+		|| true
+	@cmake -S $(GLFW34_DIR) -B $(GLFW34_DIR)/build \
+		-DGLFW_BUILD_EXAMPLES=OFF -DGLFW_BUILD_TESTS=OFF \
+		-DGLFW_BUILD_DOCS=OFF -DBUILD_SHARED_LIBS=OFF \
+		-DCMAKE_BUILD_TYPE=Release -Wno-dev --log-level=ERROR
+	@$(MAKE) -C $(GLFW34_DIR)/build -j$$(nproc) --no-print-directory
+
 clean:
 	rm -f $(EXE) $(OBJS)
+
+clean-glfw:
+	rm -rf $(GLFW34_DIR)
+	rm -f $(DEPENDS)
