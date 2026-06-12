@@ -614,7 +614,7 @@ class NiceGui {
   void WindowEtheratMonitor() {
     static ScrollingBufferT<double, double> dl_meas_buffer;
     static ScrollingBufferT<double, double> dl_cmd_buffer;
-    static ScrollingBufferT<double, double> metr_opd_nm_buffer;
+    static ScrollingBufferT<double, double> metr_opd_um_buffer;
     static ScrollingBufferT<double, double> metr_qpd_buffer[12];
     static ScrollingBufferT<double, double> metr_pointing_buffer[4];
     static double t_ecat = 0;
@@ -639,7 +639,7 @@ class NiceGui {
       t_ecat = plc_sample.timestamp_ns * 1e-9;  // convert nanoseconds to seconds
       dl_meas_buffer.AddPoint(t_ecat, plc_sample.dl_pos_um);
       dl_cmd_buffer.AddPoint(t_ecat, plc_sample.dl_cmd_um);
-      metr_opd_nm_buffer.AddPoint(t_ecat, plc_sample.opd_um * 1e3);  // convert um to nm
+      metr_opd_um_buffer.AddPoint(t_ecat, plc_sample.opd_um);  // convert um to nm
     }
 
     // plot the data
@@ -677,17 +677,17 @@ class NiceGui {
         ImPlot::SetupAxisLimits(ImAxis_Y1, -1e6, 1e6);
         ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(1), thickness);
-        ImPlot::PlotLine("OPD unwrapped (nm)", &metr_opd_nm_buffer.Data[0].time, &metr_opd_nm_buffer.Data[0].value,
-                         metr_opd_nm_buffer.Data.size(), 0, metr_opd_nm_buffer.Offset, 2 * sizeof(double));
+        ImPlot::PlotLine("OPD (um)", &metr_opd_um_buffer.Data[0].time, &metr_opd_um_buffer.Data[0].value,
+                         metr_opd_um_buffer.Data.size(), 0, metr_opd_um_buffer.Offset, 2 * sizeof(double));
         ImPlot::EndPlot();
 
         static float mean = 0.0f;
         static float stddev = 0.0f;
         const int N_points_stats = 1000;
 
-        if (metr_opd_nm_buffer.Data.size() > N_points_stats + 2) {
+        if (metr_opd_um_buffer.Data.size() > N_points_stats + 2) {
           // get the last 1000 measurements using ImVector<ImVec2> GetLastN(int n)
-          auto last_1000_measurements_data = metr_opd_nm_buffer.GetLastN(N_points_stats);
+          auto last_1000_measurements_data = metr_opd_um_buffer.GetLastN(N_points_stats);
           // get the y values
           std::vector<float> last_1000_measurements;
           for (auto &m : last_1000_measurements_data) {
@@ -703,7 +703,7 @@ class NiceGui {
         }
 
         // Display mean and std
-        ImGui::Text("Last %d samples: Mean: %.4f, Std: %.4f", N_points_stats, mean, stddev);
+        ImGui::Text("Last %d samples: Mean: %.4f um, Std: %.4f nm", N_points_stats, mean, stddev * 1e3);
       }
       ImGui::TreePop();
     }
@@ -714,7 +714,7 @@ class NiceGui {
       const static int fft_size = 1024 * 8;  // 1.2 s of data
       static double fft_power[fft_size / 2];
       static double fft_freq[fft_size / 2];
-      static FFT_calculator<double, double> fft(fft_size, fs, &metr_opd_nm_buffer, fft_power, fft_freq);
+      static FFT_calculator<double, double> fft(fft_size, fs, &metr_opd_um_buffer, fft_power, fft_freq);
 
       fft.calculate();
 
