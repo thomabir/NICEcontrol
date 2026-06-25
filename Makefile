@@ -126,8 +126,11 @@ endif
 ##---------------------------------------------------------------------
 
 # Order-only dep on $(GLFW34_LIB) ensures GLFW is cloned before headers are needed.
+# -MMD writes header dependencies to .d files; -MP adds a phony target for each
+# header so deleting or renaming a header doesn't break the build with a stale
+# "No rule to make target" error.
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(GLFW34_LIB)
-	$(CXX) $(CXXFLAGS) -c -MMD -o $@ $<
+	$(CXX) $(CXXFLAGS) -c -MMD -MP -o $@ $<
 
 $(BUILD_DIR)/%.o: $(IMGUI_DIR)/%.cpp | $(GLFW34_LIB)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
