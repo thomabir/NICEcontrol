@@ -450,8 +450,9 @@ class NiceGui {
 
   struct OpdSettings {
     float setpoint_um = 0.0f;
+    float open_loop_cmd_um = 0.0f;
     float kp = 0.0f;
-    float ki = 100.0f;
+    float ki = 1.0f;
     bool reset_phase = false;
     int mode = 0;  // 0: do nothing, 1: direct control of delay line, 3: closed loop. 2 is reserved for a specific
                    // open-loop mode.
@@ -479,6 +480,13 @@ class NiceGui {
       if (ImGui::DragFloat("OPD Setpoint", &current.setpoint_um, 1e-4, opd_setpoint_min, opd_setpoint_max, "%.4f um",
                            ImGuiSliderFlags_AlwaysClamp)) {
         plc().write<float>("MAIN.opd_setpoint_um", current.setpoint_um);
+      }
+
+      // slider for Open loop position command (clamp 0 to 15 um)
+      const float open_loop_min = 0.0f, open_loop_max = 15.0f;
+      if (ImGui::DragFloat("Open loop DL command", &current.open_loop_cmd_um, 1e-4, open_loop_min, open_loop_max,
+                           "%.4f um", ImGuiSliderFlags_AlwaysClamp)) {
+        plc().write<float>("MAIN.opd_open_loop_cmd_um", current.open_loop_cmd_um);
       }
 
       // P and I control loop gains
