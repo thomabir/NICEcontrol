@@ -4,7 +4,6 @@
 #include <atomic>
 #include <thread>
 
-#include "Consumer.hpp"
 #include "Controllers.hpp"
 #include "PI_E727_Controller.hpp"
 #include "PiezoActuators.hpp"
@@ -70,17 +69,6 @@ class ControlManager {
   void move_to_x2(float position) { shear_y2_cmd.store(position); }
   void move_to_y2(float position) { shear_x2_cmd.store(position); }
 
-  void set_shear_setpoints(float shear_x1, float shear_y1, float shear_x2, float shear_y2) {
-    shear_x1_sp.store(shear_x1);
-    shear_y1_sp.store(shear_y1);
-    shear_x2_sp.store(shear_x2);
-    shear_y2_sp.store(shear_y2);
-  }
-  void set_shear_gains(float p, float i) {
-    shear_p.store(p);
-    shear_i.store(i);
-  }
-
   void set_shear_loop_select(int select) { shear_loop_select.store(select); }
 
  private:
@@ -88,43 +76,15 @@ class ControlManager {
   SharedResources &res;
   PiezoActuators &piezos;
 
-  // sensor data
-  EthercatData data;
-
   // tt1 open loop setpoints as array
   std::atomic<float> shear_x1_cmd{0.0f};
   std::atomic<float> shear_y1_cmd{0.0f};
   std::atomic<float> shear_x2_cmd{0.0f};
   std::atomic<float> shear_y2_cmd{0.0f};
 
-  // control loop parameters
-  std::atomic<float> shear_x1_sp{0.0f};
-  std::atomic<float> shear_y1_sp{0.0f};
-  std::atomic<float> shear_x2_sp{0.0f};
-  std::atomic<float> shear_y2_sp{0.0f};
-  std::atomic<float> shear_p{0.0f};
-  std::atomic<float> shear_i{0.0f};
   std::atomic<int> shear_loop_select{0};  // 0: open loop, 1: closed loop
 
   void control() {
-    static auto consumer = res.ethercat.data.subscribe();  // Subscribe to the EtherCAT data queue
-    static PIController shear_x1_pi, shear_y1_pi, shear_x2_pi, shear_y2_pi;
-
-    res.ethercat.data.try_pop(consumer, data);  // block until new data is available
-    static float shear_p_gain = shear_p.load();
-    static float shear_i_gain = shear_i.load();
-
-    static float shear_x1_setpoint = shear_x1_sp.load();
-    static float shear_y1_setpoint = shear_y1_sp.load();
-    static float shear_x2_setpoint = shear_x2_sp.load();
-    static float shear_y2_setpoint = shear_y2_sp.load();
-
-    // calculate controller command
-    static float shear_x1_command = shear_x1_pi.step(shear_x1_setpoint - data.metr_qpd[0]);  // QPD x1 channel
-    static float shear_y1_command = shear_y1_pi.step(shear_y1_setpoint - data.metr_qpd[1]);  // QPD y1 channel
-    static float shear_x2_command = shear_x2_pi.step(shear_x2_setpoint - data.metr_qpd[3]);  // QPD x2 channel
-    static float shear_y2_command = shear_y2_pi.step(shear_y2_setpoint - data.metr_qpd[4]);  // QPD y2 channel
-
     // switch statement for shear control loop
     switch (shear_loop_select.load()) {
       case 0:  // raw actuator commands
@@ -133,35 +93,8 @@ class ControlManager {
         piezos.tt2.move_to_x(shear_x2_cmd.load());
         piezos.tt2.move_to_y(shear_y2_cmd.load());
         break;
-      case 1:
-        // read shear gains
-        shear_p_gain = shear_p.load();
-        shear_i_gain = shear_i.load();
-        shear_x1_pi.setPI(shear_p_gain, shear_i_gain);
-        shear_y1_pi.setPI(shear_p_gain, shear_i_gain);
-        shear_x2_pi.setPI(shear_p_gain, shear_i_gain);
-        shear_y2_pi.setPI(shear_p_gain, shear_i_gain);
-
-        // read shear setpoints
-        shear_x1_setpoint = shear_x1_sp.load();
-        shear_y1_setpoint = shear_y1_sp.load();
-        shear_x2_setpoint = shear_x2_sp.load();
-        shear_y2_setpoint = shear_y2_sp.load();
-
-        // calculate controller command
-        shear_x1_command = shear_x1_pi.step(shear_x1_setpoint - data.metr_qpd[0]);  // QPD x1 channel
-        shear_y1_command = shear_y1_pi.step(shear_y1_setpoint - data.metr_qpd[1]);  // QPD y1 channel
-        shear_x2_command = shear_x2_pi.step(shear_x2_setpoint - data.metr_qpd[3]);  // QPD x2 channel
-        shear_y2_command = shear_y2_pi.step(shear_y2_setpoint - data.metr_qpd[4]);  // QPD y2 channel
-
-        // send command to actuator
-        piezos.tt1.move_to_y(shear_x1_command);
-        piezos.tt1.move_to_x(-shear_y1_command);
-        piezos.tt2.move_to_y(-shear_x2_command);
-        piezos.tt2.move_to_x(shear_y2_command);
-        break;
-      case 2:
-        break;
+      default:
+        break;  // do nothing
     }
   }
 

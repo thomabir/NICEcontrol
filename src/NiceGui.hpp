@@ -31,7 +31,6 @@
 
 // Data types
 #include "ControlData.hpp"
-#include "EthercatData.hpp"
 #include "MeasurementT.hpp"
 #include "ScrollingBuffer.hpp"
 #include "ScrollingBufferT.hpp"
@@ -47,7 +46,6 @@
 #include <algorithm>
 
 #include "Consumer.hpp"
-#include "EthercatUdpInterface.hpp"   // EtherCAT UDP Interface
 #include "FftCalculator.hpp"          // FFT for data streams
 #include "Iir.h"                      // IIR filter from https://github.com/berndporr/iir1
 #include "MetrologyReader.hpp"        // reads metrology data and puts into queue
@@ -299,12 +297,13 @@ class NiceGui {
     if (recording_ethercat) {
       if (ImGui::Button("EtherCAT: Stop recording")) {
         recording_ethercat = false;
-        workers.ethercat_reader.stop_recording();
+        // TODO implement recording
+        // workers.ethercat_reader.stop_recording();
       }
     } else {
       if (ImGui::Button("EtherCAT: Start recording")) {
         recording_ethercat = true;
-        workers.ethercat_reader.start_recording();
+        // workers.ethercat_reader.start_recording();
       }
     }
 
@@ -555,44 +554,11 @@ class NiceGui {
     ImGui::SameLine();
     ImGui::Text("(Encoder: %.0f)", res.piezos.tt2.ready());
 
-    // control loop configuration
-    static float shear_x1_sp = 0.0f;
-    static float shear_y1_sp = 0.0f;
-    static float shear_x2_sp = 0.0f;
-    static float shear_y2_sp = 0.0f;
-
-    // sliders to set shear setpoints
-    ImGui::Text("Closed loop setpoints:");
-    ImGui::DragFloat("X1##TipTiltShear", &shear_x1_sp, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
-                     ImGuiSliderFlags_AlwaysClamp);
-    ImGui::DragFloat("Y1##TipTiltShear", &shear_y1_sp, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
-                     ImGuiSliderFlags_AlwaysClamp);
-    ImGui::DragFloat("X2##TipTiltShear", &shear_x2_sp, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
-                     ImGuiSliderFlags_AlwaysClamp);
-    ImGui::DragFloat("Y2##TipTiltShear", &shear_y2_sp, 0.01f, -1000.0f, 1000.0f, "%.2f urad",
-                     ImGuiSliderFlags_AlwaysClamp);
-
-    // P and I control loop gains
-    static float shear_p = 1e-3f;
-    static float shear_i = 1e-3f;
-    ImGui::Text("Control loop config:");
-    ImGui::SliderFloat("P##TipTiltShear", &shear_p, 1e-4f, 1e0f, "%.5f", ImGuiSliderFlags_Logarithmic);
-    ImGui::SliderFloat("I##TipTiltShear", &shear_i, 1e-6f, 1e-2f, "%.7f", ImGuiSliderFlags_Logarithmic);
-
     workers.beam_controller.set_shear_loop_select(tip_tilt_loop_select);
-    // if (tip_tilt_loop_select == 0) {
-    // Send raw actuator commands to ControlManager worker
     workers.beam_controller.move_to_x1(tip_tilt_raw_x1);
     workers.beam_controller.move_to_y1(tip_tilt_raw_y1);
     workers.beam_controller.move_to_x2(tip_tilt_raw_x2);
     workers.beam_controller.move_to_y2(tip_tilt_raw_y2);
-    // } else if (tip_tilt_loop_select == 1) {
-    // Send shear setpoints to ControlManager worker
-    workers.beam_controller.set_shear_setpoints(shear_x1_sp, shear_y1_sp, shear_x2_sp, shear_y2_sp);
-    // Send P and I gains to ControlManager worker
-    workers.beam_controller.set_shear_gains(shear_p, shear_i);
-
-    // }
   }
 
   void WindowEtheratMonitor() {
@@ -602,19 +568,6 @@ class NiceGui {
     static ScrollingBufferT<double, double> metr_qpd_buffer[12];
     static ScrollingBufferT<double, double> metr_pointing_buffer[4];
     static double t_ecat = 0;
-
-    // old: get data via UDP
-    static EthercatData ethercat_data;
-    static auto consumer = res.ethercat.data.subscribe();
-    while (res.ethercat.data.try_pop(consumer, ethercat_data)) {
-      auto m = ethercat_data;
-      for (int i = 0; i < 12; i++) {
-        metr_qpd_buffer[i].AddPoint(t_ecat, m.metr_qpd[i]);
-      }
-      for (int i = 0; i < 4; i++) {
-        metr_pointing_buffer[i].AddPoint(t_ecat, m.metr_pointing[i]);
-      }
-    }
 
     // Get data via ADS
     static auto ads_consumer = res.ethercat_ads.data.subscribe();
