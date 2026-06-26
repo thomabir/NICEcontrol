@@ -103,6 +103,7 @@ class TangoGenericInterface {
     std::string command_copy = command;
     try {
       tango_device->command_inout(command_copy);
+      std::cout << "Sent command: " << command_copy << std::endl;
     } catch (Tango::DevFailed &e) {
       Tango::Except::print_exception(e);
       return;
