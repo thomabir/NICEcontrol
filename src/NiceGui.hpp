@@ -96,15 +96,32 @@ class NiceGui {
   float t_gui = 0;
   PlcConnection *plc_cached = nullptr;
 
-  struct PhotometryResult {
-    double sum = 0.0;
-    int x_min = 0;
-    int x_max = 0;
-    int y_min = 0;
-    int y_max = 0;
-    int x_extent = 0;
-    int y_extent = 0;
-  };
+  // The FLIR camera and the state that its three panels share.
+  TangoFlirCamInterface flir_cam;
+  bool flir_regions_read_once = false;
+
+  // The regions last sent to the camera.
+  std::vector<PhotRegion> flir_sent_regions;
+  bool flir_subtract_bg_photometry = false;
+
+  // The rectangles on screen. They go to the camera in each frame in which they differ from flir_sent_regions.
+  int flir_region_count = 1;
+  std::vector<ImPlotRect> flir_rects;
+  bool flir_rects_from_camera = false;
+  unsigned int flir_image_width = 0;
+  unsigned int flir_image_height = 0;
+
+  // 0 shows the raw image, 1 shows the background subtracted image. Both come from the camera.
+  int flir_image_product = 0;
+
+  // Photometry history, one buffer for each possible region.
+  // The buffer span sets the upper limit of the history slider. 20000 points give 20 s at 1 kHz.
+  static constexpr int kFlirPhotHistoryPoints = 20000;
+  std::vector<ScrollingBufferT<double, double>> flir_phot_buffers;
+  std::vector<float> flir_intensity_of_one;
+  uint64_t flir_last_frame_id = 0;
+  std::array<double, kMaxPhotRegions> flir_last_values{};
+  size_t flir_last_n_regions = 0;
 
   bool ShouldClose() const { return glfwWindowShouldClose(window); }
 
@@ -144,52 +161,6 @@ class NiceGui {
     }
 
     glfwSwapBuffers(window);
-  }
-
-  static std::vector<PhotometryResult> CalculatePhotometry(const Image<int> &img,
-                                                           const std::vector<ImPlotRect> &rects_in) {
-    std::vector<PhotometryResult> results;
-    results.reserve(rects_in.size());
-    if (img.data.empty() || img.width == 0 || img.height == 0) {
-      return results;
-    }
-    for (const auto &rect_in : rects_in) {
-      PhotometryResult result;
-      int x0 = static_cast<int>(std::floor(rect_in.X.Min));
-      int x1 = static_cast<int>(std::floor(rect_in.X.Max));
-      int y0_plot = static_cast<int>(std::floor(rect_in.Y.Min));
-      int y1_plot = static_cast<int>(std::floor(rect_in.Y.Max));
-      if (x0 > x1) {
-        std::swap(x0, x1);
-      }
-      if (y0_plot > y1_plot) {
-        std::swap(y0_plot, y1_plot);
-      }
-      int y0 = img.height - 1 - y1_plot;
-      int y1 = img.height - 1 - y0_plot;
-      if (y0 > y1) {
-        std::swap(y0, y1);
-      }
-      x0 = std::max(0, std::min(x0, static_cast<int>(img.width - 1)));
-      x1 = std::max(0, std::min(x1, static_cast<int>(img.width - 1)));
-      y0 = std::max(0, std::min(y0, static_cast<int>(img.height - 1)));
-      y1 = std::max(0, std::min(y1, static_cast<int>(img.height - 1)));
-      result.x_min = x0;
-      result.x_max = x1;
-      result.y_min = y0;
-      result.y_max = y1;
-      result.x_extent = x1 - x0;
-      result.y_extent = y1 - y0;
-      double sum = 0.0;
-      for (int y = y0; y <= y1; y++) {
-        for (int x = x0; x <= x1; x++) {
-          sum += img.data[x + y * img.width];
-        }
-      }
-      result.sum = sum;
-      results.push_back(result);
-    }
-    return results;
   }
 
   bool Initialize() {
@@ -721,143 +692,132 @@ class NiceGui {
     }
   }
 
+  // The FLIR camera window, in three parts: Camera settings, Image, Photometry.
+  // The camera computes the photometry. This GUI sets the regions and draws what comes back.
   void WindowFlirCam() {
-    static TangoFlirCamInterface cam;
-    bool connected = cam.is_connected();
-
-    // static bool use_work_area = true;
-    // static ImGuiWindowFlags flags =
-    // ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
-
-    // Use the full window for the main NICEcontrol window
-    // const ImGuiViewport *viewport = ImGui::GetMainViewport();
-    // ImGui::SetNextWindowPos(use_work_area ? viewport->WorkPos : viewport->Pos);
     static ImVec2 window_size(600, 800);
     ImGui::SetNextWindowSize(window_size, ImGuiCond_FirstUseEver);
     ImGui::Begin("FlirCamWindow", nullptr, 0);
 
-    // Connection buttons and status
-    if (!connected) {
+    if (!flir_cam.is_connected()) {
       if (ImGui::Button("Connect")) {
-        cam.connect();
+        flir_cam.connect();
       }
       ImGui::SameLine();
-      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Status: Disconnected");
-    } else {
-      if (ImGui::Button("Disconnect")) {
-        cam.disconnect();
-      }
-      ImGui::SameLine();
-      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Connected");
-    }
-
-    // If not connected, don't show the GUI elements
-    if (!connected) {
+      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Disconnected");
       ImGui::End();
       return;
     }
 
-    // ping deviec
+    if (ImGui::Button("Disconnect")) {
+      flir_cam.disconnect();
+    }
     ImGui::SameLine();
-    if (ImGui::Button("Ping Device")) {
-      cam.ping_device();
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Connected");
+    ImGui::SameLine();
+    if (ImGui::Button("Ping")) {
+      flir_cam.ping_device();
     }
 
-    // Assume the camera is connected, so we can proceed with the GUI
+    // Take the settings of the camera once.
+    if (!flir_regions_read_once) {
+      flir_regions_read_once = true;
+      flir_subtract_bg_photometry = flir_cam.get_phot_subtract_background();
+      const std::vector<PhotRegion> regions = flir_cam.get_regions();
+      if (!regions.empty()) {
+        flir_region_count = static_cast<int>(regions.size());
+        flir_sent_regions = regions;
+        flir_rects_from_camera = true;
+      }
+    }
 
-    // Find the commands that the camera supports and display them as buttons
-    static std::vector<std::string> command_list = cam.get_commands();
+    // Poll outside the panels. A collapsed Photometry section keeps the history complete.
+    PollFlirPhotometry();
 
-    ImGui::Text("Auto-found commands:");
+    if (ImGui::CollapsingHeader("Camera settings")) {
+      FlirCameraSettings();
+    }
+    if (ImGui::CollapsingHeader("Image", ImGuiTreeNodeFlags_DefaultOpen)) {
+      FlirImageView();
+    }
+    if (ImGui::CollapsingHeader("Photometry", ImGuiTreeNodeFlags_DefaultOpen)) {
+      FlirPhotometryPanel();
+    }
+
+    // The regions follow the rectangles as they move.
+    PushFlirRegionsIfChanged();
+
+    ImGui::End();
+  }
+
+  void FlirCameraSettings() {
+    static std::vector<std::string> command_list = flir_cam.get_commands();
+
+    ImGui::Text("Commands:");
     ImGui::SameLine();
     for (const auto &command : command_list) {
       if (ImGui::Button(command.c_str())) {
-        cam.run_command(command);
+        flir_cam.run_command(command);
       }
       ImGui::SameLine();
     }
     ImGui::NewLine();
 
-    // auto-found attributes
-    // static std::vector<std::string> attribute_list = cam.get_attributes();
-
-    // set filename
     static char filename_char[128] = "";
-    static std::string filename_str = cam.get_filename();
+    static std::string filename_str = flir_cam.get_filename();
     ImGui::Text("Filename:");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(500);
     ImGui::InputText("##Filename", filename_char, sizeof(filename_char));
     ImGui::SameLine();
     if (ImGui::Button("Set##Filename")) {
-      // convert to str first
       filename_str = std::string(filename_char);
-      cam.set_filename(filename_str);
-      std::cout << "Filename set to: " << filename_str << std::endl;
+      flir_cam.set_filename(filename_str);
     }
     ImGui::SameLine();
     if (ImGui::Button("Read##Filename")) {
-      filename_str = cam.get_filename();
-      std::cout << "Filename read: " << filename_str << std::endl;
-      // convert to char array
+      filename_str = flir_cam.get_filename();
       std::strncpy(filename_char, filename_str.c_str(), sizeof(filename_char) - 1);
       filename_char[sizeof(filename_char) - 1] = '\0';
     }
 
-    // start recording N frames (get from user)
     static unsigned int n_frames = 1;
     ImGui::SameLine();
-    ImGui::Text("Frames to record:");
+    ImGui::Text("Frames:");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(100);
     ImGui::InputScalar("##NFramesSlider", ImGuiDataType_U32, &n_frames, NULL, NULL, "%d");
     ImGui::SameLine();
     if (ImGui::Button("Record##NFrames")) {
-      cam.start_recording(n_frames);
+      flir_cam.start_recording(n_frames);
     }
 
-    // start recording background (N frames)
     static unsigned int n_frames_bg = 1;
-    ImGui::Text("BG frames to record:");
+    ImGui::Text("BG frames:");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(100);
     ImGui::InputScalar("##NFramesBGSlider", ImGuiDataType_U32, &n_frames_bg, NULL, NULL, "%d");
     ImGui::SameLine();
     if (ImGui::Button("Record BG##NFrames")) {
-      cam.start_recording_background(n_frames_bg);
+      flir_cam.start_recording_background(n_frames_bg);
     }
 
-    // get background image
-    static std::vector<unsigned short> bg_image;
-    ImGui::SameLine();
-    if (ImGui::Button("Get BG image")) {
-      bg_image = cam.get_background();
-      std::cout << "BG image read" << std::endl;
-    }
-    ImGui::SameLine();
-
-    // checkbox whether to subtract background from image
-    static bool subtract_bg = false;
-    ImGui::Checkbox("Subtract BG", &subtract_bg);
-
-    // framerate
-    static double framerate = cam.read_framerate();
+    static double framerate = flir_cam.read_framerate();
     ImGui::Text("Framerate:");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(100);
     ImGui::InputScalar("##FramerateSlider", ImGuiDataType_Double, &framerate, NULL, NULL, "%.4f Hz");
     ImGui::SameLine();
     if (ImGui::Button("Read##Framerate")) {
-      framerate = cam.read_framerate();
+      framerate = flir_cam.read_framerate();
     }
     ImGui::SameLine();
     if (ImGui::Button("Set##Framerate")) {
-      cam.write_framerate(framerate);
-      framerate = cam.read_framerate();
+      flir_cam.write_framerate(framerate);
+      framerate = flir_cam.read_framerate();
     }
 
-    // integration time
-    static double integration_time = cam.read_integration_time();
+    static double integration_time = flir_cam.read_integration_time();
     ImGui::SameLine();
     ImGui::Text("Integration time:");
     ImGui::SameLine();
@@ -865,16 +825,15 @@ class NiceGui {
     ImGui::InputScalar("##IntegrationTimeSlider", ImGuiDataType_Double, &integration_time, NULL, NULL, "%.4f ms");
     ImGui::SameLine();
     if (ImGui::Button("Read##IntegrationTime")) {
-      integration_time = cam.read_integration_time();
+      integration_time = flir_cam.read_integration_time();
     }
     ImGui::SameLine();
     if (ImGui::Button("Set##IntegrationTime")) {
-      cam.write_integration_time(integration_time);
-      integration_time = cam.read_integration_time();
+      flir_cam.write_integration_time(integration_time);
+      integration_time = flir_cam.read_integration_time();
     }
 
-    // width
-    static unsigned int gui_width = cam.get_width();
+    static unsigned int gui_width = flir_cam.get_width();
     ImGui::SameLine();
     ImGui::Text("Width:");
     ImGui::SameLine();
@@ -882,15 +841,14 @@ class NiceGui {
     ImGui::InputScalar("##WidthSlider", ImGuiDataType_S32, &gui_width, NULL, NULL, "%d px");
     ImGui::SameLine();
     if (ImGui::Button("Read##Width")) {
-      gui_width = cam.get_width();
+      gui_width = flir_cam.get_width();
     }
     ImGui::SameLine();
     if (ImGui::Button("Set##Width")) {
-      cam.write_width(gui_width);
+      flir_cam.write_width(gui_width);
     }
 
-    // height
-    static unsigned int gui_height = cam.get_height();
+    static unsigned int gui_height = flir_cam.get_height();
     ImGui::SameLine();
     ImGui::Text("Height:");
     ImGui::SameLine();
@@ -898,21 +856,24 @@ class NiceGui {
     ImGui::InputScalar("##HeightSlider", ImGuiDataType_S32, &gui_height, NULL, NULL, "%d px");
     ImGui::SameLine();
     if (ImGui::Button("Read##Height")) {
-      gui_height = cam.get_height();
+      gui_height = flir_cam.get_height();
     }
     ImGui::SameLine();
     if (ImGui::Button("Set##Height")) {
-      cam.write_height(gui_height);
+      flir_cam.write_height(gui_height);
     }
+  }
 
-    //   static int width, height;
-    //   width = cam.get_width();
-    //   height = cam.get_height();
+  void FlirImageView() {
+    // The camera publishes both products. This choice selects which one to draw.
+    ImGui::Text("Show:");
+    ImGui::SameLine();
+    ImGui::RadioButton("Raw", &flir_image_product, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Background subtracted", &flir_image_product, 1);
 
     static Image<int> image;
-    image = cam.get_image();
-
-    // std::cout << "Image size: " << image.data.size() << " pixels" << std::endl;
+    image = (flir_image_product == 1) ? flir_cam.get_image_bg_sub() : flir_cam.get_image();
 
     static ImPlotColormap map = ImPlotColormap_Viridis;
     if (ImPlot::ColormapButton(ImPlot::GetColormapName(map), ImVec2(225, 0), map)) {
@@ -926,102 +887,78 @@ class NiceGui {
 
     ImPlot::PushColormap(map);
     ImGui::SameLine();
-    // checkbox: autoscale colormap
     static bool autoscale_colormap = true;
-    ImGui::Checkbox("Autoscale colormap", &autoscale_colormap);
+    ImGui::Checkbox("Autoscale", &autoscale_colormap);
 
-    // If the image is empty, we don't display anything
-    if (image.data.empty()) {
-      ImGui::End();
-      return;  // No image data to display
+    if (image.data.empty() || image.width == 0 || image.height == 0) {
+      ImPlot::PopColormap();
+      ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "No image. Is the camera streaming?");
+      return;
     }
+    flir_image_width = image.width;
+    flir_image_height = image.height;
 
     int *values = image.data.data();
 
-    // calculate height and width of plot window
     float aspect_ratio = float(image.width) / float(image.height);
-    // float plot_width = 1000 * io->FontGlobalScale;
     float plot_width = ImGui::GetContentRegionAvail().x - 80 * io->FontGlobalScale;  // leave space for colormap
     float plot_height = plot_width / aspect_ratio;
 
-    // selection rectangles
-    static int rect_count = 1;
-    static int rect_count_last = rect_count;
-    static std::vector<ImPlotRect> rects;
-    ImPlotDragToolFlags flags = ImPlotDragToolFlags_None;
-
-    // subtract background if requested
-    if (subtract_bg && !bg_image.empty()) {
-      // check if bg_image is the same size as image
-      if (bg_image.size() == image.data.size()) {
-        for (size_t i = 0; i < image.data.size(); i++) {
-          image.data[i] = int(image.data[i]) - int(bg_image[i]);
-        }
-      } else {
-        std::cerr << "Error: Background image size does not match image size." << std::endl;
-      }
-    }
-
-    // calculate min and max of the image, to autoscale the colormap
     int img_min_count = *std::min_element(image.data.begin(), image.data.end());
     int img_max_count = *std::max_element(image.data.begin(), image.data.end());
 
-    // colormap settings
     static int scale_min = 0;
     static int scale_max = 16383;
     const int scale_max_default = 16383;
-    const int scale_min_default = 0;
+    const int scale_min_default = -16384;
 
     ImGui::SetNextItemWidth(400);
-    ImGui::SliderScalar("Min", ImGuiDataType_U16, &scale_min, &scale_min_default, &scale_max_default, "%u");
+    ImGui::SliderScalar("Min", ImGuiDataType_S32, &scale_min, &scale_min_default, &scale_max_default, "%d");
     ImGui::SetNextItemWidth(400);
     ImGui::SameLine();
-    ImGui::SliderScalar("Max", ImGuiDataType_U16, &scale_max, &scale_min_default, &scale_max_default, "%u");
+    ImGui::SliderScalar("Max", ImGuiDataType_S32, &scale_max, &scale_min_default, &scale_max_default, "%d");
 
     if (autoscale_colormap) {
       scale_min = img_min_count;
       scale_max = img_max_count;
     }
-
-    // clamp colormap such that min < max
-    if (scale_min > scale_max) {
-      scale_min = scale_max;
-    } else if (scale_max < scale_min) {
-      scale_max = scale_min;
-    } else if (scale_min == scale_max) {
+    if (scale_min >= scale_max) {
       scale_min = scale_max - 1;
     }
 
-    // plot image
+    ImPlotDragToolFlags flags = ImPlotDragToolFlags_None;
+    if (flir_rects.size() != static_cast<size_t>(flir_region_count)) {
+      flir_rects.resize(flir_region_count);
+    }
+
+    // A first connect puts the regions of the camera on screen.
+    if (flir_rects_from_camera) {
+      flir_rects_from_camera = false;
+      for (size_t i = 0; i < flir_rects.size() && i < flir_sent_regions.size(); i++) {
+        flir_rects[i] = photometry_regions::to_plot_coords(flir_sent_regions[i], image.width, image.height);
+      }
+    }
+
     if (ImPlot::BeginPlot("##Heatmap2", ImVec2(plot_width, plot_height), ImPlotFlags_NoMouseText)) {
       ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
       ImPlot::PlotHeatmap("heat1", values, image.height, image.width, scale_min, scale_max, nullptr, ImPlotPoint(0, 0),
                           ImPlotPoint(image.width, image.height));
-      if (rect_count != rect_count_last) {
-        rect_count_last = rect_count;
-        rects.resize(rect_count);
-      }
-      if (rects.empty()) {
-        rects.resize(rect_count);
-      }
-      for (int i = 0; i < rect_count; i++) {
-        if (rects[i].X.Min == rects[i].X.Max && rects[i].Y.Min == rects[i].Y.Max) {
+      for (int i = 0; i < flir_region_count; i++) {
+        if (flir_rects[i].X.Min == flir_rects[i].X.Max && flir_rects[i].Y.Min == flir_rects[i].Y.Max) {
           const double x_offset = (image.width * 0.05) * i;
           const double y_offset = (image.height * 0.05) * i;
-          rects[i] = {0 + x_offset, double(image.width) / 2 + x_offset, 0 + y_offset,
-                      double(image.height) / 2 + y_offset};
+          flir_rects[i] = {0 + x_offset, double(image.width) / 2 + x_offset, 0 + y_offset,
+                           double(image.height) / 2 + y_offset};
         }
         bool rect_clicked = false;
         bool rect_hovered = false;
         bool rect_held = false;
-        // const ImVec4 rect_color = ImPlot::GetColormapColor(i % ImPlot::GetColormapCount());
-        // white
         const ImVec4 rect_color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-        ImPlot::DragRect(i, &rects[i].X.Min, &rects[i].Y.Min, &rects[i].X.Max, &rects[i].Y.Max,
+        ImPlot::DragRect(i, &flir_rects[i].X.Min, &flir_rects[i].Y.Min, &flir_rects[i].X.Max, &flir_rects[i].Y.Max,
                          ImVec4(rect_color.x, rect_color.y, rect_color.z, 1.0f), flags, &rect_clicked, &rect_hovered,
                          &rect_held);
-        const ImPlotPoint rect_min(rects[i].X.Min, rects[i].Y.Min);
-        const ImPlotPoint rect_max(rects[i].X.Max, rects[i].Y.Max);
+        const ImPlotPoint rect_min(flir_rects[i].X.Min, flir_rects[i].Y.Min);
+        const ImPlotPoint rect_max(flir_rects[i].X.Max, flir_rects[i].Y.Max);
         ImVec2 pixel_min = ImPlot::PlotToPixels(rect_min);
         ImVec2 pixel_max = ImPlot::PlotToPixels(rect_max);
         if (pixel_min.x > pixel_max.x) {
@@ -1035,8 +972,8 @@ class NiceGui {
         ImPlot::PushPlotClipRect();
         ImPlot::GetPlotDrawList()->AddRect(pixel_min, pixel_max, border_color, 0.0f, 0, 2.5f);
         ImPlot::PopPlotClipRect();
-        const double label_x = rects[i].X.Min;
-        const double label_y = rects[i].Y.Max;
+        const double label_x = flir_rects[i].X.Min;
+        const double label_y = flir_rects[i].Y.Max;
         const std::string label = std::to_string(i + 1);
         ImGui::SetWindowFontScale(2.0f);
         ImPlot::PlotText(label.c_str(), label_x, label_y, ImVec2(24.0f, 24.0f));
@@ -1047,81 +984,127 @@ class NiceGui {
     ImGui::SameLine();
     ImPlot::ColormapScale("##HeatScale", scale_min, scale_max, ImVec2(80 * io->FontGlobalScale, plot_height));
     ImPlot::PopColormap();
+  }
 
-    ImGui::Text("Photometry rectangles:");
+  // Send the rectangles to the camera when they differ from the ones last sent.
+  void PushFlirRegionsIfChanged() {
+    if (flir_image_width == 0 || flir_image_height == 0) {
+      return;
+    }
+
+    std::vector<PhotRegion> regions;
+    regions.reserve(flir_region_count);
+    for (int i = 0; i < flir_region_count && i < static_cast<int>(flir_rects.size()); i++) {
+      regions.push_back(photometry_regions::to_image_coords(flir_rects[i], flir_image_width, flir_image_height));
+    }
+
+    bool same = regions.size() == flir_sent_regions.size();
+    for (size_t i = 0; i < regions.size() && same; i++) {
+      same = regions[i].x0 == flir_sent_regions[i].x0 && regions[i].y0 == flir_sent_regions[i].y0 &&
+             regions[i].x1 == flir_sent_regions[i].x1 && regions[i].y1 == flir_sent_regions[i].y1;
+    }
+    if (same) {
+      return;
+    }
+
+    flir_cam.set_regions(regions);
+    flir_sent_regions = regions;
+  }
+
+  // Take every sample after the last frame that this GUI holds.
+  void PollFlirPhotometry() {
+    if (flir_phot_buffers.size() != static_cast<size_t>(kMaxPhotRegions)) {
+      // One buffer for each possible region. A change of the region count keeps the history of the others.
+      flir_phot_buffers.resize(kMaxPhotRegions, ScrollingBufferT<double, double>(kFlirPhotHistoryPoints));
+      flir_intensity_of_one.resize(kMaxPhotRegions, 1.0f);
+    }
+
+    const PhotBatch batch = flir_cam.get_phot_since(flir_last_frame_id);
+    if (batch.samples.empty()) {
+      return;
+    }
+    if (flir_last_frame_id != 0 && batch.samples.front().frame_id > flir_last_frame_id + 1) {
+      std::cerr << "FlirCam: photometry gap, frames " << (flir_last_frame_id + 1) << " to "
+                << (batch.samples.front().frame_id - 1) << " were lost." << std::endl;
+    }
+    flir_last_frame_id = batch.samples.back().frame_id;
+
+    // The samples carry camera time, the plots use GUI time. The newest sample takes the current GUI time and the
+    // others follow at their camera time.
+    const double newest_camera_time = batch.samples.back().timestamp_s;
+    for (const auto &sample : batch.samples) {
+      const double t = t_gui - (newest_camera_time - sample.timestamp_s);
+      for (size_t r = 0; r < batch.n_regions && r < static_cast<size_t>(kMaxPhotRegions); r++) {
+        flir_phot_buffers[r].AddPoint(t, sample.values[r]);
+      }
+    }
+    flir_last_values = batch.samples.back().values;
+    flir_last_n_regions = batch.n_regions;
+  }
+
+  void FlirPhotometryPanel() {
+    if (ImGui::Checkbox("Subtract background", &flir_subtract_bg_photometry)) {
+      flir_cam.set_phot_subtract_background(flir_subtract_bg_photometry);
+    }
+    ImGui::SameLine();
+    ImGui::Text("Regions:");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(120);
-    ImGui::InputInt("##PhotometryRectCount", &rect_count, 1, 1);
-    rect_count = std::max(1, std::min(rect_count, 8));
+    if (ImGui::InputInt("##PhotometryRectCount", &flir_region_count, 1, 1)) {
+      flir_region_count = std::max(0, std::min(flir_region_count, kMaxPhotRegions));
+    }
 
-    // UI for intensity normalization
+    // Local display scaling. It divides what is drawn.
     static bool apply_intensity_of_one = false;
     static bool apply_nd_filter = false;
     static float nd_filter_factor = 1.0f;
-    ImGui::Text("Intensity normalization:");
+    ImGui::Text("Normalise:");
     ImGui::SameLine();
-    ImGui::Checkbox("##Apply one", &apply_intensity_of_one);
+    ImGui::Checkbox("I_0##Apply one", &apply_intensity_of_one);
     ImGui::SameLine();
-
-    ImGui::Text("NF filter factor:");
+    ImGui::Checkbox("ND##Apply ND", &apply_nd_filter);
     ImGui::SameLine();
-    ImGui::Checkbox("##Apply ND", &apply_nd_filter);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(200);
+    ImGui::SetNextItemWidth(120);
     ImGui::InputFloat("##ND filter factor", &nd_filter_factor, 0.01f, 0.1f, "%.2f");
 
-    static std::vector<ScrollingBufferT<double, double>> photometry_buffers;
-    static std::vector<float> intensity_of_one_per_rect;
-    if (photometry_buffers.size() != static_cast<size_t>(rect_count)) {
-      photometry_buffers.resize(rect_count, ScrollingBufferT<double, double>(10000));
-    }
-    if (intensity_of_one_per_rect.size() != static_cast<size_t>(rect_count)) {
-      intensity_of_one_per_rect.resize(rect_count, 1.0f);
-    }
-    const auto photometry_results = CalculatePhotometry(image, rects);
-    for (size_t i = 0; i < photometry_results.size(); i++) {
-      double sum = photometry_results[i].sum;
+    // One row for each region that the camera reported. A row shows the last count that it had.
+    const size_t shown = std::min(static_cast<size_t>(flir_region_count), flir_last_n_regions);
+    for (size_t i = 0; i < shown; i++) {
+      double sum = flir_last_values[i];
       if (apply_intensity_of_one) {
-        sum /= intensity_of_one_per_rect[i];
+        sum /= flir_intensity_of_one[i];
       }
       if (apply_nd_filter) {
         sum /= nd_filter_factor;
       }
-      ImGui::Text("Rect %zu: %.3e counts, ", i + 1, sum);
+      ImGui::Text("%zu: %.3e", i + 1, sum);
       ImGui::SameLine();
       ImGui::Text("I_0:");
       ImGui::SameLine();
       ImGui::SetNextItemWidth(120);
-      ImGui::InputFloat(("##I_0_" + std::to_string(i)).c_str(), &intensity_of_one_per_rect[i], 0.01f, 0.1f, "%.2f");
-      photometry_buffers[i].AddPoint(t_gui, sum);
-      // ImGui::Text("Rect %zu selection: (%d,%d) to (%d,%d)  Size: %d x %d pixels", i + 1,
-      //             photometry_results[i].x_min, photometry_results[i].y_min, photometry_results[i].x_max,
-      //             photometry_results[i].y_max, photometry_results[i].x_extent, photometry_results[i].y_extent);
+      ImGui::InputFloat(("##I_0_" + std::to_string(i)).c_str(), &flir_intensity_of_one[i], 0.01f, 0.1f, "%.2f");
     }
 
-    // plot a time series of the mean intensity
     static float mean_intensity_history_length = 10.f;
-    ImGui::SliderFloat("Sum Intensity History", &mean_intensity_history_length, 1, 100, "%.5f s",
-                       ImGuiSliderFlags_Logarithmic);
+    // The upper limit is the span that the buffers hold at the full camera rate.
+    ImGui::SliderFloat("History", &mean_intensity_history_length, 1, 20, "%.5f s", ImGuiSliderFlags_Logarithmic);
     if (ImPlot::BeginPlot("Sum Intensity", ImVec2(-1, 400 * io->FontGlobalScale))) {
       static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
       ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_AutoFit, yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, t_gui - mean_intensity_history_length, t_gui, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-      for (size_t i = 0; i < photometry_buffers.size(); i++) {
-        if (photometry_buffers[i].Data.empty()) {
+      for (int i = 0; i < flir_region_count; i++) {
+        if (flir_phot_buffers[i].Data.empty()) {
           continue;
         }
         ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i % ImPlot::GetColormapCount()), 2);
         const std::string label = std::to_string(i + 1);
-        ImPlot::PlotLine(label.c_str(), &photometry_buffers[i].Data[0].time, &photometry_buffers[i].Data[0].value,
-                         photometry_buffers[i].Data.size(), 0, photometry_buffers[i].Offset, 2 * sizeof(double));
+        ImPlot::PlotLine(label.c_str(), &flir_phot_buffers[i].Data[0].time, &flir_phot_buffers[i].Data[0].value,
+                         flir_phot_buffers[i].Data.size(), 0, flir_phot_buffers[i].Offset, 2 * sizeof(double));
       }
       ImPlot::EndPlot();
     }
-
-    ImGui::End();
   }
 
   void Cleanup() {

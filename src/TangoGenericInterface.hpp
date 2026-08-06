@@ -124,6 +124,25 @@ class TangoGenericInterface {
     }
   }
 
+  // Run a command and give back its reply. Ret is the type that the Tango extraction operator gives.
+  template <typename Ret, typename Arg>
+  Ret run_command_with_reply(const std::string &command, const Arg &argument) {
+    Tango::DeviceData device_data;
+    Arg argument_copy = argument;
+    device_data << argument_copy;
+    std::string command_copy = command;
+
+    try {
+      Tango::DeviceData reply = tango_device->command_inout(command_copy, device_data);
+      Ret value;
+      reply >> value;
+      return value;
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+      return Ret();
+    }
+  }
+
   template <typename T>
   T read_attribute(const std::string &attribute_name) {
     try {
@@ -164,6 +183,39 @@ class TangoGenericInterface {
       std::string attribute_name_copy = attribute_name;
       Tango::DeviceAttribute att(attribute_name_copy, T());
       att << value;
+      tango_device->write_attribute(att);
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+    }
+  }
+
+  // Read a spectrum attribute and give back only its read values.
+  // A READ_WRITE spectrum carries the read values and then the set values in one sequence.
+  template <typename T>
+  std::vector<T> read_spectrum_attribute(const std::string &attribute_name) {
+    try {
+      std::string attribute_name_copy = attribute_name;
+      Tango::DeviceAttribute att_reply = tango_device->read_attribute(attribute_name_copy);
+      const size_t n_read = static_cast<size_t>(att_reply.get_nb_read());
+      std::vector<T> value;
+      att_reply >> value;
+      if (n_read < value.size()) {
+        value.resize(n_read);
+      }
+      return value;
+    } catch (Tango::DevFailed &e) {
+      Tango::Except::print_exception(e);
+      return std::vector<T>();
+    }
+  }
+
+  // Write a spectrum attribute. T is the exact Tango type, for example Tango::DevULong.
+  template <typename T>
+  void write_spectrum_attribute(const std::string &attribute_name, const std::vector<T> &value) {
+    try {
+      std::string attribute_name_copy = attribute_name;
+      std::vector<T> value_copy = value;
+      Tango::DeviceAttribute att(attribute_name_copy, value_copy);
       tango_device->write_attribute(att);
     } catch (Tango::DevFailed &e) {
       Tango::Except::print_exception(e);

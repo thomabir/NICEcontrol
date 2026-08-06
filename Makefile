@@ -179,8 +179,35 @@ $(BUILD_DIR)/.implot_patched: $(IMPLOT_PATCH)
 		|| true
 	@touch $@
 
+# Tests that need no hardware and no Tango connection.
+TEST_EXE = $(BUILD_DIR)/test_photometry_regions
+
+test: $(TEST_EXE)
+	@$(TEST_EXE)
+
+$(TEST_EXE): test/test_photometry_regions.cpp src/PhotometryRegions.hpp
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) -std=c++20 -I$(IMGUI_DIR) -Wall -Wextra -o $@ $<
+
+# Checks against a live camera. They need TANGO_HOST set and the FLIR_IR_Camera server running:
+#   export TANGO_HOST=localhost:10000
+#   make test-camera
+# camera_client  the client calls that the FLIR panel makes
+# camera_drag    a region write in each frame, as a drag does
+# camera_resize  the regions after a change of Width or Height
+CAMERA_TESTS = camera_client camera_drag camera_resize
+CAMERA_EXES = $(addprefix $(BUILD_DIR)/,$(CAMERA_TESTS))
+TANGO_LIBS = -L/usr/local/tango/lib -ltango -lomniDynamic4 -lCOS4 -lomniORB4 -lomnithread -lzmq -lpthread
+
+test-camera: $(CAMERA_EXES)
+	@for t in $(CAMERA_EXES); do echo "--- $$t"; $$t || exit 1; done
+
+$(BUILD_DIR)/camera_%: test/camera_%.cpp src/TangoFlirCamInterface.hpp src/PhotometryRegions.hpp
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) -std=c++20 -I$(IMGUI_DIR) -I/usr/local/tango/include/tango -Wall -Wextra -o $@ $< $(TANGO_LIBS)
+
 clean:
-	rm -f $(EXE) $(OBJS)
+	rm -f $(EXE) $(OBJS) $(TEST_EXE) $(CAMERA_EXES)
 
 clean-glfw:
 	rm -rf $(GLFW34_DIR)
