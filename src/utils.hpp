@@ -6,7 +6,7 @@
 
 namespace utils {
 
-double getTime() {
+inline double getTime() {
   // returns time in seconds since the start of the program
   static auto t0 = std::chrono::system_clock::now();
   auto tnow = std::chrono::system_clock::now();
@@ -14,7 +14,7 @@ double getTime() {
   return t_since_start;
 }
 
-std::string get_iso_datestring() {
+inline std::string get_iso_datestring() {
   time_t now;
   time(&now);
   char buf[sizeof "2011-10-08T07:07:09Z"];

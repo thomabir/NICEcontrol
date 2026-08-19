@@ -2,7 +2,7 @@
 
 #include <fftw3.h>  // Fast Fourier Transform
 
-#include "ScrollingBuffer.hpp"
+#include "ScrollingBufferT.hpp"
 
 template <typename T, typename U>
 class FFT_calculator {

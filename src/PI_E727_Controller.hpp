@@ -7,7 +7,7 @@ class PI_E727_Controller {
  public:
   PI_E727_Controller(char *serialNumberString);
   ~PI_E727_Controller();
-  void init();
+  bool init();
   double readx();
   double ready();
   void move_to_axis(int axis, double value);

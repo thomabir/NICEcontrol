@@ -6,6 +6,29 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
 
 ![User interface of NICEcontrol](./img/ui.png)
 
+## Architecture
+
+`Core` runs on one thread at a fixed cycle period of 10 ms and is independent of the user interface.
+Each cycle runs three steps in order.
+In `sense`, every application reads its hardware and writes what it found on the whiteboard.
+In `plan`, every application decides what it wants.
+In `act`, every application sends its commands to its own hardware, so each actuator takes at most one command per cycle.
+
+An application is a small class in `src/apps/` that owns one piece of hardware.
+The core steers the modes and leaves the details to the applications.
+
+The whiteboard is the public data.
+It has sample streams, which any number of readers subscribe to once and drain at their own pace, and a state of the latest values, which the core publishes as a snapshot after each cycle.
+The blackboard is the private data, for what only the log and the user interface need.
+
+Commands reach the core through one command box.
+A command that holds a value takes effect when the value differs from the one the core last sent to the hardware.
+A command that triggers an action carries a counter, and the core acts when the counter changes.
+
+The user interface never touches hardware.
+It reads the snapshot, it drains the streams into its plot buffers, and it writes commands.
+The program keeps running with no user interface open.
+
 ## Install
 
 ### Prerequisites
@@ -14,7 +37,7 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
 
   ```bash
   sudo add-apt-repository ppa:berndporr/dsp # for iir1 (https://github.com/berndporr/iir1)
-  sudo apt-get install libglfw3-dev libfftw3-dev libboost-all-dev iir1-dev python3-venv
+  sudo apt-get install libglfw3-dev libfftw3-dev iir1-dev python3-venv
   ```
 
 - (Obsolte) Install the piezo controller drivers from [MCL](http://www.madcitylabs.com/) (ask their support for the files)

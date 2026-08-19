@@ -23,7 +23,7 @@ PI_E727_Controller::PI_E727_Controller(char *serialNumberString) {
 
 PI_E727_Controller::~PI_E727_Controller() { close(); }
 
-void PI_E727_Controller::init() {
+bool PI_E727_Controller::init() {
   // Connect to the piezo controller
 
   // PI writes very verbose messages to stdout, so we temporarilly redirect stdout to /dev/null
@@ -34,7 +34,7 @@ void PI_E727_Controller::init() {
   auto fp = freopen("/dev/tty", "w", stdout);
   if (fp == nullptr) {
     std::cerr << this->name << ": Error: Failed to redirect stdout" << std::endl;
-    return;
+    return false;
   }
 
   // Check if connection was successful
@@ -42,7 +42,7 @@ void PI_E727_Controller::init() {
     std::cout << this->name << ": Connection successful" << std::endl;
   } else {
     std::cout << this->name << ": Connection failed" << std::endl;
-    return;
+    return false;
   }
 
   // find available axes
@@ -77,6 +77,8 @@ void PI_E727_Controller::init() {
   if (iServoStatus != 1) {
     std::cout << this->name << ": Error: Cannot turn on servo on axis 2" << std::endl;
   }
+
+  return true;
 }
 
 double PI_E727_Controller::readx() {

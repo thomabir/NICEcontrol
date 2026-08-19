@@ -75,7 +75,10 @@ class TangoGenericInterface {
   }
 
   int disconnect() {
-    return -1;  // not implemented
+    delete tango_device;
+    tango_device = nullptr;
+    connected = false;
+    return 0;
   }
 
   int connect() {
