@@ -4,6 +4,7 @@
 #include <thread>
 
 #include "apps/CameraApp.hpp"
+#include "apps/ClockApp.hpp"
 #include "apps/MetrologyApp.hpp"
 #include "apps/PlcApp.hpp"
 #include "apps/TangoDeviceApp.hpp"
@@ -27,7 +28,8 @@ class Core {
   static constexpr std::chrono::milliseconds kCyclePeriod{10};
 
   Core()
-      : metrology(wb),
+      : clock(wb),
+        metrology(wb),
         plc(wb),
         tiptilt(wb),
         camera(wb, bb, box),
@@ -57,6 +59,7 @@ class Core {
   Blackboard bb;
   CommandBox box;
 
+  ClockApp clock;
   MetrologyApp metrology;
   PlcApp plc;
   TipTiltApp tiptilt;
@@ -96,6 +99,9 @@ class Core {
 
     CoreState &core = wb.state.core;
 
+    // The clock comes first, so that the timestamps of this cycle use the newest pair of the two clocks.
+    clock.sense();
+    core.clock_ms = lap();
     metrology.sense();
     core.metrology_ms = lap();
     plc.sense();

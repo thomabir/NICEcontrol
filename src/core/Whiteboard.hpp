@@ -6,15 +6,17 @@
 #include <string>
 #include <vector>
 
+#include "core/DcClockEstimate.hpp"
 #include "data/PhotometryRegions.hpp"
 #include "data/PlcSample.hpp"
 #include "data/SPMCRingBuffer.hpp"
 #include "devices/TangoFlirCamInterface.hpp"
 
 // The whiteboard is the public data of the core. Every application writes its own part and reads any other part.
-// It has two kinds of data:
+// It has three kinds of data:
 //   Streams  the sample history. Any number of readers subscribe once and drain at their own pace.
 //   State    the latest values. The core publishes a snapshot of the state after each cycle.
+//   Clock    the DC time of any PC time. Any thread asks at any time, not once per cycle.
 
 // One timepoint of the 16 metrology ADC channels.
 struct AdcSample {
@@ -26,12 +28,30 @@ struct CoreState {
   uint64_t cycle = 0;
   double time_s = 0.0;
   double cycle_ms = 0.0;
+  double clock_ms = 0.0;
   double metrology_ms = 0.0;
   double plc_ms = 0.0;
   double tiptilt_ms = 0.0;
   double camera_ms = 0.0;
   double devices_ms = 0.0;
   uint64_t overruns = 0;
+};
+
+// The EtherCAT distributed clock, and the filter that gives the DC time of any PC time.
+struct ClockState {
+  bool card_open = false;      // the card is open and the esd stack runs
+  bool clock_present = false;  // the maindevice distributes the time, and the newest sample is fresh
+  bool locked = false;         // the filter has an estimate
+  int al_state = 0;            // 1 INIT, 2 PREOP, 4 SAFEOP, 8 OP
+  uint64_t dc_ns = 0;          // the distributed clock of the newest pair, from 2000-01-01 00:00
+  double read_span_us = 0.0;   // the length of the read that latched the value, the uncertainty of the pair
+  double age_ms = 0.0;         // the delay from the pair to the cycle that read it
+  double rate_ppm = 0.0;       // how much faster the DC clock runs than the PC clock
+  double offset_sd_ns = 0.0;   // the uncertainty of the estimate
+  double rate_sd_ppb = 0.0;    // the uncertainty of the rate
+  double error_ns = 0.0;       // the estimate of the newest pair minus the pair itself
+  uint64_t sample_count = 0;
+  uint64_t rejected_count = 0;  // the pairs that the gate of the filter refused
 };
 
 struct MetrologyState {
@@ -84,6 +104,7 @@ struct TangoDeviceState {
 
 struct Snapshot {
   CoreState core;
+  ClockState clock;
   MetrologyState metrology;
   OpdState opd;
   TipTiltState tiptilt;
@@ -97,6 +118,9 @@ class Whiteboard {
   SPMCRingBuffer<AdcSample, 20000> adc;
   SPMCRingBuffer<PlcSample, 20000> plc;
   SPMCRingBuffer<PhotSample, 20000> phot;
+
+  // ClockApp writes this, and any thread reads it at any time.
+  DcClockEstimate dc_clock;
 
   // The applications write here during the cycle.
   Snapshot state;

@@ -49,6 +49,9 @@ OBJS += $(BUILD_DIR)/imgui_impl_glfw.o $(BUILD_DIR)/imgui_impl_opengl3.o
 
 LIBS = -lfftw3 -lm -liir -lpi_pi_gcs2 -lnF_interface_x64
 
+# The esd subdevice stack. It reads the EtherCAT distributed clock from the ECS-PCIe/FPGA card.
+LIBS += -L$(ESD_DIR)/lib -less
+
 LIB_TANGO_DIR = -L /usr/local/tango/lib
 LIBS += $(LIB_TANGO_DIR) -ltango \
 					-lomniORB4 \
@@ -75,7 +78,11 @@ LINUX_GL_LIBS = -lGL
 # compiler flags
 # -I. resolves the vendor headers under lib/, and -I$(SRC_DIR) resolves the project headers, so no include needs a
 # relative path.
+# The esd subdevice stack is a binary library, thus ESS_ESD_LIBRARY must select the settings of that build.
+ESD_DIR = lib/esd
+
 CXXFLAGS = -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends -I/usr/local/tango/include/tango
+CXXFLAGS += -I$(ESD_DIR)/include -DESS_ESD_LIBRARY
 CXXFLAGS += -Ofast -Wall -Wformat -Wextra #-g
 
 ##---------------------------------------------------------------------

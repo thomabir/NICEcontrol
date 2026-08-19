@@ -231,9 +231,11 @@ class NiceGui {
     ImGui::Text("Cycle %llu at %.3f s, %.2f ms of the %lld ms period, %llu overruns", (unsigned long long)state.cycle,
                 state.time_s, state.cycle_ms, (long long)Core::kCyclePeriod.count(),
                 (unsigned long long)state.overruns);
-    ImGui::Text("Metrology %.2f ms, PLC %.2f ms, tip/tilt %.2f ms, camera %.2f ms, devices %.2f ms", state.metrology_ms,
-                state.plc_ms, state.tiptilt_ms, state.camera_ms, state.devices_ms);
+    ImGui::Text("Clock %.2f ms, metrology %.2f ms, PLC %.2f ms, tip/tilt %.2f ms, camera %.2f ms, devices %.2f ms",
+                state.clock_ms, state.metrology_ms, state.plc_ms, state.tiptilt_ms, state.camera_ms, state.devices_ms);
 
+    Status("DC clock", snap.clock.clock_present);
+    ImGui::SameLine();
     Status("Metrology socket", snap.metrology.socket_open);
     ImGui::SameLine();
     Status("PLC", snap.opd.connected);
@@ -249,6 +251,31 @@ class NiceGui {
     ImGui::Text("Metrology samples %llu, PLC samples %llu with %llu gaps, camera frames %llu",
                 (unsigned long long)snap.metrology.sample_count, (unsigned long long)snap.opd.sample_count,
                 (unsigned long long)snap.opd.gaps, (unsigned long long)snap.camera.frame_count);
+
+    if (ImGui::TreeNode("DC clock")) {
+      WindowClock();
+      ImGui::TreePop();
+    }
+  }
+
+  // The distributed clock of the bus, and the estimate that gives its time for any time of the PC clock.
+  void WindowClock() {
+    const ClockState &state = snap.clock;
+    if (!state.card_open) {
+      ImGui::TextDisabled("The card is not open. The program tries once, at its start.");
+      return;
+    }
+    ImGui::Text("Card:     AL state %d, %llu pairs, age %.1f ms, read span %.1f us", state.al_state,
+                (unsigned long long)state.sample_count, state.age_ms, state.read_span_us);
+    ImGui::Text("t_DC:     %llu ns", (unsigned long long)state.dc_ns);
+    if (!state.locked) {
+      ImGui::TextDisabled("Estimate: none. The maindevice does not distribute the clock.");
+      return;
+    }
+    ImGui::Text("Estimate: %+.3f ppm +- %.0f ppb, uncertainty %.0f ns", state.rate_ppm, state.rate_sd_ppb,
+                state.offset_sd_ns);
+    ImGui::Text("          last error %+.0f ns, %llu pairs refused", state.error_ns,
+                (unsigned long long)state.rejected_count);
   }
 
   static void Status(const char *label, bool up) {
