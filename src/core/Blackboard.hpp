@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "data/Image.hpp"
+#include "data/Timestamp.hpp"
 
 // The blackboard is the private data of the core. No application depends on it. It carries what only the log and the
 // user interface need, and what is too large for the whiteboard snapshot.
@@ -28,5 +29,5 @@ class Latest {
 };
 
 struct Blackboard {
-  Latest<Image<int>> camera_image;
+  Latest<Measurement<Image<int>>> camera_image;
 };

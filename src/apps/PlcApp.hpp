@@ -138,13 +138,15 @@ class PlcApp {
     retry_countdown = kRetryCycles;
   }
 
+  // The PLC is a device of the bus, thus its own timestamp is the distributed clock and the PC time follows from it.
   void take(const PlcSample &sample) {
-    wb.plc.push(sample);
+    const Timestamp time = wb.time.stamp_from_t_DC(static_cast<int64_t>(sample.timestamp_ns));
+    wb.plc.push({time, sample});
     last_sample_no = sample.sample_no;
 
     OpdState &state = wb.state.opd;
     state.sample_no = sample.sample_no;
-    state.timestamp_s = sample.timestamp_ns * 1e-9;
+    state.time = time;
     state.opd_um = sample.opd_um;
     state.dl_pos_um = sample.dl_pos_um;
     state.dl_cmd_um = sample.dl_cmd_um;

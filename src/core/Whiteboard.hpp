@@ -11,6 +11,7 @@
 #include "data/PhotometryRegions.hpp"
 #include "data/PlcSample.hpp"
 #include "data/SPMCRingBuffer.hpp"
+#include "data/Timestamp.hpp"
 #include "devices/TangoFlirCamInterface.hpp"
 
 // The whiteboard is the public data of the core. Every application writes its own part and reads any other part.
@@ -35,6 +36,11 @@ class Clocks {
   int64_t t_DC_now() const { return t_DC_from_t_PC(t_PC_now()); }
   int64_t t_DC_from_t_PC(int64_t t_PC) const { return t_PC + offset_ns; }
   int64_t t_PC_from_t_DC(int64_t t_DC) const { return t_DC - offset_ns; }
+
+  // The timestamp of a measurement. Use stamp_from_t_DC when the source itself gives a time of the bus.
+  Timestamp stamp_now() const { return stamp_from_t_PC(t_PC_now()); }
+  Timestamp stamp_from_t_PC(int64_t t_PC) const { return {t_PC, t_DC_from_t_PC(t_PC), false}; }
+  Timestamp stamp_from_t_DC(int64_t t_DC) const { return {t_PC_from_t_DC(t_DC), t_DC, true}; }
 
   void set_offset(int64_t offset) { offset_ns = offset; }
 
@@ -89,7 +95,7 @@ struct MetrologyState {
 struct OpdState {
   bool connected = false;
   uint32_t sample_no = 0;
-  double timestamp_s = 0.0;
+  Timestamp time;  // of the newest sample of the PLC
   float opd_um = 0.0f;
   float dl_pos_um = 0.0f;
   float dl_cmd_um = 0.0f;
@@ -127,6 +133,7 @@ struct TangoDeviceState {
 };
 
 struct Snapshot {
+  Timestamp time;  // when the core took this snapshot
   CoreState core;
   ClockState clock;
   MetrologyState metrology;
@@ -139,9 +146,9 @@ struct Snapshot {
 
 class Whiteboard {
  public:
-  SPMCRingBuffer<AdcSample, 20000> adc;
-  SPMCRingBuffer<PlcSample, 20000> plc;
-  SPMCRingBuffer<PhotSample, 20000> phot;
+  SPMCRingBuffer<Measurement<AdcSample>, 20000> adc;
+  SPMCRingBuffer<Measurement<PlcSample>, 20000> plc;
+  SPMCRingBuffer<Measurement<PhotSample>, 20000> phot;
 
   // ClockApp writes the offset, and any thread asks for a time.
   Clocks time;

@@ -1,29 +1,29 @@
 #pragma once
 
-#include "data/MeasurementT.hpp"
+#include "data/PlotPoint.hpp"
 #include "imgui.h"
 
-// scrolling buffer for data of type MeasurementT
-// does not use ImVector<ImVec2> but ImVector<MesurementT>
+// A scrolling buffer of plot points.
+
 template <typename T, typename U>
 struct ScrollingBufferT {
   int MaxSize;
   int Offset;
-  ImVector<MeasurementT<T, U>> Data;
+  ImVector<PlotPoint<T, U>> Data;
   ScrollingBufferT(int max_size = 70000) {
     MaxSize = max_size;
     Offset = 0;
     Data.reserve(MaxSize);
     // fill with zeros
     for (int i = 0; i < MaxSize; i++) {
-      Data.push_back(MeasurementT<T, U>(0, 0));
+      Data.push_back(PlotPoint<T, U>(0, 0));
     }
   }
   void AddPoint(T x, U y) {
     if (Data.size() < MaxSize)
-      Data.push_back(MeasurementT<T, U>(x, y));
+      Data.push_back(PlotPoint<T, U>(x, y));
     else {
-      Data[Offset] = MeasurementT<T, U>(x, y);
+      Data[Offset] = PlotPoint<T, U>(x, y);
       Offset = (Offset + 1) % MaxSize;
     }
   }
@@ -35,8 +35,8 @@ struct ScrollingBufferT {
   }
 
   // get last n points
-  ImVector<MeasurementT<T, U>> GetLastN(int n) {
-    ImVector<MeasurementT<T, U>> last_n;
+  ImVector<PlotPoint<T, U>> GetLastN(int n) {
+    ImVector<PlotPoint<T, U>> last_n;
     last_n.reserve(n);
     for (int i = 0; i < n; i++) {
       last_n.push_back(Data[(Offset - n + i + MaxSize) % MaxSize]);

@@ -88,6 +88,7 @@ class Core {
 
   void cycle() {
     const Commands command = box.get();
+    wb.state.time = wb.time.stamp_now();
     const auto start = std::chrono::steady_clock::now();
     auto mark = start;
     auto lap = [&mark]() {

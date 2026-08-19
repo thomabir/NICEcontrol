@@ -140,17 +140,19 @@ class NiceGui {
   void DrainStreams() {
     Whiteboard &wb = core.whiteboard();
 
-    AdcSample adc_sample;
-    while (wb.adc.try_pop(adc_reader, adc_sample)) {
+    Measurement<AdcSample> adc_measurement;
+    while (wb.adc.try_pop(adc_reader, adc_measurement)) {
+      const AdcSample &adc_sample = adc_measurement.value;
       adc_time = adc_sample.counter;
       for (int channel = 0; channel < 16; channel++) {
         adc_buffers[channel].AddPoint(adc_sample.counter, adc_sample.value[channel]);
       }
     }
 
-    PlcSample plc_sample;
-    while (wb.plc.try_pop(plc_reader, plc_sample)) {
-      plc_time = plc_sample.timestamp_ns * 1e-9;
+    Measurement<PlcSample> plc_measurement;
+    while (wb.plc.try_pop(plc_reader, plc_measurement)) {
+      const PlcSample &plc_sample = plc_measurement.value;
+      plc_time = plc_measurement.time.t_DC * 1e-9;
       dl_pos_buffer.AddPoint(plc_time, plc_sample.dl_pos_um);
       dl_cmd_buffer.AddPoint(plc_time, plc_sample.dl_cmd_um);
       opd_buffer.AddPoint(plc_time, plc_sample.opd_um);
@@ -163,9 +165,10 @@ class NiceGui {
       }
     }
 
-    PhotSample phot_sample;
-    while (wb.phot.try_pop(phot_reader, phot_sample)) {
-      phot_time = phot_sample.timestamp_s;
+    Measurement<PhotSample> phot_measurement;
+    while (wb.phot.try_pop(phot_reader, phot_measurement)) {
+      const PhotSample &phot_sample = phot_measurement.value;
+      phot_time = phot_measurement.time.t_DC * 1e-9;
       for (int region = 0; region < kMaxPhotRegions; region++) {
         phot_buffers[region].AddPoint(phot_time, phot_sample.values[region]);
       }
@@ -639,7 +642,7 @@ class NiceGui {
       Command([](Commands &c) { c.camera.image_product = image_product; });
     }
 
-    camera_image = core.blackboard().camera_image.load();
+    camera_image = core.blackboard().camera_image.load().value;
 
     static ImPlotColormap map = ImPlotColormap_Viridis;
     if (ImPlot::ColormapButton(ImPlot::GetColormapName(map), ImVec2(225, 0), map)) {

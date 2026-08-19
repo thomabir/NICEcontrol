@@ -19,7 +19,8 @@
 // The photometry of one frame, as GetPhotSince gives it.
 struct PhotSample {
   uint64_t frame_id = 0;
-  double timestamp_s = 0.0;
+  int64_t t_PC_ns = 0;    // the monotonic PC clock, read by the server when the frame arrived
+  double t_cam_ns = 0.0;  // the clock of the camera, as the frame carries it
   std::array<double, kMaxPhotRegions> values{};
 };
 
@@ -141,7 +142,7 @@ class TangoFlirCamInterface : public TangoGenericInterface {
   void set_phot_subtract_background(bool on) { write_attribute<bool>("PhotSubtractBackground", on); }
 
   // Ask for every photometry sample after last_frame_id.
-  // The reply is [n_regions, n_records, records...]. One record is [frame_id, timestamp_s, v_0 .. v_(n-1)].
+  // The reply is [n_regions, n_records, records...]. One record is [frame_id, t_PC_ns, t_cam_ns, v_0 .. v_(n-1)].
   PhotBatch get_phot_since(uint64_t last_frame_id) {
     PhotBatch batch;
     const auto reply = run_command_with_reply<std::vector<double>, uint64_t>("GetPhotSince", last_frame_id);
@@ -158,7 +159,7 @@ class TangoFlirCamInterface : public TangoGenericInterface {
       return batch;
     }
 
-    const size_t stride = batch.n_regions + 2;
+    const size_t stride = batch.n_regions + 3;
     if (reply.size() != 2 + n_records * stride) {
       std::cerr << "FlirCam: GetPhotSince reply has " << reply.size() << " elements, but " << n_records
                 << " records of " << stride << " elements need " << (2 + n_records * stride) << ". Reply dropped."
@@ -171,9 +172,10 @@ class TangoFlirCamInterface : public TangoGenericInterface {
       const double *record = &reply[2 + i * stride];
       PhotSample sample;
       sample.frame_id = static_cast<uint64_t>(record[0]);
-      sample.timestamp_s = record[1];
+      sample.t_PC_ns = static_cast<int64_t>(record[1]);
+      sample.t_cam_ns = record[2];
       for (size_t r = 0; r < batch.n_regions; r++) {
-        sample.values[r] = record[2 + r];
+        sample.values[r] = record[3 + r];
       }
       batch.samples.push_back(sample);
     }
