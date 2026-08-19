@@ -1,12 +1,13 @@
 #pragma once
 
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <string>
 #include <vector>
 
-#include "core/DcClockEstimate.hpp"
 #include "data/PhotometryRegions.hpp"
 #include "data/PlcSample.hpp"
 #include "data/SPMCRingBuffer.hpp"
@@ -16,7 +17,30 @@
 // It has three kinds of data:
 //   Streams  the sample history. Any number of readers subscribe once and drain at their own pace.
 //   State    the latest values. The core publishes a snapshot of the state after each cycle.
-//   Clock    the DC time of any PC time. Any thread asks at any time, not once per cycle.
+//   Clocks   the two clocks. Any thread asks for a time at any instant, not once per cycle.
+
+// The two clocks of the program, in nanoseconds.
+// t_PC counts from the start of the PC and never goes backwards.
+// t_DC counts from 2000-01-01 00:00, the epoch of the EtherCAT distributed clock.
+// t_DC is the common time of the bus, thus it is comparable with the maindevice and with each other subdevice.
+// ClockApp writes the offset of the two after each cycle.
+// ClockState says how good the offset is, and it says nothing while the card gives no clock.
+class Clocks {
+ public:
+  int64_t t_PC_now() const {
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+  }
+
+  int64_t t_DC_now() const { return t_DC_from_t_PC(t_PC_now()); }
+  int64_t t_DC_from_t_PC(int64_t t_PC) const { return t_PC + offset_ns; }
+  int64_t t_PC_from_t_DC(int64_t t_DC) const { return t_DC - offset_ns; }
+
+  void set_offset(int64_t offset) { offset_ns = offset; }
+
+ private:
+  std::atomic<int64_t> offset_ns{0};  // t_DC minus t_PC
+};
 
 // One timepoint of the 16 metrology ADC channels.
 struct AdcSample {
@@ -119,8 +143,8 @@ class Whiteboard {
   SPMCRingBuffer<PlcSample, 20000> plc;
   SPMCRingBuffer<PhotSample, 20000> phot;
 
-  // ClockApp writes this, and any thread reads it at any time.
-  DcClockEstimate dc_clock;
+  // ClockApp writes the offset, and any thread asks for a time.
+  Clocks time;
 
   // The applications write here during the cycle.
   Snapshot state;
