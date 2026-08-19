@@ -1,4 +1,4 @@
-#include "nF_EBD_Controller.hpp"
+#include "devices/nF_EBD_Controller.hpp"
 
 #include <array>
 #include <atomic>
@@ -6,7 +6,7 @@
 #include <iostream>
 #include <thread>
 
-#include "../lib/nF/nF_interface.h"
+#include "lib/nF/nF_interface.h"
 
 nF_EBD_Controller::nF_EBD_Controller(const char *com_name) {
   // set com_name

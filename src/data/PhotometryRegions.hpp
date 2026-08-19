@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "../lib/implot/implot.h"
+#include "lib/implot/implot.h"
 
 // The largest quantity of photometry regions. It agrees with kMaxPhotRegions in the camera server.
 inline constexpr int kMaxPhotRegions = 10;

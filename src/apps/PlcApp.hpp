@@ -5,10 +5,10 @@
 #include <iostream>
 #include <memory>
 
-#include "../Commands.hpp"
-#include "../PlcConnection.hpp"
-#include "../PlcSample.hpp"
-#include "../Whiteboard.hpp"
+#include "core/Commands.hpp"
+#include "core/Whiteboard.hpp"
+#include "data/PlcSample.hpp"
+#include "devices/PlcConnection.hpp"
 
 // The PLC holds a ring of the most recent samples. STREAM_BUF_SIZE in the PLC program sets its length.
 static constexpr size_t kPlcBufferSize = 512;

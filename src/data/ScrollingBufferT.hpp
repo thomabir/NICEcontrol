@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MeasurementT.hpp"
+#include "data/MeasurementT.hpp"
 #include "imgui.h"
 
 // scrolling buffer for data of type MeasurementT

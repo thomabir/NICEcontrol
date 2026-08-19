@@ -2,10 +2,10 @@
 
 #include <cstdint>
 
-#include "../Blackboard.hpp"
-#include "../Commands.hpp"
-#include "../TangoFlirCamInterface.hpp"
-#include "../Whiteboard.hpp"
+#include "core/Blackboard.hpp"
+#include "core/Commands.hpp"
+#include "core/Whiteboard.hpp"
+#include "devices/TangoFlirCamInterface.hpp"
 
 // The FLIR science camera.
 // The photometry is the part that a control loop needs, so the core takes it in every cycle. The settings and the

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "QpdData.hpp"
+#include "data/QpdData.hpp"
 
 #pragma pack(push, 1)
 struct PlcSample {

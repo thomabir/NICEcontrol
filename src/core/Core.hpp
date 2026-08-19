@@ -3,14 +3,14 @@
 #include <chrono>
 #include <thread>
 
-#include "Blackboard.hpp"
-#include "Commands.hpp"
-#include "Whiteboard.hpp"
 #include "apps/CameraApp.hpp"
 #include "apps/MetrologyApp.hpp"
 #include "apps/PlcApp.hpp"
 #include "apps/TangoDeviceApp.hpp"
 #include "apps/TipTiltApp.hpp"
+#include "core/Blackboard.hpp"
+#include "core/Commands.hpp"
+#include "core/Whiteboard.hpp"
 #include "utils.hpp"
 
 // The control core. It runs on one thread at a fixed cycle period and it is independent of the user interface.

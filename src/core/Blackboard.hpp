@@ -3,7 +3,7 @@
 #include <mutex>
 #include <utility>
 
-#include "Image.hpp"
+#include "data/Image.hpp"
 
 // The blackboard is the private data of the core. No application depends on it. It carries what only the log and the
 // user interface need, and what is too large for the whiteboard snapshot.

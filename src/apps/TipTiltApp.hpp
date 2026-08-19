@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../Commands.hpp"
-#include "../PI_E727_Controller.hpp"
-#include "../Whiteboard.hpp"
+#include "core/Commands.hpp"
+#include "core/Whiteboard.hpp"
+#include "devices/PI_E727_Controller.hpp"
 
 // Lateral beam control with the two PI tip/tilt stages.
 // A read of one encoder axis takes a USB round trip, so each cycle reads one axis and the four axes take turns.

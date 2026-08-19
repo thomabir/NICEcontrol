@@ -1,5 +1,5 @@
-#include "Core.hpp"
-#include "NiceGui.hpp"
+#include "core/Core.hpp"
+#include "gui/NiceGui.hpp"
 
 int main() {
   Core core;

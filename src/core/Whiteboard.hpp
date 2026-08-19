@@ -6,10 +6,10 @@
 #include <string>
 #include <vector>
 
-#include "PhotometryRegions.hpp"
-#include "PlcSample.hpp"
-#include "SPMCRingBuffer.hpp"
-#include "TangoFlirCamInterface.hpp"
+#include "data/PhotometryRegions.hpp"
+#include "data/PlcSample.hpp"
+#include "data/SPMCRingBuffer.hpp"
+#include "devices/TangoFlirCamInterface.hpp"
 
 // The whiteboard is the public data of the core. Every application writes its own part and reads any other part.
 // It has two kinds of data:

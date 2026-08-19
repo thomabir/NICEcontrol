@@ -1,12 +1,12 @@
-#include "PI_E754_Controller.hpp"
+#include "devices/PI_E754_Controller.hpp"
 
 #include <atomic>
 #include <cstring>
 #include <iostream>
 #include <thread>
 
-#include "../lib/pi/AutoZeroSample.h"
-#include "../lib/pi/PI_GCS2_DLL.h"
+#include "lib/pi/AutoZeroSample.h"
+#include "lib/pi/PI_GCS2_DLL.h"
 
 PI_E754_Controller::PI_E754_Controller(char *serialNumberString) {
   // set serial number

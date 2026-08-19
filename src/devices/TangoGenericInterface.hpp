@@ -7,7 +7,7 @@
 #include <ctime>
 #include <vector>
 
-#include "Image.hpp"
+#include "data/Image.hpp"
 
 class TangoGenericInterface {
  private:

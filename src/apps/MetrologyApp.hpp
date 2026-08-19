@@ -8,7 +8,7 @@
 #include <cstring>
 #include <iostream>
 
-#include "../Whiteboard.hpp"
+#include "core/Whiteboard.hpp"
 
 // Reads the metrology ADC stream, which arrives over UDP. The socket does not block, so the core drains whatever has
 // arrived and moves on.

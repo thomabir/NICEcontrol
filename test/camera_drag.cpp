@@ -4,7 +4,7 @@
 #include <string>
 #include <thread>
 
-#include "../src/TangoFlirCamInterface.hpp"
+#include "devices/TangoFlirCamInterface.hpp"
 
 static int failures = 0;
 

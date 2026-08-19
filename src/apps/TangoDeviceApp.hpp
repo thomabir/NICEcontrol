@@ -2,9 +2,9 @@
 
 #include <string>
 
-#include "../Commands.hpp"
-#include "../TangoGenericInterface.hpp"
-#include "../Whiteboard.hpp"
+#include "core/Commands.hpp"
+#include "core/Whiteboard.hpp"
+#include "devices/TangoGenericInterface.hpp"
 
 // A Tango device that takes commands and holds no state of its own, such as the shutter or the neutral density
 // filter. The application finds the command list once and sends one command when the counter changes.

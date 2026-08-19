@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "PhotometryRegions.hpp"
+#include "data/PhotometryRegions.hpp"
 
 // Commands travel from the outside world to the core. The core reads them once per cycle and acts on them in the act
 // step. A command that holds a value takes effect when the value differs from the one the core last sent to the

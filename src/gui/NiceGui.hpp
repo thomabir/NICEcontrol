@@ -19,12 +19,12 @@
 #endif
 #include <GLFW/glfw3.h>
 
-#include "../lib/fonts/SourceSans3Regular.cpp"
-#include "../lib/implot/implot.h"
-#include "Core.hpp"
-#include "FftCalculator.hpp"
-#include "PhotometryRegions.hpp"
-#include "ScrollingBufferT.hpp"
+#include "algorithms/FftCalculator.hpp"
+#include "core/Core.hpp"
+#include "data/PhotometryRegions.hpp"
+#include "data/ScrollingBufferT.hpp"
+#include "lib/fonts/SourceSans3Regular.cpp"
+#include "lib/implot/implot.h"
 #include "utils.hpp"
 
 // Windows

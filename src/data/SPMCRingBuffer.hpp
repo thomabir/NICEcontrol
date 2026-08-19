@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-#include "Consumer.hpp"
+#include "data/Consumer.hpp"
 
 /**
  * @class SPMCRingBuffer

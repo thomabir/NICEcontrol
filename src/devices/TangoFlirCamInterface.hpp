@@ -12,9 +12,9 @@
 #include <variant>
 #include <vector>
 
-#include "Image.hpp"
-#include "PhotometryRegions.hpp"
-#include "TangoGenericInterface.hpp"
+#include "data/Image.hpp"
+#include "data/PhotometryRegions.hpp"
+#include "devices/TangoGenericInterface.hpp"
 
 // The photometry of one frame, as GetPhotSince gives it.
 struct PhotSample {

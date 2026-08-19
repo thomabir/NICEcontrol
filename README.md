@@ -8,6 +8,20 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
 
 ## Architecture
 
+Each directory in the source tree holds one kind of file.
+
+| Directory         | Holds                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `src/core/`       | The cycle, the whiteboard, the blackboard, and the command box                         |
+| `src/apps/`       | One application for each piece of hardware that the core steers                        |
+| `src/devices/`    | The adapters to the outside world: ADS, Tango, and the piezo controller libraries      |
+| `src/data/`       | The data types that travel between the directories, and the containers that carry them |
+| `src/algorithms/` | Computation with no hardware and no state of its own: filters, FFT, controllers        |
+| `src/gui/`        | The user interface                                                                     |
+
+An include gives the path from `src/`, for example `#include "core/Whiteboard.hpp"`.
+A vendor header gives the path from the project root, for example `#include "lib/implot/implot.h"`.
+
 `Core` runs on one thread at a fixed cycle period of 10 ms and is independent of the user interface.
 Each cycle runs three steps in order.
 In `sense`, every application reads its hardware and writes what it found on the whiteboard.

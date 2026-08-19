@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <string>
 
-#include "../src/PhotometryRegions.hpp"
+#include "data/PhotometryRegions.hpp"
 
 static int failures = 0;
 
