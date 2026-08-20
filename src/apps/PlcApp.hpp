@@ -140,7 +140,7 @@ class PlcApp {
 
   // The PLC is a device of the bus, thus its own timestamp is the distributed clock and the PC time follows from it.
   void take(const PlcSample &sample) {
-    const Timestamp time = wb.time.stamp_from_t_DC(static_cast<int64_t>(sample.timestamp_ns));
+    const Timestamp time = wb.clocks.stamp_from_t_DC(sample.timestamp_ns);
     wb.plc.push({time, sample});
     last_sample_no = sample.sample_no;
 

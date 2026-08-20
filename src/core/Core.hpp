@@ -12,7 +12,6 @@
 #include "core/Blackboard.hpp"
 #include "core/Commands.hpp"
 #include "core/Whiteboard.hpp"
-#include "utils.hpp"
 
 // The control core. It runs on one thread at a fixed cycle period and it is independent of the user interface.
 //
@@ -59,6 +58,9 @@ class Core {
   Blackboard bb;
   CommandBox box;
 
+  // core.time_s counts from this point.
+  const int64_t t_PC_start = wb.clocks.t_PC_now();
+
   ClockApp clock;
   MetrologyApp metrology;
   PlcApp plc;
@@ -88,7 +90,7 @@ class Core {
 
   void cycle() {
     const Commands command = box.get();
-    wb.state.time = wb.time.stamp_now();
+    wb.state.time = wb.clocks.stamp_now();
     const auto start = std::chrono::steady_clock::now();
     auto mark = start;
     auto lap = [&mark]() {
@@ -128,7 +130,7 @@ class Core {
     core.devices_ms += lap();
 
     core.cycle++;
-    core.time_s = utils::getTime();
+    core.time_s = 1e-9 * static_cast<double>(wb.state.time.t_PC - t_PC_start);
     core.cycle_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     wb.publish();
   }

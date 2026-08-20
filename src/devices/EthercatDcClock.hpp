@@ -87,7 +87,7 @@ inline constexpr uint8_t kSmCount = 4;
 // pair. A constant part of read_span is the transfer over PCIe, thus the pair has a constant bias of a few
 // microseconds that only an external reference can measure.
 struct DcSample {
-  uint64_t dc_ns = 0;
+  int64_t dc_ns = 0;
   std::chrono::steady_clock::time_point pc;
   std::chrono::nanoseconds read_span{0};
 };
@@ -173,14 +173,6 @@ class DcClock {
     return sample_;
   }
 
-  // The distributed clock alone, in nanoseconds from 2000-01-01 00:00.
-  [[nodiscard]] std::optional<uint64_t> get_DC_clock() const {
-    if (const std::optional<DcSample> sample = get_DC_sample()) {
-      return sample->dc_ns;
-    }
-    return std::nullopt;
-  }
-
   // The AL state of the subdevice: 1 INIT, 2 PREOP, 4 SAFEOP, 8 OP.
   [[nodiscard]] int state() const { return current_state_.load(); }
 
@@ -244,7 +236,7 @@ class DcClock {
 
     if (valid) {
       std::lock_guard<std::mutex> lock(sample_mutex_);
-      sample_.dc_ns = sample;
+      sample_.dc_ns = static_cast<int64_t>(sample);
       sample_.pc = before;
       sample_.read_span = after - before;
     }

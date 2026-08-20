@@ -105,10 +105,9 @@ class CameraApp {
     }
     last_frame_id = batch.samples.back().frame_id;
 
-    // The camera server runs on this PC and reads the monotonic clock when the frame arrives, thus each frame
-    // carries a time of this PC and the round trip of the Tango call stays out of the timestamp.
+    // The server stamps the frame when it arrives, thus the round trip of the Tango call stays out of the timestamp.
     for (const PhotSample &sample : batch.samples) {
-      wb.phot.push({wb.time.stamp_from_t_PC(sample.t_PC_ns), sample});
+      wb.phot.push({wb.clocks.stamp_from_monotonic(sample.t_mono), sample});
     }
     wb.state.camera.n_regions = batch.n_regions;
     wb.state.camera.values = batch.samples.back().values;
@@ -172,7 +171,7 @@ class CameraApp {
 
   void take_image() {
     // The time comes before the transfer, because the frame is older than the read.
-    const Timestamp time = wb.time.stamp_now();
+    const Timestamp time = wb.clocks.stamp_now();
     if (sent.image_product == 1) {
       bb.camera_image.store({time, camera.get_image_bg_sub()});
     } else {

@@ -44,7 +44,7 @@ class MetrologyApp {
       // The packet carries no time, thus the arrival at the socket is the time of its ten timepoints.
       // The ten share it, and a packet that waited in the socket queue gets the time of the read and not of the
       // measurement. The counter of the sample keeps the true order.
-      const Timestamp time = wb.time.stamp_now();
+      const Timestamp time = wb.clocks.stamp_now();
 
       for (int i = 0; i < kTimepointsPerPacket; i++) {
         const int *record = &words[kChannelsPerRecord * i];

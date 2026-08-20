@@ -25,7 +25,6 @@
 #include "data/ScrollingBufferT.hpp"
 #include "lib/fonts/SourceSans3Regular.cpp"
 #include "lib/implot/implot.h"
-#include "utils.hpp"
 
 // Windows
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
@@ -270,11 +269,12 @@ class NiceGui {
     }
     ImGui::Text("Card:     AL state %d, %llu pairs, age %.1f ms, read span %.1f us", state.al_state,
                 (unsigned long long)state.sample_count, state.age_ms, state.read_span_us);
-    ImGui::Text("t_DC:     %llu ns", (unsigned long long)state.dc_ns);
+    ImGui::Text("t_DC:     %lld ns", (long long)state.dc_ns);
     if (!state.locked) {
       ImGui::TextDisabled("Estimate: none. The maindevice does not distribute the clock.");
       return;
     }
+    ImGui::Text("Offset:   t_DC - t_PC %+.6f s", 1e-9 * static_cast<double>(snap.time.t_DC - snap.time.t_PC));
     ImGui::Text("Estimate: %+.3f ppm +- %.0f ppb, uncertainty %.0f ns", state.rate_ppm, state.rate_sd_ppb,
                 state.offset_sd_ns);
     ImGui::Text("          last error %+.0f ns, %llu pairs refused", state.error_ns,
