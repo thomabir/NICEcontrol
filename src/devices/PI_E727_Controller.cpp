@@ -5,6 +5,7 @@
 #include <iostream>
 #include <thread>
 
+#include "devices/ScopedStdoutSilence.hpp"
 #include "lib/pi/AutoZeroSample.h"
 #include "lib/pi/PI_GCS2_DLL.h"
 
@@ -24,17 +25,10 @@ PI_E727_Controller::PI_E727_Controller(char *serialNumberString) {
 PI_E727_Controller::~PI_E727_Controller() { close(); }
 
 bool PI_E727_Controller::init() {
-  // Connect to the piezo controller
-
-  // PI writes very verbose messages to stdout, so we temporarilly redirect stdout to /dev/null
-  // I am aware this is an ugly hack, but I haven't found a better way.
-  // Probably not thread-safe.
-  fclose(stdout);
-  iD = PI_ConnectUSB(this->serialNumberString);
-  auto fp = freopen("/dev/tty", "w", stdout);
-  if (fp == nullptr) {
-    std::cerr << this->name << ": Error: Failed to redirect stdout" << std::endl;
-    return false;
+  // Connect to the piezo controller, suppress noisy output from lib during connection
+  {
+    ScopedStdoutSilence silence;
+    iD = PI_ConnectUSB(this->serialNumberString);
   }
 
   // Check if connection was successful
