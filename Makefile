@@ -192,12 +192,13 @@ $(BUILD_DIR)/.implot_patched: $(IMPLOT_PATCH)
 	@touch $@
 
 # Tests that need no hardware and no Tango connection.
-TEST_EXE = $(BUILD_DIR)/test_photometry_regions
+TESTS = test_photometry_regions test_extremum_seeker
+TEST_EXES = $(addprefix $(BUILD_DIR)/,$(TESTS))
 
-test: $(TEST_EXE)
-	@$(TEST_EXE)
+test: $(TEST_EXES)
+	@for t in $(TEST_EXES); do echo "--- $$t"; $$t || exit 1; done
 
-$(TEST_EXE): test/test_photometry_regions.cpp $(SRC_DIR)/data/PhotometryRegions.hpp
+$(BUILD_DIR)/test_%: test/test_%.cpp $(wildcard $(SRC_DIR)/*/*.hpp)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -Wall -Wextra -o $@ $<
 
@@ -220,7 +221,7 @@ $(BUILD_DIR)/camera_%: test/camera_%.cpp $(SRC_DIR)/devices/TangoFlirCamInterfac
 
 # The dependency files record the path a source had when it was compiled, so a move leaves them stale.
 clean:
-	rm -f $(EXE) $(OBJS) $(DEPENDS) $(TEST_EXE) $(CAMERA_EXES)
+	rm -f $(EXE) $(OBJS) $(DEPENDS) $(TEST_EXES) $(CAMERA_EXES)
 
 clean-glfw:
 	rm -rf $(GLFW34_DIR)

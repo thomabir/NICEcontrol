@@ -1,29 +1,48 @@
 #pragma once
 
+#include <array>
+
+#include "algorithms/IirFilter.hpp"
+
+/*
+ * @brief Implements a Proportional-Integral (PI) controller.
+ *
+ * The transfer function
+ * C(s) = Kp + Ki/s
+ * is approximated via a bilinear transform using an IIR filter.
+ */
+template <typename T>
 class PIController {
  public:
-  PIController() {
-    p = 0;
-    i = 0;
-    error_integral = 0;
-  }
-  void setPI(float p, float i) {
-    this->p = p;
-    this->i = i;
-  }
-  void reset_state() { error_integral = 0; }
-  void reset_all() {
-    error_integral = 0;
-    p = 0;
-    i = 0;
-  }
-  float step(float input) {
-    error_integral += input;
-    return p * input + i * error_integral;
+  PIController(T Kp, T Ki, T t) : Kp(Kp), Ki(Ki), t(t) { updateCoefficients(); }
+
+  T update(T error) {
+    T output = iir_filter.filter(error);
+    return output;
   }
 
+  void setGains(T newKp, T newKi) {
+    Kp = newKp;
+    Ki = newKi;
+    updateCoefficients();
+  }
+
+  void reset_Iir_filter() { iir_filter.reset(); }
+
  private:
-  float p;
-  float i;
-  float error_integral;
+  void updateCoefficients() {
+    b[0] = Kp + Ki * t / 2;
+    b[1] = -Kp + Ki * t / 2;
+    a[0] = 1;
+    iir_filter.set_coefficients(b, a);
+  }
+
+  T Kp;  // proportional gain
+  T Ki;  // integral gain
+  T t;   // sampling time
+
+  std::array<T, 2> b;  // feedforward filter coefficients
+  std::array<T, 1> a;  // feedback filter coefficients
+
+  IirFilter<T, 2> iir_filter{b, a};
 };

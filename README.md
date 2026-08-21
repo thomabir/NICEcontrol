@@ -43,6 +43,20 @@ The user interface never touches hardware.
 It reads the snapshot, it drains the streams into its plot buffers, and it writes commands.
 The program keeps running with no user interface open.
 
+### Extremum seeking
+
+`ExtremumSeeker` looks for the input of a plant where a measurement is the smallest or the largest.
+Something adds a sine to the input of the plant, and the measurement follows that sine.
+The first harmonic of the measurement is the gradient of the measurement against the input, and a PI controller drives it to zero.
+The class knows no hardware, thus one seeker fits any pair of a measurement and a plant input.
+
+`OpdSeekerApp` is the seeker of the OPD: it makes one photometry region as dark as it can by moving the OPD setpoint, and the PLC dithers the command of the delay line.
+A seeker of another pair is another application of that shape.
+
+The dither carries a period in whole nanoseconds, and its phase counts from the epoch of the clock.
+The PLC and the PC then compute the same phase from the same timestamp, at any frequency and for all time.
+A frequency in a float would not do that, because the two sides round the division to a period differently, and one nanosecond of difference grows into many turns of phase over the size of the timestamp.
+
 ## Install
 
 ### Prerequisites

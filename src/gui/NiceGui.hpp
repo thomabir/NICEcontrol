@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <numeric>
@@ -19,6 +20,7 @@
 #endif
 #include <GLFW/glfw3.h>
 
+#include "algorithms/Dither.hpp"
 #include "algorithms/FftCalculator.hpp"
 #include "core/Core.hpp"
 #include "data/PhotometryRegions.hpp"
@@ -42,6 +44,8 @@ class NiceGui {
         phot_reader(core.whiteboard().phot.subscribe()) {
     phot_buffers.resize(kMaxPhotRegions, ScrollingBufferT<double, double>(kPhotHistoryPoints));
     phot_intensity_of_one.resize(kMaxPhotRegions, 1.0f);
+    opd_dither.period_ns = dither::period_from_frequency(opd_dither_frequency_hz);
+    opd_dither.amplitude = 0.05f;
   }
 
   ~NiceGui() { Cleanup(); }
@@ -83,11 +87,18 @@ class NiceGui {
   ScrollingBufferT<double, double> dl_pos_buffer;
   ScrollingBufferT<double, double> dl_cmd_buffer;
   ScrollingBufferT<double, double> opd_buffer;
+  ScrollingBufferT<double, double> opd_setpoint_buffer;
   ScrollingBufferT<double, double> qpd_buffers[12];
   double plc_time = 0.0;
   std::vector<ScrollingBufferT<double, double>> phot_buffers;
   std::vector<float> phot_intensity_of_one;
   double phot_time = 0.0;
+
+  // OPD panel state. The panel owns what it sends, thus the dither tab and the seeker tab always agree on what the
+  // core has. The frequency is what the user asks for, and the period is what the PLC gets.
+  DitherSettings opd_dither;
+  float opd_dither_frequency_hz = 5.0f;
+  OpdSeekerCommands opd_seeker;
 
   // Camera panel state. The rectangles on screen become the regions that the camera measures.
   bool camera_seeded = false;
@@ -155,6 +166,8 @@ class NiceGui {
       dl_pos_buffer.AddPoint(plc_time, plc_sample.dl_pos_um);
       dl_cmd_buffer.AddPoint(plc_time, plc_sample.dl_cmd_um);
       opd_buffer.AddPoint(plc_time, plc_sample.opd_um);
+      // The PLC does not send the setpoint back, thus the plot takes the value that the core last sent.
+      opd_setpoint_buffer.AddPoint(plc_time, snap.opd.setpoint_um);
       const QpdData &qpd1 = plc_sample.qpd1;
       const QpdData &qpd2 = plc_sample.qpd2;
       const double qpd_values[12] = {qpd1.x1, qpd1.y1, qpd1.i1, qpd1.x2, qpd1.y2, qpd1.i2,
@@ -233,8 +246,11 @@ class NiceGui {
     ImGui::Text("Cycle %llu at %.3f s, %.2f ms of the %lld ms period, %llu overruns", (unsigned long long)state.cycle,
                 state.time_s, state.cycle_ms, (long long)Core::kCyclePeriod.count(),
                 (unsigned long long)state.overruns);
-    ImGui::Text("Clock %.2f ms, metrology %.2f ms, PLC %.2f ms, tip/tilt %.2f ms, camera %.2f ms, devices %.2f ms",
-                state.clock_ms, state.metrology_ms, state.plc_ms, state.tiptilt_ms, state.camera_ms, state.devices_ms);
+    ImGui::Text(
+        "Clock %.2f ms, metrology %.2f ms, PLC %.2f ms, tip/tilt %.2f ms, camera %.2f ms, devices %.2f ms, OPD "
+        "seeker %.2f ms",
+        state.clock_ms, state.metrology_ms, state.plc_ms, state.tiptilt_ms, state.camera_ms, state.devices_ms,
+        state.opd_seeker_ms);
 
     Status("DC clock", snap.clock.clock_present);
     ImGui::SameLine();
@@ -308,7 +324,28 @@ class NiceGui {
     ImGui::NewLine();
   }
 
+  // The OPD loop of the PLC, the dither that the PLC adds to the delay line, and the loop that looks for the setpoint
+  // of the smallest intensity. The plot under the tabs shows the OPD and the setpoint of every PLC sample.
   void WindowOpd() {
+    if (ImGui::BeginTabBar("##OPD tabs")) {
+      if (ImGui::BeginTabItem("Control")) {
+        OpdControlTab();
+        ImGui::EndTabItem();
+      }
+      if (ImGui::BeginTabItem("Dither")) {
+        OpdDitherTab();
+        ImGui::EndTabItem();
+      }
+      if (ImGui::BeginTabItem("Seeker")) {
+        OpdSeekerTab();
+        ImGui::EndTabItem();
+      }
+      ImGui::EndTabBar();
+    }
+    OpdPlot();
+  }
+
+  void OpdControlTab() {
     static int mode = 0;
     static float setpoint_um = 0.0f;
     static float open_loop_cmd_um = 0.0f;
@@ -327,9 +364,22 @@ class NiceGui {
       Command([](Commands &c) { c.opd.mode = mode; });
     }
 
+    // The seeker owns the setpoint while it runs. The field follows what the seeker found, and it keeps the last
+    // value when the seeker stops.
+    const bool seeking = snap.opd_seeker.seeker.running;
+    if (seeking) {
+      setpoint_um = snap.opd.setpoint_um;
+    }
+    ImGui::BeginDisabled(seeking);
     if (ImGui::DragFloat("OPD Setpoint", &setpoint_um, 1e-4, -1e3, 1e3, "%.4f um", ImGuiSliderFlags_AlwaysClamp)) {
       Command([](Commands &c) { c.opd.setpoint_um = setpoint_um; });
     }
+    ImGui::EndDisabled();
+    if (seeking) {
+      ImGui::SameLine();
+      ImGui::TextDisabled("(the seeker runs)");
+    }
+
     if (ImGui::DragFloat("Open loop DL command", &open_loop_cmd_um, 1e-4, 0.0f, 15.0f, "%.4f um",
                          ImGuiSliderFlags_AlwaysClamp)) {
       Command([](Commands &c) { c.opd.open_loop_cmd_um = open_loop_cmd_um; });
@@ -346,6 +396,110 @@ class NiceGui {
 
     ImGui::Text("OPD %.4f um, delay line %.4f um, command %.4f um", snap.opd.opd_um, snap.opd.dl_pos_um,
                 snap.opd.dl_cmd_um);
+  }
+
+  // The sine that the PLC adds to the command of the delay line. The seeker needs it, and the Start button of the
+  // seeker turns it on.
+  void OpdDitherTab() {
+    bool changed = false;
+    ImGui::Text("Dither:");
+    ImGui::SameLine();
+    changed |= ImGui::RadioButton("Off##Dither", &opd_dither.mode, DitherSettings::kOff);
+    ImGui::SameLine();
+    changed |= ImGui::RadioButton("Sine##Dither", &opd_dither.mode, DitherSettings::kSine);
+
+    // The PLC takes the period, thus the frequency that it gives back is the one of the nearest whole nanosecond.
+    ImGui::SetNextItemWidth(200);
+    if (ImGui::DragFloat("Frequency##Dither", &opd_dither_frequency_hz, 1e-2f, 0.05f, 500.0f, "%.3f Hz",
+                         ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic)) {
+      opd_dither.period_ns = dither::period_from_frequency(opd_dither_frequency_hz);
+      changed = true;
+    }
+    changed |= ImGui::DragFloat("Amplitude##Dither", &opd_dither.amplitude, 1e-4f, 0.0f, 1.0f, "%.4f um",
+                                ImGuiSliderFlags_AlwaysClamp);
+    changed |= ImGui::DragFloat("Phase at t = 0##Dither", &opd_dither.phase_rad, 1e-3f, -6.2832f, 6.2832f, "%.4f rad",
+                                ImGuiSliderFlags_AlwaysClamp);
+    if (changed) {
+      Command([this](Commands &c) { c.opd.dither = opd_dither; });
+    }
+
+    const double frequency_hz = dither::frequency_from_period(opd_dither.period_ns);
+    ImGui::Text("Period %lld ns, %.6f Hz", (long long)opd_dither.period_ns, frequency_hz);
+    if (snap.camera.framerate > 0.0 && 2.0 * frequency_hz > snap.camera.framerate) {
+      ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
+                         "The camera runs at %.1f Hz. It needs more than two frames of each period of the dither.",
+                         snap.camera.framerate);
+    }
+  }
+
+  // The extremum seeker. It makes one photometry region dark by moving the OPD setpoint.
+  void OpdSeekerTab() {
+    const ExtremumSeekerState &state = snap.opd_seeker.seeker;
+    ExtremumSeekerConfig &seeker = opd_seeker.seeker;
+
+    if (!opd_seeker.run) {
+      if (ImGui::Button("Start##OpdSeeker")) {
+        opd_seeker.run = true;
+        opd_dither.mode = DitherSettings::kSine;
+        Command([this](Commands &c) {
+          c.opd_seeker = opd_seeker;
+          c.opd.dither = opd_dither;
+        });
+      }
+    } else if (ImGui::Button("Stop##OpdSeeker")) {
+      opd_seeker.run = false;
+      opd_dither.mode = DitherSettings::kOff;
+      Command([this](Commands &c) {
+        c.opd_seeker = opd_seeker;
+        c.opd.dither = opd_dither;
+      });
+    }
+    ImGui::SameLine();
+    Status("Seeking", state.running);
+    ImGui::SameLine();
+    ImGui::TextDisabled("The Start button also turns the dither on.");
+
+    bool changed = false;
+    int region = opd_seeker.region + 1;
+    ImGui::SetNextItemWidth(200);
+    if (ImGui::InputInt("Photometry region##OpdSeeker", &region, 1, 1)) {
+      opd_seeker.region = std::clamp(region - 1, 0, kMaxPhotRegions - 1);
+      changed = true;
+    }
+    ImGui::Text("Look for the:");
+    ImGui::SameLine();
+    changed |= ImGui::RadioButton("Minimum##OpdSeeker", &seeker.direction, kMinimum);
+    ImGui::SameLine();
+    changed |= ImGui::RadioButton("Maximum##OpdSeeker", &seeker.direction, kMaximum);
+    changed |= ImGui::DragFloat("P##OpdSeeker", &seeker.kp, 1e-3f, -1e2f, 1e2f, "%.4f", ImGuiSliderFlags_AlwaysClamp);
+    changed |=
+        ImGui::DragFloat("I##OpdSeeker", &seeker.ki, 1e-3f, -1e2f, 1e2f, "%.4f per s", ImGuiSliderFlags_AlwaysClamp);
+    changed |= ImGui::DragFloat("Demodulation phase##OpdSeeker", &seeker.demod_phase_rad, 1e-3f, -6.2832f, 6.2832f,
+                                "%.4f rad", ImGuiSliderFlags_AlwaysClamp);
+    changed |= ImGui::DragFloat("Low pass##OpdSeeker", &seeker.lowpass_tau_s, 1e-3f, 1e-2f, 1e2f, "%.3f s",
+                                ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
+    changed |=
+        ImGui::DragFloat("Limit##OpdSeeker", &seeker.limit, 1e-3f, 0.0f, 1e2f, "%.3f um", ImGuiSliderFlags_AlwaysClamp);
+    changed |= ImGui::Checkbox("Divide the gradient by the mean intensity##OpdSeeker", &seeker.normalise);
+    if (changed) {
+      Command([this](Commands &c) { c.opd_seeker = opd_seeker; });
+    }
+
+    ImGui::Text("Intensity %.4e, gradient %+.4e per um", state.mean, state.gradient);
+    ImGui::Text("Setpoint %.4f um, %+.4f um from the start%s, %llu photometry samples", state.output, state.offset,
+                state.at_limit ? " (at the limit)" : "", (unsigned long long)state.sample_count);
+  }
+
+  void OpdPlot() {
+    static float history_length = 10.0f;
+    ImGui::SliderFloat("History length##OPD control", &history_length, 0.1f, 10.0f, "%.2f s",
+                       ImGuiSliderFlags_Logarithmic);
+    if (ImPlot::BeginPlot("##OPD control", ImVec2(-1, 250 * io->FontGlobalScale))) {
+      SetupTimePlot(history_length);
+      PlotSeries("OPD (um)", opd_buffer, 1, 1.0f);
+      PlotSeries("Setpoint (um)", opd_setpoint_buffer, 3, 2.0f);
+      ImPlot::EndPlot();
+    }
   }
 
   void WindowBeamControl() {

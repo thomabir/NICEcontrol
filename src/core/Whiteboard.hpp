@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core/Clocks.hpp"
+#include "data/ExtremumSeeker.hpp"
 #include "data/PhotometryRegions.hpp"
 #include "data/PlcSample.hpp"
 #include "data/SPMCRingBuffer.hpp"
@@ -35,6 +36,7 @@ struct CoreState {
   double tiptilt_ms = 0.0;
   double camera_ms = 0.0;
   double devices_ms = 0.0;
+  double opd_seeker_ms = 0.0;
   uint64_t overruns = 0;
 };
 
@@ -70,8 +72,16 @@ struct OpdState {
   float opd_um = 0.0f;
   float dl_pos_um = 0.0f;
   float dl_cmd_um = 0.0f;
+  float setpoint_um = 0.0f;  // the setpoint that the core last sent, from the user interface or from the optimizer
   uint64_t sample_count = 0;
   uint64_t gaps = 0;
+};
+
+// The extremum seeker on the OPD setpoint. Its output is the setpoint in um and its measurement is the intensity of
+// one photometry region.
+struct OpdSeekerState {
+  int region = 0;
+  ExtremumSeekerState seeker;
 };
 
 // The two lateral beam positions, set by the PI tip/tilt stages.
@@ -109,6 +119,7 @@ struct Snapshot {
   ClockState clock;
   MetrologyState metrology;
   OpdState opd;
+  OpdSeekerState opd_seeker;
   TipTiltState tiptilt;
   CameraState camera;
   TangoDeviceState shutter;

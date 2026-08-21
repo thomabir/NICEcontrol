@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "data/Dither.hpp"
+#include "data/ExtremumSeeker.hpp"
 #include "data/PhotometryRegions.hpp"
 
 // Commands travel from the outside world to the core. The core reads them once per cycle and acts on them in the act
@@ -18,6 +20,18 @@ struct OpdCommands {
   float kp = 0.0f;
   float ki = 1.0f;
   uint32_t reset_unwrap_count = 0;
+
+  // The PLC adds this wave to the plant input of the OPD loop, thus to the command of the delay line. Its amplitude
+  // is in um.
+  DitherSettings dither;
+};
+
+// Extremum seeking on the OPD setpoint. It makes one photometry region as dark as it can, and it writes the setpoint
+// that it finds into OpdCommands while it runs.
+struct OpdSeekerCommands {
+  bool run = false;
+  int region = 0;  // which photometry region the seeker makes dark
+  ExtremumSeekerConfig seeker;
 };
 
 struct TipTiltCommands {
@@ -61,6 +75,7 @@ struct TangoDeviceCommands {
 
 struct Commands {
   OpdCommands opd;
+  OpdSeekerCommands opd_seeker;
   TipTiltCommands tiptilt;
   CameraCommands camera;
   TangoDeviceCommands shutter;

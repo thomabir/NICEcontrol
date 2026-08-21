@@ -6,6 +6,7 @@
 #include "apps/CameraApp.hpp"
 #include "apps/ClockApp.hpp"
 #include "apps/MetrologyApp.hpp"
+#include "apps/OpdSeekerApp.hpp"
 #include "apps/PlcApp.hpp"
 #include "apps/TangoDeviceApp.hpp"
 #include "apps/TipTiltApp.hpp"
@@ -32,6 +33,7 @@ class Core {
         plc(wb),
         tiptilt(wb),
         camera(wb, bb, box),
+        opd_seeker(wb, box, 1e-3 * static_cast<double>(kCyclePeriod.count())),
         shutter("motor/shutter/2", wb.state.shutter),
         ndfilter("motor/ndfilter/1", wb.state.ndfilter) {}
 
@@ -66,6 +68,7 @@ class Core {
   PlcApp plc;
   TipTiltApp tiptilt;
   CameraApp camera;
+  OpdSeekerApp opd_seeker;
   TangoDeviceApp shutter;
   TangoDeviceApp ndfilter;
 
@@ -89,7 +92,7 @@ class Core {
   }
 
   void cycle() {
-    const Commands command = box.get();
+    Commands command = box.get();
     wb.state.time = wb.clocks.stamp_now();
     const auto start = std::chrono::steady_clock::now();
     auto mark = start;
@@ -117,7 +120,9 @@ class Core {
     ndfilter.sense();
     core.devices_ms = lap();
 
-    // No application needs a plan step yet. A control loop that needs one puts it here.
+    // The seeker reads the photometry of this cycle and writes the OPD setpoint that the act step sends.
+    opd_seeker.plan(command);
+    core.opd_seeker_ms = lap();
 
     plc.act(command.opd);
     core.plc_ms += lap();

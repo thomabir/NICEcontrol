@@ -62,6 +62,9 @@ class PlcApp {
   }
 
   void act(const OpdCommands &command) {
+    // The user interface reads the setpoint back from here, thus it is written whether or not the PLC answers.
+    wb.state.opd.setpoint_um = command.setpoint_um;
+
     if (!plc) {
       return;
     }
@@ -81,6 +84,18 @@ class PlcApp {
       }
       if (!sent_valid || command.ki != sent.ki) {
         plc->write<float>("MAIN.opd_ki", command.ki);
+      }
+      if (!sent_valid || command.dither.mode != sent.dither.mode) {
+        plc->write<int16_t>("MAIN.opd_dither_pl_mode", static_cast<int16_t>(command.dither.mode));
+      }
+      if (!sent_valid || command.dither.period_ns != sent.dither.period_ns) {
+        plc->write<uint64_t>("MAIN.opd_dither_pl_period_ns", static_cast<uint64_t>(command.dither.period_ns));
+      }
+      if (!sent_valid || command.dither.phase_rad != sent.dither.phase_rad) {
+        plc->write<float>("MAIN.opd_dither_pl_phase_at_tzero_rad", command.dither.phase_rad);
+      }
+      if (!sent_valid || command.dither.amplitude != sent.dither.amplitude) {
+        plc->write<float>("MAIN.opd_dither_pl_amplitude_um", command.dither.amplitude);
       }
       if (sent_valid && command.reset_unwrap_count != sent.reset_unwrap_count) {
         plc->write<bool>("MAIN.reset_unwrap", true);
