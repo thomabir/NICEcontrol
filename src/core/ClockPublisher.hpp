@@ -24,13 +24,19 @@ class ClockPublisher {
  public:
   /** @param path the record, NICE_CLOCK_PATH by default. */
   explicit ClockPublisher(const char *path = NICE_CLOCK_PATH) : path_(path) {
-    fd_ = ::open(path, O_CREAT | O_RDWR, 0644);
+    // In a sticky directory that all can write, such as /dev/shm, the kernel refuses O_CREAT on a file of another
+    // user (fs.protected_regular). Thus the open of a record that is already there carries no O_CREAT.
+    fd_ = ::open(path, O_RDWR);
+    if (fd_ == -1 && errno == ENOENT) {
+      // Mode 0666, because each user of this PC can run this program and thus write the record.
+      fd_ = ::open(path, O_CREAT | O_RDWR, 0666);
+    }
     if (fd_ == -1) {
       std::cerr << "ClockPublisher: " << path_ << " does not open (" << std::strerror(errno)
                 << "). The other programs on this PC do not get the two clocks." << std::endl;
       return;
     }
-    fchmod(fd_, 0644);  // an earlier umask can have left another mode on the file
+    fchmod(fd_, 0666);
   }
 
   ~ClockPublisher() {
