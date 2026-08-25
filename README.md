@@ -18,6 +18,7 @@ Each directory in the source tree holds one kind of file.
 | `src/data/`       | The data types that travel between the directories, and the containers that carry them |
 | `src/algorithms/` | Computation with no hardware and no state of its own: filters, FFT, controllers        |
 | `src/gui/`        | The user interface                                                                     |
+| `client/`         | The header that gives the distributed clock to the other programs on this PC           |
 
 An include gives the path from `src/`, for example `#include "core/Whiteboard.hpp"`.
 A vendor header gives the path from the project root, for example `#include "lib/implot/implot.h"`.
@@ -56,6 +57,23 @@ A seeker of another pair is another application of that shape.
 The dither carries a period in whole nanoseconds, and its phase counts from the epoch of the clock.
 The PLC and the PC then compute the same phase from the same timestamp, at any frequency and for all time.
 A frequency in a float would not do that, because the two sides round the division to a period differently, and one nanosecond of difference grows into many turns of phase over the size of the timestamp.
+
+### The distributed clock for other programs
+
+The esd card gives the distributed clock (DC) of the EtherCAT bus to one process only, thus no second program can read it from the card.
+NICEcontrol writes the step from `CLOCK_MONOTONIC` to the two clocks into `/dev/shm/nice_clock` in each cycle, and `client/nice_clock.h` adds that step to a reading of `CLOCK_MONOTONIC`.
+That clock has one epoch for all processes of a boot, thus the two programs speak about the same instant.
+
+```c
+int64_t t_DC_ns;
+if (nice_clock_now(&t_DC_ns, NULL, NULL) == 0) use(t_DC_ns);
+```
+
+The record appears only while NICEcontrol has confidence in the offset, and the reader gives the age of the record, which the caller judges against its own budget.
+The record carries no rate, thus the error grows by about 50 us in each second of age: a record younger than 200 ms gives t_DC within 10 us of the bus.
+Each failure prints one line to stderr.
+The offset holds for 60 s after the last pair of the two clocks, because the rate of the last estimate removes the difference of the two crystals.
+`make nice-clock-read` builds a program that prints the present record, for a check from a shell.
 
 ## Install
 
@@ -188,7 +206,24 @@ make
 
 ## Debugging with Analog Discovery 2
 
-### Install
+#### The distributed clock for other programs
+
+The esd card gives the distributed clock (DC) of the EtherCAT bus to one process only, thus no second program can read it from the card.
+NICEcontrol writes the step from `CLOCK_MONOTONIC` to the two clocks into `/dev/shm/nice_clock` in each cycle, and `client/nice_clock.h` adds that step to a reading of `CLOCK_MONOTONIC`.
+That clock has one epoch for all processes of a boot, thus the two programs speak about the same instant.
+
+```c
+int64_t t_DC_ns;
+if (nice_clock_now(&t_DC_ns, NULL, NULL) == 0) use(t_DC_ns);
+```
+
+The record appears only while NICEcontrol has confidence in the offset, and the reader gives the age of the record, which the caller judges against its own budget.
+The record carries no rate, thus the error grows by about 50 us in each second of age: a record younger than 200 ms gives t_DC within 10 us of the bus.
+Each failure prints one line to stderr.
+The offset holds for 60 s after the last pair of the two clocks, because the rate of the last estimate removes the difference of the two crystals.
+`make nice-clock-read` builds a program that prints the present record, for a check from a shell.
+
+## Install
 
 Download the [Adept 2 Runtime](https://digilent.com/reference/software/adept/runtime-previous-versions) (64 bit `.deb` file).
 Download [Digilent WaveForms](https://digilent.com/reference/software/waveforms/waveforms-3/previous-versions) (64 bit `.deb` file).
@@ -208,7 +243,24 @@ sudo dpkg -i ~/Downloads/digilent.waveforms_3.23.4_amd64.deb
 
 ## Teensy to activate ADCs
 
-### Install
+#### The distributed clock for other programs
+
+The esd card gives the distributed clock (DC) of the EtherCAT bus to one process only, thus no second program can read it from the card.
+NICEcontrol writes the step from `CLOCK_MONOTONIC` to the two clocks into `/dev/shm/nice_clock` in each cycle, and `client/nice_clock.h` adds that step to a reading of `CLOCK_MONOTONIC`.
+That clock has one epoch for all processes of a boot, thus the two programs speak about the same instant.
+
+```c
+int64_t t_DC_ns;
+if (nice_clock_now(&t_DC_ns, NULL, NULL) == 0) use(t_DC_ns);
+```
+
+The record appears only while NICEcontrol has confidence in the offset, and the reader gives the age of the record, which the caller judges against its own budget.
+The record carries no rate, thus the error grows by about 50 us in each second of age: a record younger than 200 ms gives t_DC within 10 us of the bus.
+Each failure prints one line to stderr.
+The offset holds for 60 s after the last pair of the two clocks, because the rate of the last estimate removes the difference of the two crystals.
+`make nice-clock-read` builds a program that prints the present record, for a check from a shell.
+
+## Install
 
 Using PlatformIO in VSCode.
 

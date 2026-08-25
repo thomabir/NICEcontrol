@@ -192,15 +192,22 @@ $(BUILD_DIR)/.implot_patched: $(IMPLOT_PATCH)
 	@touch $@
 
 # Tests that need no hardware and no Tango connection.
-TESTS = test_photometry_regions test_extremum_seeker
+TESTS = test_photometry_regions test_extremum_seeker test_clocks
 TEST_EXES = $(addprefix $(BUILD_DIR)/,$(TESTS))
 
 test: $(TEST_EXES)
 	@for t in $(TEST_EXES); do echo "--- $$t"; $$t || exit 1; done
 
-$(BUILD_DIR)/test_%: test/test_%.cpp $(wildcard $(SRC_DIR)/*/*.hpp)
+$(BUILD_DIR)/test_%: test/test_%.cpp $(wildcard $(SRC_DIR)/*/*.hpp) client/nice_clock.h
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -Wall -Wextra -o $@ $<
+
+# The reader of the two clocks, for a check of the record from a shell.
+nice-clock-read: $(BUILD_DIR)/nice_clock_read
+
+$(BUILD_DIR)/nice_clock_read: client/nice_clock_read.c client/nice_clock.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=gnu17 -Wall -Wextra -o $@ $<
 
 # Checks against a live camera. They need TANGO_HOST set and the FLIR_IR_Camera server running:
 #   export TANGO_HOST=localhost:10000
@@ -221,7 +228,7 @@ $(BUILD_DIR)/camera_%: test/camera_%.cpp $(SRC_DIR)/devices/TangoFlirCamInterfac
 
 # The dependency files record the path a source had when it was compiled, so a move leaves them stale.
 clean:
-	rm -f $(EXE) $(OBJS) $(DEPENDS) $(TEST_EXES) $(CAMERA_EXES)
+	rm -f $(EXE) $(OBJS) $(DEPENDS) $(TEST_EXES) $(CAMERA_EXES) $(BUILD_DIR)/nice_clock_read
 
 clean-glfw:
 	rm -rf $(GLFW34_DIR)

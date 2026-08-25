@@ -22,6 +22,7 @@
 
 #include "algorithms/Dither.hpp"
 #include "algorithms/FftCalculator.hpp"
+#include "client/nice_clock.h"
 #include "core/Core.hpp"
 #include "data/PhotometryRegions.hpp"
 #include "data/ScrollingBufferT.hpp"
@@ -279,6 +280,8 @@ class NiceGui {
   // The distributed clock of the bus, and the estimate that gives its time for any time of the PC clock.
   void WindowClock() {
     const ClockState &state = snap.clock;
+    ImGui::Text("Health:   %s", state.dc_good ? "good, thus " NICE_CLOCK_PATH " gives t_DC to the other programs"
+                                              : "no time of the bus, thus t_DC and the shared record are not good");
     if (!state.card_open) {
       ImGui::TextDisabled("The card is not open. The program tries once, at its start.");
       return;

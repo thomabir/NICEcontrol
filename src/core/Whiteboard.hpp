@@ -55,6 +55,7 @@ struct ClockState {
   double error_ns = 0.0;       // the estimate of the newest pair minus the pair itself
   uint64_t sample_count = 0;
   uint64_t rejected_count = 0;  // the pairs that the gate of the filter refused
+  bool dc_good = false;         // t_DC is a time of the bus, thus the timestamps and the shared record are good
 };
 
 struct MetrologyState {
