@@ -105,6 +105,7 @@ class NiceGui {
   DitherSettings opd_dither;
   float opd_dither_frequency_hz = 5.0f;
   OpdSeekerCommands opd_seeker;
+  bool opd_seeker_run_pending = false;  // the core has not read the newest press of the Start or Stop button
 
   // Camera panel state. The rectangles on screen become the regions that the camera measures.
   bool camera_seeded = false;
@@ -372,16 +373,18 @@ class NiceGui {
       Command([](Commands &c) { c.opd.mode = mode; });
     }
 
-    // The seeker owns the setpoint while it runs. The field follows what the seeker found, and it keeps the last
-    // value when the seeker stops.
+    // The field shows the setpoint that the core holds, thus it follows the seeker while it runs and it keeps what
+    // the seeker found when it stops. It stops following only while the user works on it.
+    static bool editing = false;
     const bool seeking = snap.opd_seeker.seeker.running;
-    if (seeking) {
+    if (!editing) {
       setpoint_um = snap.opd.setpoint_um;
     }
     ImGui::BeginDisabled(seeking);
     if (ImGui::DragFloat("OPD Setpoint", &setpoint_um, 1e-4, -1e3, 1e3, "%.4f um", ImGuiSliderFlags_AlwaysClamp)) {
       Command([](Commands &c) { c.opd.setpoint_um = setpoint_um; });
     }
+    editing = ImGui::IsItemActive();
     ImGui::EndDisabled();
     if (seeking) {
       ImGui::SameLine();
@@ -445,9 +448,18 @@ class NiceGui {
     const ExtremumSeekerState &state = snap.opd_seeker.seeker;
     ExtremumSeekerConfig &seeker = opd_seeker.seeker;
 
+    // The core clears the run command when the seeker cannot run, thus the button follows the core. It shows what
+    // the user asked for until the core has read that press.
+    if (snap.opd_seeker.run == opd_seeker.run) {
+      opd_seeker_run_pending = false;
+    } else if (!opd_seeker_run_pending) {
+      opd_seeker.run = snap.opd_seeker.run;
+    }
+
     if (!opd_seeker.run) {
       if (ImGui::Button("Start##OpdSeeker")) {
         opd_seeker.run = true;
+        opd_seeker_run_pending = true;
         opd_dither.mode = DitherSettings::kSine;
         Command([this](Commands &c) {
           c.opd_seeker = opd_seeker;
@@ -456,6 +468,7 @@ class NiceGui {
       }
     } else if (ImGui::Button("Stop##OpdSeeker")) {
       opd_seeker.run = false;
+      opd_seeker_run_pending = true;
       opd_dither.mode = DitherSettings::kOff;
       Command([this](Commands &c) {
         c.opd_seeker = opd_seeker;
@@ -466,6 +479,17 @@ class NiceGui {
     Status("Seeking", state.running);
     ImGui::SameLine();
     ImGui::TextDisabled("The Start button also turns the dither on.");
+
+    const ImVec4 warning(1.0f, 0.6f, 0.0f, 1.0f);
+    if (snap.opd_seeker.block != kSeekerReady) {
+      ImGui::TextColored(warning, "%s", text_of(snap.opd_seeker.block));
+    } else if (state.stale) {
+      ImGui::TextColored(warning, "No photometry arrives. The setpoint holds.");
+    } else if (state.settling) {
+      ImGui::TextDisabled("The low pass settles. The setpoint holds.");
+    } else {
+      ImGui::TextDisabled("The seeker has all it needs.");
+    }
 
     bool changed = false;
     int region = opd_seeker.region + 1;
@@ -488,14 +512,17 @@ class NiceGui {
                                 ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
     changed |=
         ImGui::DragFloat("Limit##OpdSeeker", &seeker.limit, 1e-3f, 0.0f, 1e2f, "%.3f um", ImGuiSliderFlags_AlwaysClamp);
+    changed |= ImGui::DragFloat("Fastest move##OpdSeeker", &seeker.max_rate, 1e-3f, 1e-3f, 1e2f, "%.3f um per s",
+                                ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic);
     changed |= ImGui::Checkbox("Divide the gradient by the mean intensity##OpdSeeker", &seeker.normalise);
     if (changed) {
       Command([this](Commands &c) { c.opd_seeker = opd_seeker; });
     }
 
     ImGui::Text("Intensity %.4e, gradient %+.4e per um", state.mean, state.gradient);
+    const char *held = state.at_limit ? " (at the limit)" : (state.at_max_rate ? " (as fast as it may)" : "");
     ImGui::Text("Setpoint %.4f um, %+.4f um from the start%s, %llu photometry samples", state.output, state.offset,
-                state.at_limit ? " (at the limit)" : "", (unsigned long long)state.sample_count);
+                held, (unsigned long long)state.sample_count);
   }
 
   void OpdPlot() {

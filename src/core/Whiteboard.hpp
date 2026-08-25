@@ -78,10 +78,41 @@ struct OpdState {
   uint64_t gaps = 0;
 };
 
+// What keeps the seeker of the OPD setpoint from running. The seeker needs a closed OPD loop to move, a dither to
+// measure the gradient with, the phase of the distributed clock to demodulate with, and a region that the camera
+// measures.
+enum OpdSeekerBlock {
+  kSeekerReady = 0,
+  kSeekerNoPlc,
+  kSeekerOpenLoop,
+  kSeekerNoDither,
+  kSeekerNoClock,
+  kSeekerNoRegion,
+};
+
+inline const char *text_of(OpdSeekerBlock block) {
+  switch (block) {
+    case kSeekerNoPlc:
+      return "The PLC is not connected.";
+    case kSeekerOpenLoop:
+      return "The OPD loop is not closed.";
+    case kSeekerNoDither:
+      return "The dither is off.";
+    case kSeekerNoClock:
+      return "The distributed clock is not good, thus the phase of the dither is not the one of the PLC.";
+    case kSeekerNoRegion:
+      return "The camera does not measure that photometry region.";
+    default:
+      return "";
+  }
+}
+
 // The extremum seeker on the OPD setpoint. Its output is the setpoint in um and its measurement is the intensity of
 // one photometry region.
 struct OpdSeekerState {
   int region = 0;
+  bool run = false;  // the command that the core holds. The core clears it when the seeker cannot run.
+  OpdSeekerBlock block = kSeekerReady;
   ExtremumSeekerState seeker;
 };
 

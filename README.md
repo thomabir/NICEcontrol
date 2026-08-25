@@ -54,6 +54,14 @@ The class knows no hardware, thus one seeker fits any pair of a measurement and 
 `OpdSeekerApp` is the seeker of the OPD: it makes one photometry region as dark as it can by moving the OPD setpoint, and the PLC dithers the command of the delay line.
 A seeker of another pair is another application of that shape.
 
+The output only moves while the estimate of the gradient is one that the seeker can trust.
+Each sample carries the dither amplitude that the plant had when that sample was taken, thus a new amplitude changes only the samples after it.
+The output holds from the start of a run, and from any change of the amplitude, the demodulation phase, the low pass or the normalisation, until the low pass has settled.
+It also holds over a gap in the measurement, and a rate bounds how fast it moves at all.
+
+`OpdSeekerApp` runs the seeker only while the PLC is connected, the OPD loop is closed, the dither is on, the distributed clock is good, and the camera measures the region.
+It stops the seeker and clears the command of the user when one of them goes, and the user interface says which one.
+
 The dither carries a period in whole nanoseconds, and its phase counts from the epoch of the clock.
 The PLC and the PC then compute the same phase from the same timestamp, at any frequency and for all time.
 A frequency in a float would not do that, because the two sides round the division to a period differently, and one nanosecond of difference grows into many turns of phase over the size of the timestamp.
