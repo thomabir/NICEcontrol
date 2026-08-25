@@ -30,6 +30,9 @@ class CameraApp {
     if (command.connect != camera.is_connected()) {
       if (command.connect) {
         camera.connect();
+        if (camera.is_connected()) {
+          seed_from_camera();
+        }
       } else {
         camera.disconnect();
       }
@@ -51,27 +54,29 @@ class CameraApp {
       camera.start_recording_background(command.background_frames);
     }
 
+    // sent holds the settings of the camera from the connect on, thus a comparison against sent is a comparison
+    // against the camera itself, and only a change of the commands goes out.
     if (command.settings_valid) {
-      if (!sent_valid || command.subtract_background != sent.subtract_background) {
+      if (command.subtract_background != sent.subtract_background) {
         camera.set_phot_subtract_background(command.subtract_background);
       }
-      if (!sent_valid || !same_regions(command.regions, sent.regions)) {
+      if (!same_regions(command.regions, sent.regions)) {
         camera.set_regions(command.regions);
       }
       // Each of these restarts the stream, so they only go out on a change.
-      if (sent_valid && command.framerate != sent.framerate) {
+      if (command.framerate != sent.framerate) {
         camera.write_framerate(command.framerate);
       }
-      if (sent_valid && command.integration_time_ms != sent.integration_time_ms) {
+      if (command.integration_time_ms != sent.integration_time_ms) {
         camera.write_integration_time(command.integration_time_ms);
       }
-      if (sent_valid && command.width != sent.width) {
+      if (command.width != sent.width) {
         camera.write_width(command.width);
       }
-      if (sent_valid && command.height != sent.height) {
+      if (command.height != sent.height) {
         camera.write_height(command.height);
       }
-      if (sent_valid && command.filename != sent.filename) {
+      if (command.filename != sent.filename) {
         std::string filename = command.filename;
         camera.set_filename(filename);
       }
@@ -96,7 +101,6 @@ class CameraApp {
   int settings_turn = 0;
   CameraCommands sent;
   bool sent_valid = false;
-  bool settings_seeded = false;
 
   void take_photometry() {
     const PhotBatch batch = camera.get_phot_since(last_frame_id);
@@ -114,8 +118,47 @@ class CameraApp {
     wb.state.camera.frame_count += batch.samples.size();
   }
 
+  // Read the whole set of settings, and start the commands and the record of what went out from it.
+  //
+  // This runs inside the connect, thus every cycle after it has settings_valid true and sent holds what the camera
+  // holds. A command therefore never counts as sent before it goes out.
+  void seed_from_camera() {
+    CameraState &state = wb.state.camera;
+    state.framerate = camera.read_framerate();
+    state.integration_time_ms = camera.read_integration_time();
+    state.width = camera.get_width();
+    state.height = camera.get_height();
+    state.filename = camera.get_filename();
+    state.subtract_background = camera.get_phot_subtract_background();
+    state.regions = camera.get_regions();
+    state.device_commands = camera.get_commands();
+    settings_turn = 0;
+
+    // The camera reports the truth. The commands and the record of what went out both start from it, thus nothing
+    // goes to the camera until someone asks for a change.
+    sent.framerate = state.framerate;
+    sent.integration_time_ms = state.integration_time_ms;
+    sent.width = state.width;
+    sent.height = state.height;
+    sent.filename = state.filename;
+    sent.subtract_background = state.subtract_background;
+    sent.regions = state.regions;
+
+    box.edit([&state](Commands &commands) {
+      commands.camera.framerate = state.framerate;
+      commands.camera.integration_time_ms = state.integration_time_ms;
+      commands.camera.width = state.width;
+      commands.camera.height = state.height;
+      commands.camera.filename = state.filename;
+      commands.camera.subtract_background = state.subtract_background;
+      commands.camera.regions = state.regions;
+      commands.camera.settings_valid = true;
+    });
+  }
+
   // The settings change rarely, so they take one round trip per stride and the eight of them take turns. This keeps
-  // the read off the critical path of the image, and no cycle carries the whole set.
+  // the read off the critical path of the image, and no cycle carries the whole set. It refreshes what the panel
+  // shows; the commands come from the seed and from whoever asks for a change.
   void take_settings() {
     if (wb.state.core.cycle % kSettingsStride != 0) {
       return;
@@ -150,23 +193,6 @@ class CameraApp {
     }
 
     settings_turn = (settings_turn + 1) % kSettingsCount;
-    if (settings_turn != 0 || settings_seeded) {
-      return;
-    }
-
-    // The camera reports the truth. The commands start from it, so that the core sends nothing until someone asks
-    // for a change.
-    settings_seeded = true;
-    box.edit([&state](Commands &commands) {
-      commands.camera.framerate = state.framerate;
-      commands.camera.integration_time_ms = state.integration_time_ms;
-      commands.camera.width = state.width;
-      commands.camera.height = state.height;
-      commands.camera.filename = state.filename;
-      commands.camera.subtract_background = state.subtract_background;
-      commands.camera.regions = state.regions;
-      commands.camera.settings_valid = true;
-    });
   }
 
   void take_image() {

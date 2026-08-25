@@ -95,6 +95,11 @@ class NiceGui {
   std::vector<float> phot_intensity_of_one;
   double phot_time = 0.0;
 
+  // Local display scaling of the photometry. It divides what the panel shows and it does not reach the camera.
+  bool phot_apply_intensity_of_one = false;
+  bool phot_apply_nd_filter = false;
+  float phot_nd_filter_factor = 1.0f;
+
   // OPD panel state. The panel owns what it sends, thus the dither tab and the seeker tab always agree on what the
   // core has. The frequency is what the user asks for, and the period is what the PLC gets.
   DitherSettings opd_dither;
@@ -919,46 +924,84 @@ class NiceGui {
     camera_sent_regions = regions;
   }
 
+  // One photometry series, and the scaling that the panel draws it with.
+  struct PhotSeries {
+    const ScrollingBufferT<double, double> *buffer;
+    double scale;
+  };
+
+  // The buffers hold what the camera measured, thus the scaling happens here and the history stays untouched.
+  static ImPlotPoint PhotSeriesPoint(int index, void *user_data) {
+    const PhotSeries &series = *static_cast<const PhotSeries *>(user_data);
+    const ImVector<PlotPoint<double, double>> &data = series.buffer->Data;
+    const PlotPoint<double, double> &point = data[(series.buffer->Offset + index) % data.size()];
+    return ImPlotPoint(point.time, point.value * series.scale);
+  }
+
+  // What the y axis of the photometry plot carries. The scaling is a division, thus the label names the divisor.
+  const char *PhotAxisLabel() const {
+    if (phot_apply_intensity_of_one && phot_apply_nd_filter) {
+      return "Counts / (I_0 ND)";
+    }
+    if (phot_apply_intensity_of_one) {
+      return "Counts / I_0";
+    }
+    if (phot_apply_nd_filter) {
+      return "Counts / ND";
+    }
+    return "Counts";
+  }
+
+  // What one region of the photometry is divided by. A factor of zero divides by one instead.
+  double PhotScale(size_t region) const {
+    double scale = 1.0;
+    if (phot_apply_intensity_of_one && region < phot_intensity_of_one.size() && phot_intensity_of_one[region] != 0.0f) {
+      scale /= phot_intensity_of_one[region];
+    }
+    if (phot_apply_nd_filter && phot_nd_filter_factor != 0.0f) {
+      scale /= phot_nd_filter_factor;
+    }
+    return scale;
+  }
+
   void FlirPhotometryPanel() {
+    // The width follows the font, because a stepper of a fixed width does not hold its buttons at a large scale and
+    // the row then breaks into two.
+    const float input_width = 120 * io->FontGlobalScale;
+
     if (ImGui::Checkbox("Subtract background", &camera_subtract_background)) {
       const bool on = camera_subtract_background;
       Command([on](Commands &c) { c.camera.subtract_background = on; });
     }
     ImGui::SameLine();
+    // What the camera reports back. It follows the box after one round of the settings, so a write that does not
+    // arrive is visible here.
+    ImGui::TextDisabled("(camera: %s)", snap.camera.subtract_background ? "on" : "off");
+    ImGui::SameLine();
     ImGui::Text("Regions:");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(120);
+    ImGui::SetNextItemWidth(input_width);
     if (ImGui::InputInt("##RegionCount", &camera_region_count, 1, 1)) {
       camera_region_count = std::max(0, std::min(camera_region_count, kMaxPhotRegions));
     }
 
-    // Local display scaling. It divides what is drawn and it does not reach the camera.
-    static bool apply_intensity_of_one = false;
-    static bool apply_nd_filter = false;
-    static float nd_filter_factor = 1.0f;
+    // The scaling reaches the rows and the plot.
     ImGui::Text("Normalise:");
     ImGui::SameLine();
-    ImGui::Checkbox("I_0##Apply one", &apply_intensity_of_one);
+    ImGui::Checkbox("I_0##Apply one", &phot_apply_intensity_of_one);
     ImGui::SameLine();
-    ImGui::Checkbox("ND##Apply ND", &apply_nd_filter);
+    ImGui::Checkbox("ND##Apply ND", &phot_apply_nd_filter);
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(120);
-    ImGui::InputFloat("##ND filter factor", &nd_filter_factor, 0.01f, 0.1f, "%.2f");
+    ImGui::SetNextItemWidth(input_width);
+    ImGui::InputFloat("##ND filter factor", &phot_nd_filter_factor, 0.01f, 0.1f, "%.2f");
 
     const size_t shown = std::min(static_cast<size_t>(camera_region_count), snap.camera.n_regions);
     for (size_t i = 0; i < shown; i++) {
-      double sum = snap.camera.values[i];
-      if (apply_intensity_of_one) {
-        sum /= phot_intensity_of_one[i];
-      }
-      if (apply_nd_filter) {
-        sum /= nd_filter_factor;
-      }
-      ImGui::Text("%zu: %.3e", i + 1, sum);
+      ImGui::Text("%zu: %.3e", i + 1, snap.camera.values[i] * PhotScale(i));
       ImGui::SameLine();
       ImGui::Text("I_0:");
       ImGui::SameLine();
-      ImGui::SetNextItemWidth(120);
+      ImGui::SetNextItemWidth(input_width);
       ImGui::InputFloat(("##I_0_" + std::to_string(i)).c_str(), &phot_intensity_of_one[i], 0.01f, 0.1f, "%.2f");
     }
 
@@ -966,12 +1009,14 @@ class NiceGui {
     ImGui::SliderFloat("History", &history_length, 1, 20, "%.5f s", ImGuiSliderFlags_Logarithmic);
     if (ImPlot::BeginPlot("Sum Intensity", ImVec2(-1, 400 * io->FontGlobalScale))) {
       static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
-      ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_AutoFit, yflags);
+      ImPlot::SetupAxes(nullptr, PhotAxisLabel(), ImPlotAxisFlags_AutoFit, yflags);
       ImPlot::SetupAxisLimits(ImAxis_X1, phot_time - history_length, phot_time, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       for (int i = 0; i < camera_region_count; i++) {
-        PlotSeries(std::to_string(i + 1).c_str(), phot_buffers[i], i % ImPlot::GetColormapCount(), 2.0f);
+        PhotSeries series{&phot_buffers[i], PhotScale(static_cast<size_t>(i))};
+        ImPlot::SetNextLineStyle(ImPlot::GetColormapColor(i % ImPlot::GetColormapCount()), 2.0f * io->FontGlobalScale);
+        ImPlot::PlotLineG(std::to_string(i + 1).c_str(), PhotSeriesPoint, &series, series.buffer->Data.size());
       }
       ImPlot::EndPlot();
     }
