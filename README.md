@@ -6,6 +6,83 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
 
 ![User interface of NICEcontrol](./img/ui.png)
 
+## Architecture
+
+Each directory in the source tree holds one kind of file.
+
+| Directory         | Holds                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `src/core/`       | The cycle, the whiteboard, the blackboard, and the command box                         |
+| `src/apps/`       | One application for each piece of hardware that the core steers                        |
+| `src/devices/`    | The adapters to the outside world: ADS, Tango, and the piezo controller libraries      |
+| `src/data/`       | The data types that travel between the directories, and the containers that carry them |
+| `src/algorithms/` | Computation with no hardware and no state of its own: filters, FFT, controllers        |
+| `src/gui/`        | The user interface                                                                     |
+| `client/`         | The header that gives the distributed clock to the other programs on this PC           |
+
+An include gives the path from `src/`, for example `#include "core/Whiteboard.hpp"`.
+A vendor header gives the path from the project root, for example `#include "lib/implot/implot.h"`.
+
+`Core` runs on one thread at a fixed cycle period of 10 ms and is independent of the user interface.
+Each cycle runs three steps in order.
+In `sense`, every application reads its hardware and writes what it found on the whiteboard.
+In `plan`, every application decides what it wants.
+In `act`, every application sends its commands to its own hardware, so each actuator takes at most one command per cycle.
+
+An application is a small class in `src/apps/` that owns one piece of hardware.
+The core steers the modes and leaves the details to the applications.
+
+The whiteboard is the public data.
+It has sample streams, which any number of readers subscribe to once and drain at their own pace, and a state of the latest values, which the core publishes as a snapshot after each cycle.
+The blackboard is the private data, for what only the log and the user interface need.
+
+Commands reach the core through one command box.
+A command that holds a value takes effect when the value differs from the one the core last sent to the hardware.
+A command that triggers an action carries a counter, and the core acts when the counter changes.
+
+The user interface never touches hardware.
+It reads the snapshot, it drains the streams into its plot buffers, and it writes commands.
+The program keeps running with no user interface open.
+
+### Extremum seeking
+
+`ExtremumSeeker` looks for the input of a plant where a measurement is the smallest or the largest.
+Something adds a sine to the input of the plant, and the measurement follows that sine.
+The first harmonic of the measurement is the gradient of the measurement against the input, and a PI controller drives it to zero.
+The class knows no hardware, thus one seeker fits any pair of a measurement and a plant input.
+
+`OpdSeekerApp` is the seeker of the OPD: it makes one photometry region as dark as it can by moving the OPD setpoint, and the PLC dithers the command of the delay line.
+A seeker of another pair is another application of that shape.
+
+The output only moves while the estimate of the gradient is one that the seeker can trust.
+Each sample carries the dither amplitude that the plant had when that sample was taken, thus a new amplitude changes only the samples after it.
+The output holds from the start of a run, and from any change of the amplitude, the demodulation phase, the low pass or the normalisation, until the low pass has settled.
+It also holds over a gap in the measurement, and a rate bounds how fast it moves at all.
+
+`OpdSeekerApp` runs the seeker only while the PLC is connected, the OPD loop is closed, the dither is on, the distributed clock is good, and the camera measures the region.
+It stops the seeker and clears the command of the user when one of them goes, and the user interface says which one.
+
+The dither carries a period in whole nanoseconds, and its phase counts from the epoch of the clock.
+The PLC and the PC then compute the same phase from the same timestamp, at any frequency and for all time.
+A frequency in a float would not do that, because the two sides round the division to a period differently, and one nanosecond of difference grows into many turns of phase over the size of the timestamp.
+
+### The distributed clock for other programs
+
+The esd card gives the distributed clock (DC) of the EtherCAT bus to one process only, thus no second program can read it from the card.
+NICEcontrol writes the step from `CLOCK_MONOTONIC` to the two clocks into `/dev/shm/nice_clock` in each cycle, and `client/nice_clock.h` adds that step to a reading of `CLOCK_MONOTONIC`.
+That clock has one epoch for all processes of a boot, thus the two programs speak about the same instant.
+
+```c
+int64_t t_DC_ns;
+if (nice_clock_now(&t_DC_ns, NULL, NULL) == 0) use(t_DC_ns);
+```
+
+The record appears only while NICEcontrol has confidence in the offset, and the reader gives the age of the record, which the caller judges against its own budget.
+The record carries no rate, thus the error grows by about 50 us in each second of age: a record younger than 200 ms gives t_DC within 10 us of the bus.
+Each failure prints one line to stderr.
+The offset holds for 60 s after the last pair of the two clocks, because the rate of the last estimate removes the difference of the two crystals.
+`make nice-clock-read` builds a program that prints the present record, for a check from a shell.
+
 ## Install
 
 ### Prerequisites
@@ -14,7 +91,7 @@ This nulling testbed, built at ETH Zürich by the [Exoplanets & Habitability gro
 
   ```bash
   sudo add-apt-repository ppa:berndporr/dsp # for iir1 (https://github.com/berndporr/iir1)
-  sudo apt-get install libglfw3-dev libfftw3-dev libboost-all-dev iir1-dev python3-venv
+  sudo apt-get install libglfw3-dev libfftw3-dev iir1-dev python3-venv
   ```
 
 - (Obsolte) Install the piezo controller drivers from [MCL](http://www.madcitylabs.com/) (ask their support for the files)
@@ -137,7 +214,24 @@ make
 
 ## Debugging with Analog Discovery 2
 
-### Install
+#### The distributed clock for other programs
+
+The esd card gives the distributed clock (DC) of the EtherCAT bus to one process only, thus no second program can read it from the card.
+NICEcontrol writes the step from `CLOCK_MONOTONIC` to the two clocks into `/dev/shm/nice_clock` in each cycle, and `client/nice_clock.h` adds that step to a reading of `CLOCK_MONOTONIC`.
+That clock has one epoch for all processes of a boot, thus the two programs speak about the same instant.
+
+```c
+int64_t t_DC_ns;
+if (nice_clock_now(&t_DC_ns, NULL, NULL) == 0) use(t_DC_ns);
+```
+
+The record appears only while NICEcontrol has confidence in the offset, and the reader gives the age of the record, which the caller judges against its own budget.
+The record carries no rate, thus the error grows by about 50 us in each second of age: a record younger than 200 ms gives t_DC within 10 us of the bus.
+Each failure prints one line to stderr.
+The offset holds for 60 s after the last pair of the two clocks, because the rate of the last estimate removes the difference of the two crystals.
+`make nice-clock-read` builds a program that prints the present record, for a check from a shell.
+
+## Install
 
 Download the [Adept 2 Runtime](https://digilent.com/reference/software/adept/runtime-previous-versions) (64 bit `.deb` file).
 Download [Digilent WaveForms](https://digilent.com/reference/software/waveforms/waveforms-3/previous-versions) (64 bit `.deb` file).
@@ -157,7 +251,24 @@ sudo dpkg -i ~/Downloads/digilent.waveforms_3.23.4_amd64.deb
 
 ## Teensy to activate ADCs
 
-### Install
+#### The distributed clock for other programs
+
+The esd card gives the distributed clock (DC) of the EtherCAT bus to one process only, thus no second program can read it from the card.
+NICEcontrol writes the step from `CLOCK_MONOTONIC` to the two clocks into `/dev/shm/nice_clock` in each cycle, and `client/nice_clock.h` adds that step to a reading of `CLOCK_MONOTONIC`.
+That clock has one epoch for all processes of a boot, thus the two programs speak about the same instant.
+
+```c
+int64_t t_DC_ns;
+if (nice_clock_now(&t_DC_ns, NULL, NULL) == 0) use(t_DC_ns);
+```
+
+The record appears only while NICEcontrol has confidence in the offset, and the reader gives the age of the record, which the caller judges against its own budget.
+The record carries no rate, thus the error grows by about 50 us in each second of age: a record younger than 200 ms gives t_DC within 10 us of the bus.
+Each failure prints one line to stderr.
+The offset holds for 60 s after the last pair of the two clocks, because the rate of the last estimate removes the difference of the two crystals.
+`make nice-clock-read` builds a program that prints the present record, for a check from a shell.
+
+## Install
 
 Using PlatformIO in VSCode.
 

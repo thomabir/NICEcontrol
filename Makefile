@@ -23,8 +23,8 @@ BUILD_DIR = build
 ## .cpp files
 ##---------------------------------------------------------------------
 
-# my source files
-SOURCES = $(wildcard $(SRC_DIR)/*.cpp)
+# my source files. Only the device drivers have a .cpp; the rest of the tree is header only.
+SOURCES = $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/devices/*.cpp)
 
 # add general imgui sources
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
@@ -48,6 +48,9 @@ OBJS += $(BUILD_DIR)/imgui_impl_glfw.o $(BUILD_DIR)/imgui_impl_opengl3.o
 ##---------------------------------------------------------------------
 
 LIBS = -lfftw3 -lm -liir -lpi_pi_gcs2 -lnF_interface_x64
+
+# The esd subdevice stack. It reads the EtherCAT distributed clock from the ECS-PCIe/FPGA card.
+LIBS += -L$(ESD_DIR)/lib -less
 
 LIB_TANGO_DIR = -L /usr/local/tango/lib
 LIBS += $(LIB_TANGO_DIR) -ltango \
@@ -73,7 +76,13 @@ UNAME_S := $(shell uname -s)
 LINUX_GL_LIBS = -lGL
 
 # compiler flags
-CXXFLAGS = -std=c++20 -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends -I/usr/local/tango/include/tango
+# -I. resolves the vendor headers under lib/, and -I$(SRC_DIR) resolves the project headers, so no include needs a
+# relative path.
+# The esd subdevice stack is a binary library, thus ESS_ESD_LIBRARY must select the settings of that build.
+ESD_DIR = lib/esd
+
+CXXFLAGS = -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends -I/usr/local/tango/include/tango
+CXXFLAGS += -I$(ESD_DIR)/include -DESS_ESD_LIBRARY
 CXXFLAGS += -Ofast -Wall -Wformat -Wextra #-g
 
 ##---------------------------------------------------------------------
@@ -132,6 +141,9 @@ endif
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(GLFW34_LIB)
 	$(CXX) $(CXXFLAGS) -c -MMD -MP -o $@ $<
 
+$(BUILD_DIR)/%.o: $(SRC_DIR)/devices/%.cpp | $(GLFW34_LIB)
+	$(CXX) $(CXXFLAGS) -c -MMD -MP -o $@ $<
+
 $(BUILD_DIR)/%.o: $(IMGUI_DIR)/%.cpp | $(GLFW34_LIB)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
@@ -180,14 +192,22 @@ $(BUILD_DIR)/.implot_patched: $(IMPLOT_PATCH)
 	@touch $@
 
 # Tests that need no hardware and no Tango connection.
-TEST_EXE = $(BUILD_DIR)/test_photometry_regions
+TESTS = test_photometry_regions test_extremum_seeker test_clocks
+TEST_EXES = $(addprefix $(BUILD_DIR)/,$(TESTS))
 
-test: $(TEST_EXE)
-	@$(TEST_EXE)
+test: $(TEST_EXES)
+	@for t in $(TEST_EXES); do echo "--- $$t"; $$t || exit 1; done
 
-$(TEST_EXE): test/test_photometry_regions.cpp src/PhotometryRegions.hpp
+$(BUILD_DIR)/test_%: test/test_%.cpp $(wildcard $(SRC_DIR)/*/*.hpp) client/nice_clock.h
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) -std=c++20 -I$(IMGUI_DIR) -Wall -Wextra -o $@ $<
+	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -Wall -Wextra -o $@ $<
+
+# The reader of the two clocks, for a check of the record from a shell.
+nice-clock-read: $(BUILD_DIR)/nice_clock_read
+
+$(BUILD_DIR)/nice_clock_read: client/nice_clock_read.c client/nice_clock.h
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -std=gnu17 -Wall -Wextra -o $@ $<
 
 # Checks against a live camera. They need TANGO_HOST set and the FLIR_IR_Camera server running:
 #   export TANGO_HOST=localhost:10000
@@ -202,12 +222,13 @@ TANGO_LIBS = -L/usr/local/tango/lib -ltango -lomniDynamic4 -lCOS4 -lomniORB4 -lo
 test-camera: $(CAMERA_EXES)
 	@for t in $(CAMERA_EXES); do echo "--- $$t"; $$t || exit 1; done
 
-$(BUILD_DIR)/camera_%: test/camera_%.cpp src/TangoFlirCamInterface.hpp src/PhotometryRegions.hpp
+$(BUILD_DIR)/camera_%: test/camera_%.cpp $(SRC_DIR)/devices/TangoFlirCamInterface.hpp $(SRC_DIR)/data/PhotometryRegions.hpp
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) -std=c++20 -I$(IMGUI_DIR) -I/usr/local/tango/include/tango -Wall -Wextra -o $@ $< $(TANGO_LIBS)
+	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -I/usr/local/tango/include/tango -Wall -Wextra -o $@ $< $(TANGO_LIBS)
 
+# The dependency files record the path a source had when it was compiled, so a move leaves them stale.
 clean:
-	rm -f $(EXE) $(OBJS) $(TEST_EXE) $(CAMERA_EXES)
+	rm -f $(EXE) $(OBJS) $(DEPENDS) $(TEST_EXES) $(CAMERA_EXES) $(BUILD_DIR)/nice_clock_read
 
 clean-glfw:
 	rm -rf $(GLFW34_DIR)
