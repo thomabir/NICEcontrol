@@ -129,7 +129,7 @@ The offset holds for 60 s after the last pair of the two clocks, because the rat
 
   - The files can be found on their support website, and the password is on the calibration certificate of the controller. You can also ask their support for the password. The installation instructions they provide are not best practice, so instead you may want to follow the instructions here:
 
-  - Locate `libnF_interface.so` and install it as a library. By default:
+  - Install the library `libnF_interface_x64.so` (revision 4.12):
 
     ```bash
     sudo cp ~/Downloads/EBx-120\ Support/software/lib/linux/libnF_interface_x64.so /usr/local/lib/
@@ -141,10 +141,11 @@ The offset holds for 60 s after the last pair of the two clocks, because the rat
     ```bash
     cd ~/code/NICEcontrol/
     mkdir lib/nF
-    cp ~/Downloads/EBx-120\ Support/software/programming_examples/c-testLinuxLib/include/* lib/nF/
+    cp ~/Downloads/EBx-120\ Support/software/lib/include/* lib/nF/
     ```
 
-    In `nF_interface.h`, add the line `#define LINUX` at the beginning
+  - Each controller must use DHCP on the lab network. `nF_EBD_Controller` finds the controller by its serial number.
+    Check with `make test-nf NF_SERIALS="<serial number> ..."`.
 
 - Install the [Beckhoff ADS library](https://github.com/Beckhoff/ADS) to communicate with the PLC:
 

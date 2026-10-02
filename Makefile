@@ -226,9 +226,20 @@ $(BUILD_DIR)/camera_%: test/camera_%.cpp $(SRC_DIR)/devices/TangoFlirCamInterfac
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -I/usr/local/tango/include/tango -Wall -Wextra -o $@ $< $(TANGO_LIBS)
 
+# Check against live nanoFaktur controllers on the LAN. The stages move between 2000 urad and 4000 urad.
+#   make test-nf NF_SERIALS="1000003878 1000003879"
+NF_SERIALS ?= 1000003878 1000003879
+
+test-nf: $(BUILD_DIR)/nf_controller
+	$(BUILD_DIR)/nf_controller $(NF_SERIALS)
+
+$(BUILD_DIR)/nf_controller: test/nf_controller.cpp $(SRC_DIR)/devices/nF_EBD_Controller.hpp
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -Ofast -Wall -Wextra -o $@ $< -lnF_interface_x64 -pthread
+
 # The dependency files record the path a source had when it was compiled, so a move leaves them stale.
 clean:
-	rm -f $(EXE) $(OBJS) $(DEPENDS) $(TEST_EXES) $(CAMERA_EXES) $(BUILD_DIR)/nice_clock_read
+	rm -f $(EXE) $(OBJS) $(DEPENDS) $(TEST_EXES) $(CAMERA_EXES) $(BUILD_DIR)/nice_clock_read $(BUILD_DIR)/nf_controller
 
 clean-glfw:
 	rm -rf $(GLFW34_DIR)
