@@ -156,6 +156,7 @@ struct Snapshot {
   CameraState camera;
   TangoDeviceState shutter;
   TangoDeviceState ndfilter;
+  TangoDeviceState polarizer;
 };
 
 class Whiteboard {

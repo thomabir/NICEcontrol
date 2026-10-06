@@ -80,6 +80,7 @@ struct Commands {
   CameraCommands camera;
   TangoDeviceCommands shutter;
   TangoDeviceCommands ndfilter;
+  TangoDeviceCommands polarizer;
 };
 
 // The one place where commands are stored. Later this becomes a scheduler that merges several command sources.

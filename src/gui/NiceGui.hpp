@@ -217,6 +217,9 @@ class NiceGui {
     if (ImGui::CollapsingHeader("ND Filter")) {
       WindowTangoDevice("NDFilter", snap.ndfilter, [](Commands &c) -> TangoDeviceCommands & { return c.ndfilter; });
     }
+    if (ImGui::CollapsingHeader("Polarizer")) {
+      WindowTangoDevice("Polarizer", snap.polarizer, [](Commands &c) -> TangoDeviceCommands & { return c.polarizer; });
+    }
     if (ImGui::CollapsingHeader("Flir Camera")) {
       WindowFlirCam();
     }
@@ -272,6 +275,8 @@ class NiceGui {
     Status("Shutter", snap.shutter.connected);
     ImGui::SameLine();
     Status("ND filter", snap.ndfilter.connected);
+    ImGui::SameLine();
+    Status("Polarizer", snap.polarizer.connected);
 
     ImGui::Text("Metrology samples %llu, PLC samples %llu with %llu gaps, camera frames %llu",
                 (unsigned long long)snap.metrology.sample_count, (unsigned long long)snap.opd.sample_count,
