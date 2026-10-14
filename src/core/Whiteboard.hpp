@@ -12,6 +12,7 @@
 #include "data/PlcSample.hpp"
 #include "data/SPMCRingBuffer.hpp"
 #include "data/Timestamp.hpp"
+#include "data/TipTilt.hpp"
 #include "devices/TangoFlirCamInterface.hpp"
 
 // The whiteboard is the public data of the core. Every application writes its own part and reads any other part.
@@ -116,13 +117,18 @@ struct OpdSeekerState {
   ExtremumSeekerState seeker;
 };
 
-// The two lateral beam positions, set by the PI tip/tilt stages.
-struct TipTiltState {
+// One tip/tilt actuator, in local axes. See data/TipTilt.hpp for the map to the beam coordinates.
+struct TipTiltActuatorState {
   bool connected = false;
-  float x1 = 0.0f;
-  float y1 = 0.0f;
-  float x2 = 0.0f;
-  float y2 = 0.0f;
+  tiptilt::Vector2 sensor_local_mrad{};  // read in this cycle
+  tiptilt::Vector2 min_local_mrad{};     // the range of the setpoint
+  tiptilt::Vector2 max_local_mrad{};
+};
+
+// The lateral beam control with two PI and two nanoFaktur tip/tilt actuators.
+struct TipTiltState {
+  bool connected = false;  // all actuators are connected
+  std::array<TipTiltActuatorState, kTipTiltActuators> actuators;
 };
 
 struct CameraState {

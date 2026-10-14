@@ -29,7 +29,6 @@ constexpr const char *discovery_message = "nF";
 constexpr int discovery_timeout_ms = 500;
 constexpr u32 param_device_serial = 0xFF000011;
 constexpr u8 closed_loop = 1;
-constexpr int cmd_level = 0xFFF0;
 
 struct DiscoveredController {
   std::string ip;
@@ -139,7 +138,7 @@ inline void *disconnect_thread(void *fd) {
 // nanoFaktur EBD-120 tip/tilt piezo controller (2 axes), connected via LAN (TCP port 51000).
 // The controller is found by its device serial number with a UDP broadcast on all IPv4 interfaces, so the IP address
 // is not necessary. The controller must use DHCP (parameter 0xFF010001 = 1 in flash).
-// Positions and targets are in urad.
+// Positions and targets are in mrad.
 class nF_EBD_Controller {
  public:
   explicit nF_EBD_Controller(const char *serial_number)
@@ -150,8 +149,8 @@ class nF_EBD_Controller {
   nF_EBD_Controller(const nF_EBD_Controller &) = delete;
   nF_EBD_Controller &operator=(const nF_EBD_Controller &) = delete;
 
-  // Finds and connects the controller, verifies its serial number, reads the closed-loop range and switches on closed
-  // loop on both axes. Returns false if one of these steps fails.
+  // Finds and connects the controller, verifies its serial number and switches on closed loop on both axes. Returns
+  // false if one of these steps fails.
   bool init() {
     if (this->fd >= 0) {
       return true;
@@ -167,7 +166,7 @@ class nF_EBD_Controller {
       return false;
     }
 
-    if (!verify_serial_number() || !read_range() || !enable_servo()) {
+    if (!verify_serial_number() || !enable_servo()) {
       disconnect();
       return false;
     }
@@ -188,7 +187,7 @@ class nF_EBD_Controller {
     return this->fd >= 0;
   }
 
-  // Position of both axes (urad). A read takes one TCP round trip (approximately 1.3 ms). NaN if not connected or if
+  // Position of both axes (mrad). A read takes one TCP round trip (approximately 1.3 ms). NaN if not connected or if
   // the read fails. With -ffast-math (included in -Ofast), std::isnan() does not detect NaN, so use is_connected().
   std::array<double, 2> read() {
     constexpr double nan = std::numeric_limits<double>::quiet_NaN();
@@ -197,17 +196,17 @@ class nF_EBD_Controller {
       return {nan, nan};
     }
     send_pending_target();
-    float position[2];  // mrad
+    float position[2];
     if (nF_get_dev_axis_position_m(this->fd, 2, this->axes, position) != 0) {
       return {nan, nan};
     }
-    return {position[0] * 1e3 - this->offset, position[1] * 1e3 - this->offset};
+    return {position[0], position[1]};
   }
 
-  // Sets a closed-loop target (urad) and returns immediately. A worker thread or the next read() sends the target,
+  // Sets a closed-loop target (mrad) and returns immediately. A worker thread or the next read() sends the target,
   // whichever gets the connection first. Thus a read() after move_to() always comes after the command. Targets that
-  // arrive before the send replace each other, and the last target is always sent. Targets outside the closed-loop
-  // range of the controller are clamped.
+  // arrive before the send replace each other, and the last target is always sent. Targets outside the range are
+  // clamped.
   void move_to(std::array<double, 2> target) {
     {
       std::scoped_lock lock(this->target_mutex);
@@ -216,6 +215,10 @@ class nF_EBD_Controller {
     }
     this->target_cv.notify_one();
   }
+
+  // The range of the targets of each axis (mrad), from the data sheet of the stage.
+  std::array<double, 2> range_min() const { return {this->min_pos, this->min_pos}; }
+  std::array<double, 2> range_max() const { return {this->max_pos, this->max_pos}; }
 
   void close() {
     if (this->mover.joinable()) {
@@ -233,12 +236,11 @@ class nF_EBD_Controller {
   std::string serial_number;
   std::string name;
   std::string ip;
-  int fd = -1;                      // interface descriptor of the vendor library, -1 if not connected
-  int axes[2] = {0, 1};             // x-axis, y-axis
-  double offset = 0.0;              // urad
-  std::array<double, 2> min_pos{};  // urad, closed-loop range from the controller
-  std::array<double, 2> max_pos{};  // urad
-  std::mutex io_mutex;              // one command at a time on the connection
+  int fd = -1;           // interface descriptor of the vendor library, -1 if not connected
+  int axes[2] = {0, 1};  // x-axis, y-axis
+  double min_pos = 0.0;  // mrad
+  double max_pos = 8.0;  // mrad
+  std::mutex io_mutex;   // one command at a time on the connection
 
   std::thread mover;
   std::mutex target_mutex;
@@ -246,6 +248,7 @@ class nF_EBD_Controller {
   std::array<double, 2> pending_target{};
   bool target_pending = false;
   bool stop_mover = false;
+  int last_target_error = 0;
 
   bool find_ip() {
     int matches = 0;
@@ -278,24 +281,6 @@ class nF_EBD_Controller {
     if (err != 0 || format != CMD_DATA_FMT_STRING || this->serial_number != value.sData) {
       std::cout << this->name << ": Error: Controller at " << this->ip << " has a different serial number" << std::endl;
       return false;
-    }
-    return true;
-  }
-
-  bool read_range() {
-    float low[2], high[2];  // mrad
-    u32 level = 1;
-    nF_intf_write_command_u32_m(this->fd, nF_EBD_detail::cmd_level, 1, &level);
-    const int err_low = nF_get_dev_axis_range_low_m(this->fd, nF_EBD_detail::closed_loop, 2, this->axes, low);
-    const int err_high = nF_get_dev_axis_range_high_m(this->fd, nF_EBD_detail::closed_loop, 2, this->axes, high);
-    if (err_low != 0 || err_high != 0) {
-      std::cout << this->name << ": Error: Cannot read the closed-loop range (errors " << err_low << ", " << err_high
-                << ", controller error " << nF_get_dev_error_m(this->fd) << ")" << std::endl;
-      return false;
-    }
-    for (int i = 0; i < 2; i++) {
-      this->min_pos[i] = low[i] * 1e3 - this->offset;
-      this->max_pos[i] = high[i] * 1e3 - this->offset;
     }
     return true;
   }
@@ -352,14 +337,20 @@ class nF_EBD_Controller {
       target = this->pending_target;
       this->target_pending = false;
     }
-    float target_mrad[2];  // the nF API expects float
+    float target_float[2];  // the nF API expects float
     for (int i = 0; i < 2; i++) {
-      const double clamped = std::clamp(target[i], this->min_pos[i], this->max_pos[i]);
-      target_mrad[i] = static_cast<float>((clamped + this->offset) * 1e-3);
+      const double clamped = std::clamp(target[i], this->min_pos, this->max_pos);
+      target_float[i] = static_cast<float>(clamped);
     }
-    if (this->fd >= 0) {
-      nF_set_dev_axis_target_m(this->fd, nF_EBD_detail::closed_loop, 2, this->axes, target_mrad);
+    if (this->fd < 0) {
+      return;
     }
+    const int err = nF_set_dev_axis_target_m(this->fd, nF_EBD_detail::closed_loop, 2, this->axes, target_float);
+    if (err != 0 && err != this->last_target_error) {
+      std::cout << this->name << ": Error: Cannot set the target (error " << err << ", controller error "
+                << nF_get_dev_error_m(this->fd) << ")" << std::endl;
+    }
+    this->last_target_error = err;  // each new error code prints once
   }
 
   void disconnect() {

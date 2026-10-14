@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -8,6 +9,7 @@
 #include "data/Dither.hpp"
 #include "data/ExtremumSeeker.hpp"
 #include "data/PhotometryRegions.hpp"
+#include "data/TipTilt.hpp"
 
 // Commands travel from the outside world to the core. The core reads them once per cycle and acts on them in the act
 // step. A command that holds a value takes effect when the value differs from the one the core last sent to the
@@ -35,11 +37,8 @@ struct OpdSeekerCommands {
 };
 
 struct TipTiltCommands {
-  int mode = 0;  // 0 open loop, 1 closed loop, 2 hold still
-  float x1 = 0.0f;
-  float y1 = 0.0f;
-  float x2 = 0.0f;
-  float y2 = 0.0f;
+  int mode = 0;  // 0 open loop, 1 closed loop with the metrology (not available), 2 hold still
+  std::array<TipTiltSetpoint, kTipTiltActuators> setpoints;
 };
 
 struct CameraCommands {

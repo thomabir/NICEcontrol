@@ -1,6 +1,6 @@
 // Check of nF_EBD_Controller against live nanoFaktur controllers on the LAN.
 // Usage: nf_controller <serial number> [<serial number> ...]
-// The stages move between 2000 urad and 4000 urad, and stop at 3000 urad.
+// The stages move between 2 mrad and 4 mrad, and stop at 3 mrad.
 
 #include <algorithm>
 #include <array>
@@ -16,7 +16,7 @@
 
 namespace {
 
-constexpr double tolerance = 10.0;  // urad
+constexpr double tolerance = 0.01;  // mrad
 constexpr auto settle_time = std::chrono::milliseconds(500);
 
 int failures = 0;
@@ -55,23 +55,23 @@ double median_read_ms(nF_EBD_Controller &controller, int n_reads) {
 
 void check_one(nF_EBD_Controller &controller, const std::string &serial) {
   check(controller.is_connected(), serial + ": connected");
-  check(move_and_check(controller, {3000.0, 3500.0}), serial + ": move to (3000, 3500) with reads without pause");
-  check(move_and_check(controller, {2500.0, 2000.0}), serial + ": move to (2500, 2000) with reads without pause");
+  check(move_and_check(controller, {3.0, 3.5}), serial + ": move to (3.0, 3.5) with reads without pause");
+  check(move_and_check(controller, {2.5, 2.0}), serial + ": move to (2.5, 2.0) with reads without pause");
 
   for (int i = 0; i <= 200; i++) {
-    controller.move_to({2000.0 + 10.0 * i, 4000.0 - 10.0 * i});
+    controller.move_to({2.0 + 0.01 * i, 4.0 - 0.01 * i});
   }
   std::this_thread::sleep_for(settle_time);
-  check(near(controller.read(), {4000.0, 2000.0}), serial + ": the last of 200 fast targets is reached");
+  check(near(controller.read(), {4.0, 2.0}), serial + ": the last of 200 fast targets is reached");
 
   std::printf("  %s: median read() time %.3f ms\n", serial.c_str(), median_read_ms(controller, 500));
 
-  controller.move_to({3000.0, 3000.0});
+  controller.move_to({3.0, 3.0});
   std::this_thread::sleep_for(settle_time);
   controller.close();
   check(!controller.is_connected(), serial + ": is_connected() is false after close()");
   check(controller.init(), serial + ": init() after close() connects again");
-  check(near(controller.read(), {3000.0, 3000.0}), serial + ": position is kept after close() and init()");
+  check(near(controller.read(), {3.0, 3.0}), serial + ": position is kept after close() and init()");
 }
 
 }  // namespace
@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
   check(std::all_of(ok.begin(), ok.end(), [](char c) { return c != 0; }), "all controllers in parallel threads");
 
   for (auto &c : controllers) {
-    c->move_to({3000.0, 3000.0});
+    c->move_to({3.0, 3.0});
   }
   std::this_thread::sleep_for(settle_time);
   for (auto &c : controllers) {

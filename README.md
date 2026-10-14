@@ -12,7 +12,7 @@ Each directory in the source tree holds one kind of file.
 
 | Directory         | Holds                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------- |
-| `src/core/`       | The cycle, the whiteboard, the blackboard, and the command box                         |
+| `src/core/`       | The cycle, the whiteboard, the blackboard, the command box, and the cycle workers      |
 | `src/apps/`       | One application for each piece of hardware that the core steers                        |
 | `src/devices/`    | The adapters to the outside world: ADS, Tango, and the piezo controller libraries      |
 | `src/data/`       | The data types that travel between the directories, and the containers that carry them |
@@ -43,6 +43,30 @@ A command that triggers an action carries a counter, and the core acts when the 
 The user interface never touches hardware.
 It reads the snapshot, it drains the streams into its plot buffers, and it writes commands.
 The program keeps running with no user interface open.
+
+### Lateral beam control
+
+`TipTiltApp` controls two PI E-727 and two nanoFaktur EBD-120 tip/tilt actuators.
+In each cycle it reads the sensors of all four actuators, and it sends each setpoint that the user interface changed.
+The reads of the four actuators run in parallel, thus the sense step takes the time of the slowest read.
+A controller sends a new target on its own thread, thus the act step does not wait for USB or the LAN.
+
+All tip/tilt angles are in mrad, in the controller classes too.
+Each actuator has its own local axes, and the core uses only the local axes.
+The beam coordinates are common to all actuators.
+An invertible 2×2 matrix per actuator (`kLocalToBeam` in `src/data/TipTilt.hpp`) maps the local axes to the beam coordinates.
+Its inverse (`kBeamToLocal`) maps the beam coordinates to the local axes.
+The ranges of the stages come from the data sheets and are constants in the controller classes.
+
+The window "Lateral beam control" has two tables with the same setpoints:
+
+- "Beam coordinates", for operation. A setpoint goes through `kBeamToLocal` and is clamped to the range of the stage.
+- "Actuator axes", for diagnosis. It shows the setpoints and the sensor values in local axes.
+
+An edit in one table also changes the other table.
+Each setpoint starts at the value in `kStartSetpoint`, in local axes.
+The core sends nothing to an actuator until the user interface sets its setpoint, thus the actuators stay where they are when the program starts.
+The closed loop with the metrology is not available.
 
 ### Extremum seeking
 

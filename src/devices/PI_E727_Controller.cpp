@@ -1,6 +1,6 @@
 #include "devices/PI_E727_Controller.hpp"
 
-#include <atomic>
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <thread>
@@ -9,17 +9,10 @@
 #include "lib/pi/AutoZeroSample.h"
 #include "lib/pi/PI_GCS2_DLL.h"
 
-PI_E727_Controller::PI_E727_Controller(char *serialNumberString) {
-  // set serial number
+PI_E727_Controller::PI_E727_Controller(const char *serialNumberString) {
   std::strcpy(this->serialNumberString, serialNumberString);
-
-  // set name
   std::strcpy(this->name, "PI E-727 Tip/Tilt Piezo Controller S/N ");
   std::strcat(this->name, serialNumberString);
-
-  // set is_moving to false
-  is_moving_x = false;
-  is_moving_y = false;
 }
 
 PI_E727_Controller::~PI_E727_Controller() { close(); }
@@ -31,37 +24,22 @@ bool PI_E727_Controller::init() {
     iD = PI_ConnectUSB(this->serialNumberString);
   }
 
-  // Check if connection was successful
-  if (PI_IsConnected(iD)) {
-    std::cout << this->name << ": Connection successful" << std::endl;
-  } else {
+  if (!PI_IsConnected(iD)) {
     std::cout << this->name << ": Connection failed" << std::endl;
     return false;
   }
+  std::cout << this->name << ": Connection successful" << std::endl;
 
-  // find available axes
-  // char szAxes[1024];
-  // PI_qSAI(iD, szAxes, 1024);
-  // std::cout << "Available axes: " << szAxes << std::endl;
-
-  // find units that qPOS and MOV use
-  // char szUnits[1024];
-  // PI_qPUN(iD, "2", szUnits, 1024);
-  // std::cout << "Units: " << szUnits << std::endl;
-
-  // If an error occurred, print it to the console
   int iError = 0;
   PI_qERR(iD, &iError);
   if (iError != 0) {
     std::cout << this->name << ": Error: " << iError << std::endl;
   }
 
-  // set servo mode
   const int iEnable = 1;
   PI_SVO(iD, "1", &iEnable);
   PI_SVO(iD, "2", &iEnable);
 
-  // check if both axes servo modes are enabled. Print error if at least one is not enabled.
   int iServoStatus = 0;
   PI_qSVO(iD, "1", &iServoStatus);
   if (iServoStatus != 1) {
@@ -72,87 +50,62 @@ bool PI_E727_Controller::init() {
     std::cout << this->name << ": Error: Cannot turn on servo on axis 2" << std::endl;
   }
 
+  {
+    std::scoped_lock lock(this->target_mutex);
+    this->stop_mover = false;
+    this->target_pending = false;
+  }
+  this->mover = std::thread(&PI_E727_Controller::move_loop, this);
   return true;
 }
 
-double PI_E727_Controller::readx() {
-  double value = 0;
-  PI_qPOS(iD, "2", &value);
-  return value - offset;  // urad
+std::array<double, 2> PI_E727_Controller::read() {
+  std::scoped_lock lock(this->io_mutex);
+  send_pending_target();
+  double value[2] = {0.0, 0.0};
+  PI_qPOS(iD, "1 2", value);
+  return {value[0] * 1e-3, value[1] * 1e-3};  // the controller uses urad
 }
 
-double PI_E727_Controller::ready() {
-  double value = 0;
-  PI_qPOS(iD, "1", &value);
-  return value - offset;  // urad
+void PI_E727_Controller::move_to(std::array<double, 2> target) {
+  {
+    std::scoped_lock lock(this->target_mutex);
+    this->pending_target = target;
+    this->target_pending = true;
+  }
+  this->target_cv.notify_one();
 }
 
-void PI_E727_Controller::move_to_axis(int axis, double value) {
-  if (axis == 1) {
-    move_to_x(value);
-  } else if (axis == 2) {
-    move_to_y(value);
-  } else {
-    std::cout << "Invalid axis" << std::endl;
+void PI_E727_Controller::move_loop() {
+  while (true) {
+    {
+      std::unique_lock lock(this->target_mutex);
+      this->target_cv.wait(lock, [this] { return this->target_pending || this->stop_mover; });
+      if (this->stop_mover) {
+        return;
+      }
+    }
+    std::scoped_lock lock(this->io_mutex);
+    send_pending_target();
   }
 }
 
-void PI_E727_Controller::move_to_x(double value) {
-  if (is_moving_x.load()) {
-    return;
-  }  // stage is unreachable while moving
-
-  is_moving_x.store(true);
-  std::thread([this, value] {
-    move_to_x_blocking(value);
-    is_moving_x.store(false);
-  }).detach();
-}
-
-void PI_E727_Controller::move_to_y(double value) {
-  if (is_moving_y.load()) {
-    return;
-  }  // stage is unreachable while moving
-
-  is_moving_y.store(true);
-  std::thread([this, value] {
-    move_to_y_blocking(value);
-    is_moving_y.store(false);
-  }).detach();
-}
-
-void PI_E727_Controller::move_to_x_blocking(double value) {
-  double dValue = value + offset;  // the negative sign is because of the orientation of the piezo
-
-  // check if the value is within the allowed range, clamp if necessary
-  if (dValue < min_pos) {
-    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to "
-    // << min_pos << " um instead." << std::endl;
-    dValue = min_pos;
-  } else if (dValue > max_pos) {
-    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to "
-    // << max_pos << " um instead." << std::endl;
-    dValue = max_pos;
+// Sends the pending target, if there is one. The caller holds io_mutex.
+void PI_E727_Controller::send_pending_target() {
+  std::array<double, 2> target;
+  {
+    std::scoped_lock lock(this->target_mutex);
+    if (!this->target_pending) {
+      return;
+    }
+    target = this->pending_target;
+    this->target_pending = false;
   }
-
-  PI_MOV(iD, "1", &dValue);
-}
-
-void PI_E727_Controller::move_to_y_blocking(double value) {
-  double dValue = value + offset;
-
-  // check if the value is within the allowed range, clamp if necessary
-  if (dValue < min_pos) {
-    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to "
-    // << min_pos << " um instead." << std::endl;
-    dValue = min_pos;
-  } else if (dValue > max_pos) {
-    // std::cout << this->name << ": Warning: Cannot go that far. Commanded position is " << dValue << " um, going to "
-    // << max_pos << " um instead." << std::endl;
-    dValue = max_pos;
+  double value[2];
+  for (int i = 0; i < 2; i++) {
+    value[i] = std::clamp(target[i], min_pos, max_pos) * 1e3;  // the controller uses urad
   }
-
-  PI_MOV(iD, "2", &dValue);
+  PI_MOV(iD, "1 2", value);
 }
 
 // run autozero procedure
@@ -161,7 +114,21 @@ void PI_E727_Controller::autozero() {
   autozero_axis(iD, "2");
 }
 
-void PI_E727_Controller::close() { PI_CloseConnection(iD); }
+void PI_E727_Controller::close() {
+  if (this->mover.joinable()) {
+    {
+      std::scoped_lock lock(this->target_mutex);
+      this->stop_mover = true;
+    }
+    this->target_cv.notify_one();
+    this->mover.join();
+  }
+  std::scoped_lock lock(this->io_mutex);
+  if (iD >= 0) {
+    PI_CloseConnection(iD);
+    iD = -1;
+  }
+}
 
 int PI_E727_Controller::autozero_axis(int ID, const std::string axis) {
   BOOL bAutoZeroed;
