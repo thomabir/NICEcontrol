@@ -141,8 +141,8 @@ inline void *disconnect_thread(void *fd) {
 // Positions and targets are in mrad.
 class nF_EBD_Controller {
  public:
-  explicit nF_EBD_Controller(const char *serial_number)
-      : serial_number(serial_number), name(std::string("nF EBD Controller S/N ") + serial_number) {}
+  explicit nF_EBD_Controller(const char *serial)
+      : serial_number(serial), name(std::string("nF EBD Controller S/N ") + serial) {}
 
   ~nF_EBD_Controller() { close(); }
 

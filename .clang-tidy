@@ -1,0 +1,8 @@
+# bugprone-easily-swappable-parameters is off: it asks for a distinct type for each parameter of the same type.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  concurrency-*,
+  cppcoreguidelines-owning-memory
+HeaderFilterRegex: 'src/'

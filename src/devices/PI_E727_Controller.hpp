@@ -11,7 +11,7 @@
 // Positions and targets are in mrad. Index 0 is the controller axis "1", and index 1 is the controller axis "2".
 class PI_E727_Controller {
  public:
-  explicit PI_E727_Controller(const char *serialNumberString);
+  explicit PI_E727_Controller(const char *serial_number);
   ~PI_E727_Controller();
   bool init();
 

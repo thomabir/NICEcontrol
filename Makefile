@@ -16,7 +16,7 @@ GLFW34_DIR = lib/glfw34
 GLFW34_LIB = $(GLFW34_DIR)/build/src/libglfw3.a
 GLFW34_PATCH = glfw34_x11monitor.patch
 
-TANGO_INCLUDE = -I/usr/local/tango/include/tango
+TANGO_INCLUDE = -isystem /usr/local/tango/include/tango
 TANGO_LIBS = -L/usr/local/tango/lib -ltango -lomniORB4 -lomniDynamic4 -lCOS4 -lomnithread -lzmq -lpthread
 
 # The repository of the Tango device servers. The GUI runs its restart_servers.sh.
@@ -33,11 +33,15 @@ DEPENDS = $(patsubst %.cpp,$(BUILD_DIR)/%.d,$(notdir $(SOURCES)))
 
 # -I. resolves the vendor headers under lib/, and -I$(SRC_DIR) resolves the project headers, so no include needs a
 # relative path.
+# The vendor folders are -isystem, thus the compiler gives no warnings for their headers.
 # The esd subdevice stack is a binary library, thus ESS_ESD_LIBRARY must select the settings of that build.
-CXXFLAGS = -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends $(TANGO_INCLUDE) -I$(GLFW34_DIR)/include
-CXXFLAGS += -I$(ESD_DIR)/include -DESS_ESD_LIBRARY
+CXXFLAGS = -std=c++20 -I. -I$(SRC_DIR) -isystem $(IMGUI_DIR) -isystem $(IMGUI_DIR)/backends $(TANGO_INCLUDE)
+CXXFLAGS += -isystem $(GLFW34_DIR)/include -isystem $(ESD_DIR)/include -DESS_ESD_LIBRARY
 CXXFLAGS += -Ofast -Wall -Wformat -Wextra
 CXXFLAGS += -DNICE_TANGO_SERVERS_DIR=\"$(TANGO_SERVERS_DIR)\"
+
+# Warnings for the project sources only. The vendor sources compile without them.
+PROJECT_WARNINGS = -Wshadow -Wconversion -Wnon-virtual-dtor
 
 LIBS = -lfftw3 -lm -liir -lpi_pi_gcs2 -lnF_interface_x64
 LIBS += -L$(ESD_DIR)/lib -less
@@ -49,10 +53,10 @@ LIBS += -lGL $(GLFW34_LIB) -lrt -ldl -lX11 -lXrandr -lXi -lXcursor -lXinerama
 # -MMD writes the header dependencies to .d files. -MP adds a phony target for each header, thus a deleted or renamed
 # header does not stop the build with "No rule to make target".
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(GLFW34_LIB)
-	$(CXX) $(CXXFLAGS) -c -MMD -MP -o $@ $<
+	$(CXX) $(CXXFLAGS) $(PROJECT_WARNINGS) -c -MMD -MP -o $@ $<
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/devices/%.cpp | $(GLFW34_LIB)
-	$(CXX) $(CXXFLAGS) -c -MMD -MP -o $@ $<
+	$(CXX) $(CXXFLAGS) $(PROJECT_WARNINGS) -c -MMD -MP -o $@ $<
 
 $(BUILD_DIR)/%.o: $(IMGUI_DIR)/%.cpp | $(GLFW34_LIB)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
@@ -98,6 +102,13 @@ $(BUILD_DIR)/.implot_patched: $(IMPLOT_PATCH)
 		&& git -C $(IMPLOT_DIR) apply $(CURDIR)/$(IMPLOT_PATCH) \
 		|| true
 	@touch $@
+
+# Static analysis of the project sources and of the project headers that they include. .clang-tidy holds the checks.
+# clang-tidy 14 cannot parse the C++20 headers of libstdc++ 14, thus TIDY_STDLIB selects an older libstdc++.
+TIDY_STDLIB ?= -nostdinc++ -isystem /usr/include/c++/11 -isystem /usr/include/x86_64-linux-gnu/c++/11
+
+tidy: | $(GLFW34_LIB) $(BUILD_DIR)/.implot_patched
+	clang-tidy $(filter $(SRC_DIR)/%,$(SOURCES)) -- $(TIDY_STDLIB) $(CXXFLAGS)
 
 # Tests that need no hardware and no Tango connection.
 TESTS = test_photometry_regions test_extremum_seeker test_clocks test_script_runner test_tango_widgets

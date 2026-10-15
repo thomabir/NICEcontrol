@@ -14,10 +14,9 @@
 
 class TangoGenericInterface {
  private:
-  Tango::DeviceProxy *tango_device;
+  std::unique_ptr<Tango::DeviceProxy> tango_device;
   std::string device_name;
   bool connected = false;
-  Tango::DeviceProxy *get_device() { return tango_device; }
 
   template <typename T>
   static bool extract_number(Tango::DeviceAttribute &att, double &number) {
@@ -30,14 +29,7 @@ class TangoGenericInterface {
   }
 
  public:
-  TangoGenericInterface(const std::string &device_name = "motor/shutter/1")
-      : tango_device(nullptr), device_name(device_name) {}
-
-  ~TangoGenericInterface() {
-    if (tango_device) {
-      delete tango_device;
-    }
-  }
+  TangoGenericInterface(const std::string &name = "motor/shutter/1") : device_name(name) {}
 
   bool is_connected() { return connected; }
 
@@ -49,11 +41,10 @@ class TangoGenericInterface {
 
     // Create a new device proxy
     try {
-      tango_device = new Tango::DeviceProxy(device_name.c_str());
+      tango_device = std::make_unique<Tango::DeviceProxy>(device_name.c_str());
       return 0;
     } catch (Tango::DevFailed &e) {
       Tango::Except::print_exception(e);
-      tango_device = nullptr;
       return -1;
     }
   }
@@ -87,8 +78,7 @@ class TangoGenericInterface {
   }
 
   int disconnect() {
-    delete tango_device;
-    tango_device = nullptr;
+    tango_device.reset();
     connected = false;
     return 0;
   }
@@ -230,7 +220,6 @@ class TangoGenericInterface {
         case Tango::DEV_BOOLEAN:
           return extract_number<Tango::DevBoolean>(att, number);
         case Tango::DEV_SHORT:
-          return extract_number<Tango::DevShort>(att, number);
         case Tango::DEV_ENUM:
           return extract_number<Tango::DevShort>(att, number);
         case Tango::DEV_USHORT:

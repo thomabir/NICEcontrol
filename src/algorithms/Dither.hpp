@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <numbers>
 
@@ -29,7 +30,7 @@ inline int64_t period_from_frequency(double frequency_hz) {
   if (!(frequency_hz > 0.0)) {
     return 0;
   }
-  return static_cast<int64_t>(1.0e9 / frequency_hz + 0.5);
+  return std::llround(1.0e9 / frequency_hz);
 }
 
 inline double frequency_from_period(int64_t period_ns) {

@@ -30,7 +30,7 @@
 #include "data/ScrollingBufferT.hpp"
 #include "gui/ScriptRunner.hpp"
 #include "gui/TangoDeviceWidgets.hpp"
-#include "lib/fonts/SourceSans3Regular.cpp"
+#include "lib/fonts/SourceSans3Regular.cpp"  // NOLINT(bugprone-suspicious-include): the font data, made by binary_to_compressed_c
 #include "lib/implot/implot.h"
 
 // Windows
@@ -42,11 +42,11 @@
 // so the program keeps running with no user interface open.
 class NiceGui {
  public:
-  explicit NiceGui(Core &core)
-      : core(core),
-        adc_reader(core.whiteboard().adc.subscribe()),
-        plc_reader(core.whiteboard().plc.subscribe()),
-        phot_reader(core.whiteboard().phot.subscribe()) {
+  explicit NiceGui(Core &control_core)
+      : core(control_core),
+        adc_reader(control_core.whiteboard().adc.subscribe()),
+        plc_reader(control_core.whiteboard().plc.subscribe()),
+        phot_reader(control_core.whiteboard().phot.subscribe()) {
     phot_buffers.resize(kMaxPhotRegions, ScrollingBufferT<double, double>(kPhotHistoryPoints));
     phot_intensity_of_one.resize(kMaxPhotRegions, 1.0f);
     opd_dither.period_ns = dither::period_from_frequency(opd_dither_frequency_hz);
@@ -180,7 +180,7 @@ class NiceGui {
     Measurement<PlcSample> plc_measurement;
     while (wb.plc.try_pop(plc_reader, plc_measurement)) {
       const PlcSample &plc_sample = plc_measurement.value;
-      plc_time = plc_measurement.time.t_DC * 1e-9;
+      plc_time = 1e-9 * static_cast<double>(plc_measurement.time.t_DC);
       dl_pos_buffer.AddPoint(plc_time, plc_sample.dl_pos_um);
       dl_cmd_buffer.AddPoint(plc_time, plc_sample.dl_cmd_um);
       opd_buffer.AddPoint(plc_time, plc_sample.opd_um);
@@ -198,7 +198,7 @@ class NiceGui {
     Measurement<PhotSample> phot_measurement;
     while (wb.phot.try_pop(phot_reader, phot_measurement)) {
       const PhotSample &phot_sample = phot_measurement.value;
-      phot_time = phot_measurement.time.t_DC * 1e-9;
+      phot_time = 1e-9 * static_cast<double>(phot_measurement.time.t_DC);
       for (int region = 0; region < kMaxPhotRegions; region++) {
         phot_buffers[region].AddPoint(phot_time, phot_sample.values[region]);
       }
@@ -502,7 +502,7 @@ class NiceGui {
       setpoint_um = snap.opd.setpoint_um;
     }
     ImGui::BeginDisabled(seeking);
-    if (ImGui::DragFloat("OPD Setpoint", &setpoint_um, 1e-4, -1e3, 1e3, "%.4f um", ImGuiSliderFlags_AlwaysClamp)) {
+    if (ImGui::DragFloat("OPD Setpoint", &setpoint_um, 1e-4f, -1e3, 1e3, "%.4f um", ImGuiSliderFlags_AlwaysClamp)) {
       Command([](Commands &c) { c.opd.setpoint_um = setpoint_um; });
     }
     editing = ImGui::IsItemActive();
@@ -512,7 +512,7 @@ class NiceGui {
       ImGui::TextDisabled("(the seeker runs)");
     }
 
-    if (ImGui::DragFloat("Open loop DL command", &open_loop_cmd_um, 1e-4, 0.0f, 15.0f, "%.4f um",
+    if (ImGui::DragFloat("Open loop DL command", &open_loop_cmd_um, 1e-4f, 0.0f, 15.0f, "%.4f um",
                          ImGuiSliderFlags_AlwaysClamp)) {
       Command([](Commands &c) { c.opd.open_loop_cmd_um = open_loop_cmd_um; });
     }
@@ -794,7 +794,7 @@ class NiceGui {
     static ImPlotAxisFlags yflags = ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit;
     if (ImPlot::BeginPlot("##ADC", ImVec2(-1, 400 * frame_io.FontGlobalScale))) {
       ImPlot::SetupAxes(nullptr, nullptr, xflags, yflags);
-      ImPlot::SetupAxisLimits(ImAxis_X1, adc_time - history_length, adc_time, ImGuiCond_Always);
+      ImPlot::SetupAxisLimits(ImAxis_X1, static_cast<double>(adc_time) - history_length, adc_time, ImGuiCond_Always);
       ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1);
       ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
       for (int i = 0; i < 16; i++) {
@@ -829,8 +829,8 @@ class NiceGui {
       }
 
       const int n_points = 1000;
-      static float mean = 0.0f;
-      static float stddev = 0.0f;
+      static double mean = 0.0;    // um
+      static double stddev = 0.0;  // um
       if (opd_buffer.Data.size() > n_points + 2) {
         const auto last = opd_buffer.GetLastN(n_points);
         std::vector<double> values;
@@ -838,16 +838,21 @@ class NiceGui {
         for (const auto &m : last) {
           values.push_back(m.value);
         }
-        mean = std::accumulate(values.begin(), values.end(), 0.0) / values.size();
-        const double square_sum = std::inner_product(values.begin(), values.end(), values.begin(), 0.0);
-        stddev = std::sqrt(square_sum / values.size() - mean * mean);
+        // Two passes, because the mean is large against the deviation and one pass loses the deviation.
+        const double count = static_cast<double>(values.size());
+        mean = std::accumulate(values.begin(), values.end(), 0.0) / count;
+        double square_sum = 0.0;
+        for (const double value : values) {
+          square_sum += (value - mean) * (value - mean);
+        }
+        stddev = std::sqrt(square_sum / count);
       }
       ImGui::Text("Last %d samples: Mean: %.4f um, Std: %.4f nm", n_points, mean, stddev * 1e3);
       ImGui::TreePop();
     }
 
     if (ImGui::TreeNode("OPD FFT##EtherCAT")) {
-      const static int fs = 1 / 150e-6;      // the PLC samples every 150 us
+      const static double fs = 1 / 150e-6;   // Hz, the PLC samples every 150 us
       const static int fft_size = 1024 * 8;  // 1.2 s of data
       static double fft_power[fft_size / 2];
       static double fft_freq[fft_size / 2];
@@ -1137,8 +1142,8 @@ class NiceGui {
 
     if (ImPlot::BeginPlot("##Heatmap", ImVec2(plot_width, plot_height), ImPlotFlags_NoMouseText)) {
       ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
-      ImPlot::PlotHeatmap("heat", values, height, width, scale_min, scale_max, nullptr, ImPlotPoint(0, 0),
-                          ImPlotPoint(width, height));
+      ImPlot::PlotHeatmap("heat", values, static_cast<int>(height), static_cast<int>(width), scale_min, scale_max,
+                          nullptr, ImPlotPoint(0, 0), ImPlotPoint(width, height));
       for (int i = 0; i < camera_region_count; i++) {
         if (camera_rects[i].X.Min == camera_rects[i].X.Max && camera_rects[i].Y.Min == camera_rects[i].Y.Max) {
           const double x_offset = (width * 0.05) * i;

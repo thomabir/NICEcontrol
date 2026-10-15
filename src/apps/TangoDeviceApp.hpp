@@ -13,7 +13,8 @@
 // It sends one command or one attribute write when the counter of that request changes.
 class TangoDeviceApp {
  public:
-  TangoDeviceApp(const std::string &device_name, TangoDeviceState &state) : device(device_name), state(state) {}
+  TangoDeviceApp(const std::string &device_name, TangoDeviceState &device_state)
+      : device(device_name), state(device_state) {}
 
   void sense() {
     if (!state.connected) {

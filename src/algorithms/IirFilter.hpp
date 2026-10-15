@@ -30,7 +30,8 @@ template <typename T, int N>
 class IirFilter {
  public:
   // Initialize filter with coefficients
-  IirFilter(const std::array<T, N>& b, const std::array<T, N - 1>& a) : a(a), b(b) {
+  IirFilter(const std::array<T, N>& b_coefficients, const std::array<T, N - 1>& a_coefficients)
+      : a(a_coefficients), b(b_coefficients) {
     x.fill(0);
     y.fill(0);
   }
@@ -93,9 +94,9 @@ class IirFilter {
     y.fill(sum_a != 1 ? input * sum_b / (1 - sum_a) : 0);
   }
 
-  void set_coefficients(const std::array<T, N>& b, const std::array<T, N - 1>& a) {
-    this->b = b;
-    this->a = a;
+  void set_coefficients(const std::array<T, N>& b_coefficients, const std::array<T, N - 1>& a_coefficients) {
+    b = b_coefficients;
+    a = a_coefficients;
   }
 
  private:

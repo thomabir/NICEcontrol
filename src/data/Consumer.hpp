@@ -19,9 +19,9 @@ class Consumer {
 
   /**
    * @brief Constructs a Consumer with a specified read position
-   * @param readIndex Initial read position for this consumer
+   * @param start_index Initial read position for this consumer
    */
-  Consumer(size_t readIndex) : readIndex(readIndex), sem(0) {}
+  Consumer(size_t start_index) : readIndex(start_index), sem(0) {}
 
   /**
    * @brief Notifies the consumer that there is data available

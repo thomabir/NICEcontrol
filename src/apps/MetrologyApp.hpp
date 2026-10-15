@@ -47,7 +47,7 @@ class MetrologyApp {
       const Timestamp time = wb.clocks.stamp_now();
 
       for (int i = 0; i < kTimepointsPerPacket; i++) {
-        const int *record = &words[kChannelsPerRecord * i];
+        const int *record = &words[static_cast<size_t>(kChannelsPerRecord * i)];
         AdcSample sample;
         sample.counter = record[0];
         for (int channel = 0; channel < 16; channel++) {

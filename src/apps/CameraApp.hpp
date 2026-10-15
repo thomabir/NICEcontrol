@@ -233,7 +233,8 @@ class CameraApp {
     // The time comes before the transfer, because the frame is older than the read.
     const Timestamp time = wb.clocks.stamp_now();
     Image<int> image = (sent.image_product == 1) ? camera.get_image_bg_sub() : camera.get_image();
-    wb.camera_image.store(std::make_shared<const Measurement<Image<int>>>(time, std::move(image)));
+    wb.camera_image.store(
+        std::make_shared<const Measurement<Image<int>>>(Measurement<Image<int>>{time, std::move(image)}));
   }
 
   static bool same_regions(const std::vector<PhotRegion> &a, const std::vector<PhotRegion> &b) {

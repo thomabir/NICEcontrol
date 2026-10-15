@@ -14,7 +14,7 @@
 template <typename T>
 class PIController {
  public:
-  PIController(T Kp, T Ki, T t) : Kp(Kp), Ki(Ki), t(t) { updateCoefficients(); }
+  PIController(T kp, T ki, T sample_time) : Kp(kp), Ki(ki), t(sample_time) { updateCoefficients(); }
 
   T update(T error) {
     T output = iir_filter.filter(error);

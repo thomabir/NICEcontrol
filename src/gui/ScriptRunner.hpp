@@ -14,7 +14,7 @@
 // caller.
 class ScriptRunner {
  public:
-  explicit ScriptRunner(std::string output_path) : output_path(std::move(output_path)) {}
+  explicit ScriptRunner(std::string path) : output_path(std::move(path)) {}
 
   // Start the program. Give back false if a program of this runner is still running or if the start failed.
   bool start(const std::vector<std::string> &args) {

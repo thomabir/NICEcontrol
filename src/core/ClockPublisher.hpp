@@ -6,9 +6,9 @@
 #include <unistd.h>
 
 #include <cerrno>
-#include <cstring>
 #include <iostream>
 #include <string>
+#include <system_error>
 
 #include "client/nice_clock.h"
 
@@ -32,7 +32,8 @@ class ClockPublisher {
       fd_ = ::open(path, O_CREAT | O_RDWR, 0666);
     }
     if (fd_ == -1) {
-      std::cerr << "ClockPublisher: " << path_ << " does not open (" << std::strerror(errno)
+      const int error = errno;
+      std::cerr << "ClockPublisher: " << path_ << " does not open (" << std::generic_category().message(error)
                 << "). The other programs on this PC do not get the two clocks." << std::endl;
       return;
     }
@@ -61,9 +62,10 @@ class ClockPublisher {
     }
     // The record of the last cycle stays after a failure, it gets old, and the reader then refuses it.
     if (pwrite(fd_, &record, sizeof(record), 0) < 0 && !write_failed_) {
+      const int error = errno;
       write_failed_ = true;
-      std::cerr << "ClockPublisher: " << path_ << " does not take the record (" << std::strerror(errno)
-                << "). This line comes one time only." << std::endl;
+      std::cerr << "ClockPublisher: " << path_ << " does not take the record ("
+                << std::generic_category().message(error) << "). This line comes one time only." << std::endl;
     }
     nice_clock_flock(fd_, LOCK_UN);
   }

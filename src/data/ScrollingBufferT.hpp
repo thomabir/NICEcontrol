@@ -16,14 +16,14 @@ struct ScrollingBufferT {
     Data.reserve(MaxSize);
     // fill with zeros
     for (int i = 0; i < MaxSize; i++) {
-      Data.push_back(PlotPoint<T, U>(0, 0));
+      Data.push_back(PlotPoint<T, U>{0, 0});
     }
   }
   void AddPoint(T x, U y) {
     if (Data.size() < MaxSize)
-      Data.push_back(PlotPoint<T, U>(x, y));
+      Data.push_back(PlotPoint<T, U>{x, y});
     else {
-      Data[Offset] = PlotPoint<T, U>(x, y);
+      Data[Offset] = PlotPoint<T, U>{x, y};
       Offset = (Offset + 1) % MaxSize;
     }
   }

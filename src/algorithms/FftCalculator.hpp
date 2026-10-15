@@ -8,25 +8,22 @@ template <typename T, typename U>
 class FFT_calculator {
  public:
   int size;
-  float sampling_rate;
+  double sampling_rate;  // Hz
   ScrollingBufferT<T, U> *measurement_buffer;
   double *output_power;
   double *output_freq;
   fftw_complex *in, *out;
   fftw_plan fft_plan;
 
-  FFT_calculator(int size, float sampling_rate, auto *measurement_buffer, double *output_power, double *output_freq) {
-    // initialise fftw
+  FFT_calculator(int n_points, double sampling_rate_hz, ScrollingBufferT<T, U> *buffer, double *power, double *freq)
+      : size(n_points),
+        sampling_rate(sampling_rate_hz),
+        measurement_buffer(buffer),
+        output_power(power),
+        output_freq(freq) {
     in = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * size);
     out = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * size);
     fft_plan = fftw_plan_dft_1d(size, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
-
-    // initialise variables
-    this->size = size;
-    this->sampling_rate = sampling_rate;
-    this->measurement_buffer = measurement_buffer;
-    this->output_power = output_power;
-    this->output_freq = output_freq;
   }
 
   void calculate() {

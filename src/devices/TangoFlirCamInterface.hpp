@@ -38,7 +38,7 @@ class TangoFlirCamInterface : public TangoGenericInterface {
 
   void stop_stream() { run_command("StopFrames"); }
 
-  int get_width() { return read_attribute<ulong>("Width"); }
+  unsigned int get_width() { return static_cast<unsigned int>(read_attribute<ulong>("Width")); }
 
   void write_width(unsigned int width) {
     run_command("StopFrames");
@@ -46,7 +46,7 @@ class TangoFlirCamInterface : public TangoGenericInterface {
     run_command("StartStream");
   }
 
-  int get_height() { return read_attribute<ulong>("Height"); }
+  unsigned int get_height() { return static_cast<unsigned int>(read_attribute<ulong>("Height")); }
 
   void write_height(unsigned int height) {
     run_command("StopFrames");

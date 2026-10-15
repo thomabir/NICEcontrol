@@ -9,10 +9,10 @@
 #include "lib/pi/AutoZeroSample.h"
 #include "lib/pi/PI_GCS2_DLL.h"
 
-PI_E727_Controller::PI_E727_Controller(const char *serialNumberString) {
-  std::strcpy(this->serialNumberString, serialNumberString);
+PI_E727_Controller::PI_E727_Controller(const char *serial_number) {
+  std::strcpy(this->serialNumberString, serial_number);
   std::strcpy(this->name, "PI E-727 Tip/Tilt Piezo Controller S/N ");
-  std::strcat(this->name, serialNumberString);
+  std::strcat(this->name, serial_number);
 }
 
 PI_E727_Controller::~PI_E727_Controller() { close(); }
