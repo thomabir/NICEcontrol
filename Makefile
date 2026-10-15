@@ -85,6 +85,10 @@ CXXFLAGS = -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends -I
 CXXFLAGS += -I$(ESD_DIR)/include -DESS_ESD_LIBRARY
 CXXFLAGS += -Ofast -Wall -Wformat -Wextra #-g
 
+# The repository of the Tango device servers. The GUI runs its restart_servers.sh.
+TANGO_SERVERS_DIR ?= $(abspath ../TangoServers)
+CXXFLAGS += -DNICE_TANGO_SERVERS_DIR=\"$(TANGO_SERVERS_DIR)\"
+
 ##---------------------------------------------------------------------
 ## OPENGL ES
 ##---------------------------------------------------------------------
@@ -192,7 +196,7 @@ $(BUILD_DIR)/.implot_patched: $(IMPLOT_PATCH)
 	@touch $@
 
 # Tests that need no hardware and no Tango connection.
-TESTS = test_photometry_regions test_extremum_seeker test_clocks
+TESTS = test_photometry_regions test_extremum_seeker test_clocks test_script_runner test_tango_widgets
 TEST_EXES = $(addprefix $(BUILD_DIR)/,$(TESTS))
 
 test: $(TEST_EXES)
@@ -201,6 +205,13 @@ test: $(TEST_EXES)
 $(BUILD_DIR)/test_%: test/test_%.cpp $(wildcard $(SRC_DIR)/*/*.hpp) client/nice_clock.h
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -Wall -Wextra -o $@ $<
+
+# The widget test draws in an ImGui context, thus it links the ImGui core.
+IMGUI_CORE_OBJS = $(addprefix $(BUILD_DIR)/,imgui.o imgui_draw.o imgui_tables.o imgui_widgets.o)
+
+$(BUILD_DIR)/test_tango_widgets: test/test_tango_widgets.cpp $(SRC_DIR)/gui/TangoDeviceWidgets.hpp $(SRC_DIR)/data/TangoAttribute.hpp $(IMGUI_CORE_OBJS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -Wall -Wextra -o $@ $< $(IMGUI_CORE_OBJS)
 
 # The reader of the two clocks, for a check of the record from a shell.
 nice-clock-read: $(BUILD_DIR)/nice_clock_read
@@ -227,6 +238,17 @@ $(BUILD_DIR)/camera_%: test/camera_%.cpp $(SRC_DIR)/devices/TangoFlirCamInterfac
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -I/usr/local/tango/include/tango -Wall -Wextra -o $@ $< $(TANGO_LIBS)
 
+# Check of the generic Tango device application against a ThorlabsChopper server on the simulated controller.
+# The script of the server adds a temporary device to the Tango database and gives its name to the test.
+#   export TANGO_HOST=localhost:10000
+#   make test-chopper
+test-chopper: $(BUILD_DIR)/chopper_app
+	$(TANGO_SERVERS_DIR)/ThorlabsChopper/test/run_test.sh $(TANGO_SERVERS_DIR)/DeviceServers/ThorlabsChopper $(BUILD_DIR)/chopper_app
+
+$(BUILD_DIR)/chopper_app: test/chopper_app.cpp $(SRC_DIR)/apps/TangoDeviceApp.hpp $(SRC_DIR)/devices/TangoGenericInterface.hpp $(SRC_DIR)/core/Whiteboard.hpp $(SRC_DIR)/core/Commands.hpp
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) -I/usr/local/tango/include/tango -Wall -Wextra -o $@ $< $(TANGO_LIBS)
+
 # Check against live nanoFaktur controllers on the LAN. The stages move between 2000 urad and 4000 urad.
 #   make test-nf NF_SERIALS="1000003878 1000003879"
 NF_SERIALS ?= 1000003878 1000003879
@@ -240,7 +262,7 @@ $(BUILD_DIR)/nf_controller: test/nf_controller.cpp $(SRC_DIR)/devices/nF_EBD_Con
 
 # The dependency files record the path a source had when it was compiled, so a move leaves them stale.
 clean:
-	rm -f $(EXE) $(OBJS) $(DEPENDS) $(TEST_EXES) $(CAMERA_EXES) $(BUILD_DIR)/nice_clock_read $(BUILD_DIR)/nf_controller
+	rm -f $(EXE) $(OBJS) $(DEPENDS) $(TEST_EXES) $(CAMERA_EXES) $(BUILD_DIR)/nice_clock_read $(BUILD_DIR)/nf_controller $(BUILD_DIR)/chopper_app
 
 clean-glfw:
 	rm -rf $(GLFW34_DIR)

@@ -11,6 +11,7 @@
 #include "data/PhotometryRegions.hpp"
 #include "data/PlcSample.hpp"
 #include "data/SPMCRingBuffer.hpp"
+#include "data/TangoAttribute.hpp"
 #include "data/Timestamp.hpp"
 #include "data/TipTilt.hpp"
 #include "devices/TangoFlirCamInterface.hpp"
@@ -153,6 +154,8 @@ struct CameraState {
 struct TangoDeviceState {
   bool connected = false;
   std::vector<std::string> device_commands;
+  std::vector<TangoAttributeState> attributes;
+  std::string last_error;  // the error of the last command or attribute write, empty after a success
 };
 
 struct Snapshot {
@@ -167,6 +170,7 @@ struct Snapshot {
   TangoDeviceState shutter;
   TangoDeviceState ndfilter;
   TangoDeviceState polarizer;
+  TangoDeviceState chopper;
 };
 
 class Whiteboard {

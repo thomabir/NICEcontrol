@@ -76,6 +76,11 @@ struct CameraCommands {
 struct TangoDeviceCommands {
   std::string device_command;
   uint32_t device_command_count = 0;
+
+  // The value is text. The application converts it to the Tango type of the attribute.
+  std::string write_attribute;
+  std::string write_value;
+  uint32_t write_count = 0;
 };
 
 struct Commands {
@@ -86,6 +91,7 @@ struct Commands {
   TangoDeviceCommands shutter;
   TangoDeviceCommands ndfilter;
   TangoDeviceCommands polarizer;
+  TangoDeviceCommands chopper;
 };
 
 // The one place where commands are stored. Later this becomes a scheduler that merges several command sources.

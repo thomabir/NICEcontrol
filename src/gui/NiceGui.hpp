@@ -27,6 +27,8 @@
 #include "core/Core.hpp"
 #include "data/PhotometryRegions.hpp"
 #include "data/ScrollingBufferT.hpp"
+#include "gui/ScriptRunner.hpp"
+#include "gui/TangoDeviceWidgets.hpp"
 #include "lib/fonts/SourceSans3Regular.cpp"
 #include "lib/implot/implot.h"
 
@@ -116,6 +118,13 @@ class NiceGui {
   bool camera_subtract_background = false;
   std::vector<PhotRegion> camera_sent_regions;
   Image<int> camera_image;
+
+  // Tango device panel state.
+  TangoEditBuffers tango_edit;
+
+  // The restart of the Tango database and the device servers, by the script of the TangoServers repository.
+  ScriptRunner tango_restart{"/tmp/nicecontrol-tango-restart-" + std::to_string(getuid()) + ".log"};
+  bool tango_restart_database = true;
 
   template <typename F>
   void Command(F change) {
@@ -209,6 +218,7 @@ class NiceGui {
     static bool show_demo_window = false;
     static bool show_app_metrics = false;
 
+    TangoRestartBar();
     if (ImGui::CollapsingHeader("Core", ImGuiTreeNodeFlags_DefaultOpen)) {
       WindowCore();
     }
@@ -220,6 +230,9 @@ class NiceGui {
     }
     if (ImGui::CollapsingHeader("Polarizer")) {
       WindowTangoDevice("Polarizer", snap.polarizer, [](Commands &c) -> TangoDeviceCommands & { return c.polarizer; });
+    }
+    if (ImGui::CollapsingHeader("Chopper")) {
+      WindowTangoDevice("Chopper", snap.chopper, [](Commands &c) -> TangoDeviceCommands & { return c.chopper; });
     }
     if (ImGui::CollapsingHeader("Flir Camera")) {
       WindowFlirCam();
@@ -278,6 +291,8 @@ class NiceGui {
     Status("ND filter", snap.ndfilter.connected);
     ImGui::SameLine();
     Status("Polarizer", snap.polarizer.connected);
+    ImGui::SameLine();
+    Status("Chopper", snap.chopper.connected);
 
     ImGui::Text("Metrology samples %llu, PLC samples %llu with %llu gaps, camera frames %llu",
                 (unsigned long long)snap.metrology.sample_count, (unsigned long long)snap.opd.sample_count,
@@ -312,12 +327,67 @@ class NiceGui {
                 (unsigned long long)state.rejected_count);
   }
 
+  // Buttons that restart the Tango database and the device servers of all users, and the output of the restart.
+  void TangoRestartBar() {
+    tango_restart.poll();
+    const bool running = tango_restart.running();
+    ImGui::BeginDisabled(running);
+    if (ImGui::Button("Restart Tango and device servers")) {
+      tango_restart_database = true;
+      ImGui::OpenPopup("Restart Tango");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Restart device servers")) {
+      tango_restart_database = false;
+      ImGui::OpenPopup("Restart Tango");
+    }
+    ImGui::EndDisabled();
+
+    if (ImGui::BeginPopupModal("Restart Tango", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::Text("This stops the device servers in %s/servers.conf, also of other users.", NICE_TANGO_SERVERS_DIR);
+      if (tango_restart_database) {
+        ImGui::TextUnformatted("Then it restarts the Tango database.");
+      }
+      ImGui::TextUnformatted("Then it starts the device servers.");
+      if (ImGui::Button("Restart")) {
+        std::vector<std::string> args{std::string(NICE_TANGO_SERVERS_DIR) + "/restart_servers.sh"};
+        if (!tango_restart_database) {
+          args.push_back("--keep-database");
+        }
+        tango_restart.start(args);
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::SameLine();
+      if (ImGui::Button("Cancel")) {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
+
+    if (!tango_restart.started()) {
+      return;
+    }
+    ImGui::SameLine();
+    if (running) {
+      ImGui::TextUnformatted("Restart in progress");
+    } else if (tango_restart.status() == 0) {
+      Status("Restart complete", true);
+    } else {
+      Status("Restart failed", false);
+    }
+    ImGui::SameLine();
+    if (ImGui::TreeNode("Restart output")) {
+      ImGui::TextUnformatted(tango_restart.output().c_str());
+      ImGui::TreePop();
+    }
+  }
+
   static void Status(const char *label, bool up) {
     const ImVec4 colour = up ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
     ImGui::TextColored(colour, "%s", label);
   }
 
-  // A row of buttons, one for each command that the device reports.
+  // A row of buttons, one for each command that the device reports, and a table of the scalar attributes.
   template <typename Select>
   void WindowTangoDevice(const char *id, const TangoDeviceState &state, Select select) {
     if (!state.connected) {
@@ -337,6 +407,40 @@ class NiceGui {
       ImGui::SameLine();
     }
     ImGui::NewLine();
+    if (!state.last_error.empty()) {
+      ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Error: %s", state.last_error.c_str());
+    }
+
+    if (state.attributes.empty() || !ImGui::BeginTable((std::string("##attributes ") + id).c_str(), 4,
+                                                       ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+      return;
+    }
+    ImGui::TableSetupColumn("Attribute");
+    ImGui::TableSetupColumn("Value");
+    ImGui::TableSetupColumn("Unit");
+    ImGui::TableSetupColumn("Set");
+    ImGui::TableHeadersRow();
+    for (const TangoAttributeState &a : state.attributes) {
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted(a.name.c_str());
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted(a.valid ? TangoValueText(a).c_str() : "-");
+      ImGui::TableNextColumn();
+      ImGui::TextUnformatted(a.unit.c_str());
+      ImGui::TableNextColumn();
+      if (a.writable) {
+        TangoAttributeInput(id, a, tango_edit, [&](const std::string &value) {
+          Command([&](Commands &c) {
+            TangoDeviceCommands &target = select(c);
+            target.write_attribute = a.name;
+            target.write_value = value;
+            target.write_count++;
+          });
+        });
+      }
+    }
+    ImGui::EndTable();
   }
 
   // The OPD loop of the PLC, the dither that the PLC adds to the delay line, and the loop that looks for the setpoint

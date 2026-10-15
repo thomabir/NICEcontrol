@@ -36,7 +36,8 @@ class Core {
         opd_seeker(wb, box, 1e-3 * static_cast<double>(kCyclePeriod.count())),
         shutter("motor/shutter/2", wb.state.shutter),
         ndfilter("motor/ndfilter/1", wb.state.ndfilter),
-        polarizer("motor/polarizer/1", wb.state.polarizer) {}
+        polarizer("motor/polarizer/1", wb.state.polarizer),
+        chopper("motor/chopper/1", wb.state.chopper) {}
 
   void start() {
     if (thread.joinable()) {
@@ -73,6 +74,7 @@ class Core {
   TangoDeviceApp shutter;
   TangoDeviceApp ndfilter;
   TangoDeviceApp polarizer;  // the Elliptec rotation stage
+  TangoDeviceApp chopper;    // the Thorlabs MC2000B optical chopper
 
   std::jthread thread;
 
@@ -121,6 +123,7 @@ class Core {
     shutter.sense();
     ndfilter.sense();
     polarizer.sense();
+    chopper.sense();
     core.devices_ms = lap();
 
     // The seeker reads the photometry of this cycle and writes the OPD setpoint that the act step sends.
@@ -136,6 +139,7 @@ class Core {
     shutter.act(command.shutter);
     ndfilter.act(command.ndfilter);
     polarizer.act(command.polarizer);
+    chopper.act(command.chopper);
     core.devices_ms += lap();
 
     core.cycle++;
