@@ -1,5 +1,7 @@
 #pragma once
 
+#include <GLFW/glfw3.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -12,16 +14,6 @@
 #include <thread>
 #include <vector>
 
-// GUI
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#define GL_SILENCE_DEPRECATION
-#if defined(IMGUI_IMPL_OPENGL_ES2)
-#include <GLES2/gl2.h>
-#endif
-#include <GLFW/glfw3.h>
-
 #include "algorithms/Dither.hpp"
 #include "algorithms/FftCalculator.hpp"
 #include "client/nice_clock.h"
@@ -30,13 +22,11 @@
 #include "data/ScrollingBufferT.hpp"
 #include "gui/ScriptRunner.hpp"
 #include "gui/TangoDeviceWidgets.hpp"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 #include "lib/fonts/SourceSans3Regular.cpp"  // NOLINT(bugprone-suspicious-include): the font data, made by binary_to_compressed_c
 #include "lib/implot/implot.h"
-
-// Windows
-#if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#pragma comment(lib, "legacy_stdio_definitions")
-#endif
 
 // The user interface. It shows what the core publishes and it sends commands to the core. It never touches hardware,
 // so the program keeps running with no user interface open.
@@ -81,7 +71,6 @@ class NiceGui {
   Snapshot snap;
   std::jthread gui_thread;
   GLFWwindow *window = nullptr;
-  const char *glsl_version = nullptr;
   ImGuiIO *io = nullptr;
   ImFont *mainFont = nullptr;
   ImVec4 clear_color;
@@ -1316,22 +1305,10 @@ class NiceGui {
 
     if (!glfwInit()) return false;
 
-#if defined(IMGUI_IMPL_OPENGL_ES2)
-    glsl_version = "#version 100";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-#elif defined(__APPLE__)
-    glsl_version = "#version 150";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#else
-    glsl_version = "#version 130";
+    // OpenGL 3.0 with GLSL 1.30.
+    constexpr const char *kGlslVersion = "#version 130";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-#endif
 
     window = glfwCreateWindow(1280, 720, "NICEcontrol", nullptr, nullptr);
     if (window == nullptr) return false;
@@ -1358,7 +1335,7 @@ class NiceGui {
     }
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init(glsl_version);
+    ImGui_ImplOpenGL3_Init(kGlslVersion);
 
     io->Fonts->AddFontDefault();
 
