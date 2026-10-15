@@ -55,6 +55,12 @@ struct CameraCommands {
   bool subtract_background = false;
   std::vector<PhotRegion> regions;
 
+  // Frame sync settings, as the entry names of the camera features.
+  std::string sync_source;
+  std::string sync_mode;
+  std::string sync_polarity;
+  double sync_delay_us = 0.0;
+
   // 0 takes the raw image, 1 takes the image with the background subtracted.
   int image_product = 0;
 

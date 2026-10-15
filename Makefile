@@ -215,7 +215,8 @@ $(BUILD_DIR)/nice_clock_read: client/nice_clock_read.c client/nice_clock.h
 # camera_client  the client calls that the FLIR panel makes
 # camera_drag    a region write in each frame, as a drag does
 # camera_resize  the regions after a change of Width or Height
-CAMERA_TESTS = camera_client camera_drag camera_resize
+# camera_sync    the frame sync settings, and the stream after each write
+CAMERA_TESTS = camera_client camera_drag camera_resize camera_sync
 CAMERA_EXES = $(addprefix $(BUILD_DIR)/,$(CAMERA_TESTS))
 TANGO_LIBS = -L/usr/local/tango/lib -ltango -lomniDynamic4 -lCOS4 -lomniORB4 -lomnithread -lzmq -lpthread
 

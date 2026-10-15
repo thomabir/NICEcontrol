@@ -70,6 +70,40 @@ class TangoFlirCamInterface : public TangoGenericInterface {
     run_command("StartStream");
   }
 
+  // The frame sync settings. The server refuses these writes during an acquisition, thus each write stops the stream
+  // and starts it again.
+  std::string get_sync_source() { return read_attribute<std::string>("FrameSyncSource"); }
+
+  void write_sync_source(const std::string &source) {
+    run_command("StopFrames");
+    write_attribute("FrameSyncSource", source);
+    run_command("StartStream");
+  }
+
+  std::string get_sync_mode() { return read_attribute<std::string>("FrameSyncMode"); }
+
+  void write_sync_mode(const std::string &mode) {
+    run_command("StopFrames");
+    write_attribute("FrameSyncMode", mode);
+    run_command("StartStream");
+  }
+
+  std::string get_sync_polarity() { return read_attribute<std::string>("FrameSyncPolarity"); }
+
+  void write_sync_polarity(const std::string &polarity) {
+    run_command("StopFrames");
+    write_attribute("FrameSyncPolarity", polarity);
+    run_command("StartStream");
+  }
+
+  double get_sync_delay_us() { return read_attribute<double>("FrameSyncDelay"); }
+
+  void write_sync_delay_us(double delay_us) {
+    run_command("StopFrames");
+    write_attribute<double>("FrameSyncDelay", delay_us);
+    run_command("StartStream");
+  }
+
   std::string get_filename() { return read_attribute<std::string>("Filename"); }
 
   void set_filename(std::string &filename) {

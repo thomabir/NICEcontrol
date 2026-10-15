@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <map>
 #include <numeric>
 #include <string>
 #include <thread>
@@ -889,6 +890,43 @@ class NiceGui {
                              [](Commands &c, unsigned int v) { c.camera.width = v; });
     SettingRow<unsigned int>("Height", "%d px", snap.camera.height, ImGuiDataType_U32,
                              [](Commands &c, unsigned int v) { c.camera.height = v; });
+
+    ImGui::SeparatorText("Frame sync");
+    ChoiceRow("Sync source", snap.camera.sync_source, kSyncSources,
+              [](Commands &c, const std::string &v) { c.camera.sync_source = v; });
+    ChoiceRow("Sync mode", snap.camera.sync_mode, kSyncModes,
+              [](Commands &c, const std::string &v) { c.camera.sync_mode = v; });
+    ChoiceRow("Sync polarity", snap.camera.sync_polarity, kSyncPolarities,
+              [](Commands &c, const std::string &v) { c.camera.sync_polarity = v; });
+    SettingRow<double>("Sync delay", "%.3f us", snap.camera.sync_delay_us, ImGuiDataType_Double,
+                       [](Commands &c, double v) { c.camera.sync_delay_us = v; });
+  }
+
+  // One entry of a camera enumeration feature: the entry name that the camera uses, and the label on screen.
+  struct Choice {
+    const char *entry;
+    const char *label;
+  };
+
+  static constexpr Choice kSyncSources[] = {{"Internal", "Internal"}, {"External", "External"}};
+  static constexpr Choice kSyncModes[] = {{"Integration", "FSSI"}, {"Readout", "FSSR"}};
+  static constexpr Choice kSyncPolarities[] = {{"ActiveLow", "Active low"}, {"ActiveHigh", "Active high"}};
+
+  // Shows the entry that the camera reports as the selected radio button, and sends an entry when the user selects it.
+  template <size_t N, typename Apply>
+  void ChoiceRow(const char *label, const std::string &reported, const Choice (&choices)[N], Apply apply) {
+    ImGui::Text("%s: ", label);
+    ImGui::PushID(label);
+    for (const Choice &choice : choices) {
+      ImGui::SameLine();
+      if (ImGui::RadioButton(choice.label, reported == choice.entry) && reported != choice.entry) {
+        const std::string value = choice.entry;
+        Command([&](Commands &c) { apply(c, value); });
+      }
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(camera: %s)", reported.c_str());
+    ImGui::PopID();
   }
 
   // Shows the value that the camera reports, and sends a new one when the user asks for it.
@@ -899,7 +937,9 @@ class NiceGui {
     ImGui::Text(format, reported);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(120);
-    static T wanted{};
+    // One input value per row. Rows of the same type share the template instance, thus the label selects the value.
+    static std::map<std::string, T> wanted_by_label;
+    T &wanted = wanted_by_label[label];
     ImGui::PushID(label);
     ImGui::InputScalar("##Wanted", type, &wanted, NULL, NULL, format);
     ImGui::SameLine();

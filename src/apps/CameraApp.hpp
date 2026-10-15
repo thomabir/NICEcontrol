@@ -80,6 +80,18 @@ class CameraApp {
         std::string filename = command.filename;
         camera.set_filename(filename);
       }
+      if (command.sync_source != sent.sync_source) {
+        camera.write_sync_source(command.sync_source);
+      }
+      if (command.sync_mode != sent.sync_mode) {
+        camera.write_sync_mode(command.sync_mode);
+      }
+      if (command.sync_polarity != sent.sync_polarity) {
+        camera.write_sync_polarity(command.sync_polarity);
+      }
+      if (command.sync_delay_us != sent.sync_delay_us) {
+        camera.write_sync_delay_us(command.sync_delay_us);
+      }
     }
 
     sent = command;
@@ -87,10 +99,10 @@ class CameraApp {
   }
 
  private:
-  // The image comes in every cycle, which is above the screen refresh rate. The eight settings take one round trip
-  // per stride, so the whole set is refreshed every kSettingsStride * kSettingsCount cycles.
+  // The image comes in every cycle, which is above the screen refresh rate. Each setting takes one round trip per
+  // stride, so the whole set is refreshed every kSettingsStride * kSettingsCount cycles.
   static constexpr uint64_t kSettingsStride = 10;
-  static constexpr int kSettingsCount = 8;
+  static constexpr int kSettingsCount = 12;
 
   Whiteboard &wb;
   Blackboard &bb;
@@ -131,6 +143,10 @@ class CameraApp {
     state.filename = camera.get_filename();
     state.subtract_background = camera.get_phot_subtract_background();
     state.regions = camera.get_regions();
+    state.sync_source = camera.get_sync_source();
+    state.sync_mode = camera.get_sync_mode();
+    state.sync_polarity = camera.get_sync_polarity();
+    state.sync_delay_us = camera.get_sync_delay_us();
     state.device_commands = camera.get_commands();
     settings_turn = 0;
 
@@ -143,6 +159,10 @@ class CameraApp {
     sent.filename = state.filename;
     sent.subtract_background = state.subtract_background;
     sent.regions = state.regions;
+    sent.sync_source = state.sync_source;
+    sent.sync_mode = state.sync_mode;
+    sent.sync_polarity = state.sync_polarity;
+    sent.sync_delay_us = state.sync_delay_us;
 
     box.edit([&state](Commands &commands) {
       commands.camera.framerate = state.framerate;
@@ -152,11 +172,15 @@ class CameraApp {
       commands.camera.filename = state.filename;
       commands.camera.subtract_background = state.subtract_background;
       commands.camera.regions = state.regions;
+      commands.camera.sync_source = state.sync_source;
+      commands.camera.sync_mode = state.sync_mode;
+      commands.camera.sync_polarity = state.sync_polarity;
+      commands.camera.sync_delay_us = state.sync_delay_us;
       commands.camera.settings_valid = true;
     });
   }
 
-  // The settings change rarely, so they take one round trip per stride and the eight of them take turns. This keeps
+  // The settings change rarely, so they take one round trip per stride and take turns. This keeps
   // the read off the critical path of the image, and no cycle carries the whole set. It refreshes what the panel
   // shows; the commands come from the seed and from whoever asks for a change.
   void take_settings() {
@@ -186,6 +210,18 @@ class CameraApp {
         break;
       case 6:
         state.regions = camera.get_regions();
+        break;
+      case 7:
+        state.sync_source = camera.get_sync_source();
+        break;
+      case 8:
+        state.sync_mode = camera.get_sync_mode();
+        break;
+      case 9:
+        state.sync_polarity = camera.get_sync_polarity();
+        break;
+      case 10:
+        state.sync_delay_us = camera.get_sync_delay_us();
         break;
       default:
         state.device_commands = camera.get_commands();

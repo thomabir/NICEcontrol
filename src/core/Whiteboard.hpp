@@ -140,6 +140,10 @@ struct CameraState {
   std::string filename;
   bool subtract_background = false;
   std::vector<PhotRegion> regions;
+  std::string sync_source;
+  std::string sync_mode;
+  std::string sync_polarity;
+  double sync_delay_us = 0.0;
   std::vector<std::string> device_commands;
   size_t n_regions = 0;
   std::array<double, kMaxPhotRegions> values{};
