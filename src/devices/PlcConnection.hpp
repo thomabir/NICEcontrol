@@ -11,7 +11,6 @@
 #include <AdsLib/AdsLib.h>
 #include <AdsLib/AdsVariable.h>
 
-#include <array>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -77,44 +76,6 @@ class PlcConnection {
     if (error) throw std::runtime_error("Failed to write '" + symbol + "'");
   }
 
-  template <typename T, size_t N>
-  std::array<T, N> readArray(const std::string &symbol) {
-    ensureConnected();
-    uint32_t handle = cachedHandle(symbol);
-    std::array<T, N> buffer;
-    uint32_t bytesRead = 0;
-    auto error = m_device->ReadReqEx2(ADSIGRP_SYM_VALBYHND, handle, sizeof(T) * N, buffer.data(), &bytesRead);
-    if (error || bytesRead != sizeof(T) * N) throw std::runtime_error("Failed to read array '" + symbol + "'");
-    return buffer;
-  }
-
-  template <typename T, size_t N>
-  void writeArray(const std::string &symbol, const std::array<T, N> &data) {
-    ensureConnected();
-    uint32_t handle = cachedHandle(symbol);
-    auto error = m_device->WriteReqEx(ADSIGRP_SYM_VALBYHND, handle, sizeof(T) * N, data.data());
-    if (error) throw std::runtime_error("Failed to write array '" + symbol + "'");
-  }
-
-  // ── Raw read / write by index group + offset ────────────────────────
-
-  template <typename T>
-  T readRaw(uint32_t indexGroup, uint32_t indexOffset) {
-    ensureConnected();
-    T buffer;
-    uint32_t bytesRead = 0;
-    auto error = m_device->ReadReqEx2(indexGroup, indexOffset, sizeof(T), &buffer, &bytesRead);
-    if (error || bytesRead != sizeof(T)) throw std::runtime_error("Failed raw read");
-    return buffer;
-  }
-
-  template <typename T>
-  void writeRaw(uint32_t indexGroup, uint32_t indexOffset, const T &value) {
-    ensureConnected();
-    auto error = m_device->WriteReqEx(indexGroup, indexOffset, sizeof(T), &value);
-    if (error) throw std::runtime_error("Failed raw write");
-  }
-
   // ── Device info / state ─────────────────────────────────────────────
 
   DeviceInfo deviceInfo() const {
@@ -134,11 +95,6 @@ class PlcConnection {
   void disconnect() {
     m_handleCache.clear();
     m_device.reset();
-  }
-
-  void reconnect() {
-    disconnect();
-    connect();
   }
 
   void clearHandleCache() { m_handleCache.clear(); }

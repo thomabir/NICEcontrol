@@ -160,8 +160,6 @@ class TangoFlirCamInterface : public TangoGenericInterface {
     return image;
   }
 
-  std::vector<unsigned short> get_background() { return read_attribute<std::vector<unsigned short>>("Background"); }
-
   // A write of the regions does not interrupt the acquisition.
   void set_regions(const std::vector<PhotRegion> &regions) {
     write_spectrum_attribute<Tango::DevULong>("PhotRegions", photometry_regions::flatten(regions));

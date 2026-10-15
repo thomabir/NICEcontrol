@@ -60,8 +60,7 @@ class TangoGenericInterface {
 
   int ping_device() {
     try {
-      // tango_device->ping();  // TODO check if something comes back
-      std::cout << " device ping took " << tango_device->ping() << " microseconds" << endl;
+      tango_device->ping();
       return 0;
     } catch (Tango::DevFailed &e) {
       Tango::Except::print_exception(e);
@@ -120,7 +119,6 @@ class TangoGenericInterface {
     std::string command_copy = command;
     try {
       tango_device->command_inout(command_copy);
-      std::cout << "Sent command: " << command_copy << std::endl;
       return "";
     } catch (Tango::DevFailed &e) {
       Tango::Except::print_exception(e);
@@ -465,80 +463,4 @@ class TangoGenericInterface {
     }
     return commands;
   }
-
-  std::vector<std::string> get_attributes() {
-    std::vector<std::string> attributes;
-    try {
-      auto reply = tango_device->attribute_list_query();
-      for (const auto &att_info : reply[0]) {
-        attributes.push_back(att_info.name);
-        std::cout << att_info.name << " " << att_info.data_type << " " << att_info.data_format << " "
-                  << att_info.writable << " " << att_info.unit << " " << att_info.max_dim_x << " " << att_info.max_dim_y
-                  << " " << att_info.max_value << " " << att_info.min_value << " ";
-        // print the attribute value using get_att_details
-        // get_att_details(att_info.name, att_info.data_type);
-      }
-
-    } catch (Tango::DevFailed &e) {
-      Tango::Except::print_exception(e);
-    }
-    return attributes;
-  }
-
-  // void get_att_details(const std::string &attribute_name, int data_type) {
-  //   Tango::DeviceAttribute att_reply;
-  //   std::string att_name = attribute_name;
-  //   att_reply = cam_device->read_attribute(att_name);
-  //   if (data_type == Tango::DEV_STRING) {
-  //     std::string value;
-  //     att_reply >> value;
-  //     std::cout << "Value: " << value << std::endl;
-  //   } else if (data_type == Tango::DEV_DOUBLE) {
-  //     double value;
-  //     att_reply >> value;
-  //     std::cout << "Value: " << value << std::endl;
-  //   } else if (data_type == Tango::DEV_LONG) {
-  //     int value;
-  //     att_reply >> value;
-  //     std::cout << "Value: " << value << std::endl;
-  //   } else if (data_type == Tango::DEV_SHORT) {
-  //     short value;
-  //     att_reply >> value;
-  //     std::cout << "Value: " << value << std::endl;
-  //   } else if (data_type == Tango::DEV_ULONG) {
-  //     unsigned int value;
-  //     att_reply >> value;
-  //     std::cout << "Value: " << value << std::endl;
-  //   } else if (data_type == Tango::DEV_USHORT) {
-  //     unsigned short value;
-  //     att_reply >> value;
-  //     std::cout << "Value: " << value << std::endl;
-  //   } else if (data_type == Tango::DEV_BOOLEAN) {
-  //     bool value;
-  //     att_reply >> value;
-  //     std::cout << "Value: " << value << std::endl;
-  //   }
-  // }
-
-  //   std::vector<std::string> get_commands() {
-  //     std::vector<std::string> commands;
-  //     try {
-  //       auto reply = tango_device->command_list_query();
-  //       for (const auto &cmd_info : reply[0]) {
-  //         if (cmd_info.cmd_name != "Init") {
-  //           commands.push_back(cmd_info.cmd_name);
-  //           std::cout << cmd_info.cmd_name << " "
-  //           << cmd_info.cmd_tag << " "
-  //           << cmd_info.in_type << " "
-  //           << cmd_info.in_type_desc << " "
-  //           << cmd_info.out_type << " "
-  //           << cmd_info.out_type_desc << " "
-  //           << std::endl;
-  //         }
-  //       }
-  //     } catch (Tango::DevFailed &e) {
-  //       Tango::Except::print_exception(e);
-  //     }
-  //     return commands;
-  //   }
 };

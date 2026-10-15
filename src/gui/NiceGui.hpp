@@ -785,7 +785,7 @@ class NiceGui {
     ImGui::SliderFloat("ADC History", &history_length, 200, 70000, "%.0f samples", ImGuiSliderFlags_Logarithmic);
 
     static const char *labels[16] = {
-        "QOD1 UP",        "QPD1 LEFT", "QPD1 RIGHT",     "QPD1 DOWN", "QPD1 sum", "OPD ref",
+        "QPD1 UP",        "QPD1 LEFT", "QPD1 RIGHT",     "QPD1 DOWN", "QPD1 sum", "OPD ref",
         "Pos ref (QPD1)", "OPD back",  "Pos ref (QPD2)", "NC3",       "NC4",      "NC5",
         "QPD2 UP",        "QPD2 LEFT", "QPD2 RIGHT",     "QPD2 DOWN"};
 
