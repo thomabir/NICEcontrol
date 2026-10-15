@@ -222,17 +222,15 @@ class NiceGui {
     if (ImGui::CollapsingHeader("Core", ImGuiTreeNodeFlags_DefaultOpen)) {
       WindowCore();
     }
-    if (ImGui::CollapsingHeader("Shutter")) {
-      WindowTangoDevice("Shutter", snap.shutter, [](Commands &c) -> TangoDeviceCommands & { return c.shutter; });
-    }
-    if (ImGui::CollapsingHeader("ND Filter")) {
-      WindowTangoDevice("NDFilter", snap.ndfilter, [](Commands &c) -> TangoDeviceCommands & { return c.ndfilter; });
-    }
-    if (ImGui::CollapsingHeader("Polarizer")) {
-      WindowTangoDevice("Polarizer", snap.polarizer, [](Commands &c) -> TangoDeviceCommands & { return c.polarizer; });
-    }
-    if (ImGui::CollapsingHeader("Chopper")) {
-      WindowTangoDevice("Chopper", snap.chopper, [](Commands &c) -> TangoDeviceCommands & { return c.chopper; });
+    if (ImGui::CollapsingHeader("Tango devices", ImGuiTreeNodeFlags_DefaultOpen)) {
+      TangoDeviceRow("Shutter", "Shutter", snap.shutter,
+                     [](Commands &c) -> TangoDeviceCommands & { return c.shutter; });
+      TangoDeviceRow("ND Filter", "NDFilter", snap.ndfilter,
+                     [](Commands &c) -> TangoDeviceCommands & { return c.ndfilter; });
+      TangoDeviceRow("Polarizer", "Polarizer", snap.polarizer,
+                     [](Commands &c) -> TangoDeviceCommands & { return c.polarizer; });
+      TangoDeviceRow("Chopper", "Chopper", snap.chopper,
+                     [](Commands &c) -> TangoDeviceCommands & { return c.chopper; });
     }
     if (ImGui::CollapsingHeader("Flir Camera")) {
       WindowFlirCam();
@@ -387,30 +385,42 @@ class NiceGui {
     ImGui::TextColored(colour, "%s", label);
   }
 
-  // A row of buttons, one for each command that the device reports, and a table of the scalar attributes.
+  // One line with the device name and a button for each command that the device reports. The table of the scalar
+  // attributes shows when the user expands the line.
   template <typename Select>
-  void WindowTangoDevice(const char *id, const TangoDeviceState &state, Select select) {
+  void TangoDeviceRow(const char *label, const char *id, const TangoDeviceState &state, Select select) {
+    ImGui::AlignTextToFramePadding();
+    const bool open = ImGui::TreeNode((std::string(label) + "##tango " + id).c_str());
+    ImGui::SameLine();
     if (!state.connected) {
       ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Not connected. The core retries.");
-      return;
-    }
-    ImGui::Text("Commands:");
-    ImGui::SameLine();
-    for (const std::string &command : state.device_commands) {
-      if (ImGui::Button((command + "##" + id).c_str())) {
-        Command([&](Commands &c) {
-          TangoDeviceCommands &target = select(c);
-          target.device_command = command;
-          target.device_command_count++;
-        });
+    } else {
+      for (const std::string &command : state.device_commands) {
+        if (ImGui::Button((command + "##" + id).c_str())) {
+          Command([&](Commands &c) {
+            TangoDeviceCommands &target = select(c);
+            target.device_command = command;
+            target.device_command_count++;
+          });
+        }
+        ImGui::SameLine();
       }
-      ImGui::SameLine();
+      ImGui::NewLine();
+      if (!state.last_error.empty()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Error: %s", state.last_error.c_str());
+      }
     }
-    ImGui::NewLine();
-    if (!state.last_error.empty()) {
-      ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Error: %s", state.last_error.c_str());
+    if (open) {
+      if (state.connected) {
+        TangoAttributeTable(id, state, select);
+      }
+      ImGui::TreePop();
     }
+  }
 
+  // A table of the scalar attributes, with an input for each writable attribute.
+  template <typename Select>
+  void TangoAttributeTable(const char *id, const TangoDeviceState &state, Select select) {
     if (state.attributes.empty() || !ImGui::BeginTable((std::string("##attributes ") + id).c_str(), 4,
                                                        ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
       return;
