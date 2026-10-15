@@ -10,7 +10,6 @@
 #include "apps/PlcApp.hpp"
 #include "apps/TangoDeviceApp.hpp"
 #include "apps/TipTiltApp.hpp"
-#include "core/Blackboard.hpp"
 #include "core/Commands.hpp"
 #include "core/Whiteboard.hpp"
 
@@ -32,7 +31,7 @@ class Core {
         metrology(wb),
         plc(wb),
         tiptilt(wb),
-        camera(wb, bb, box),
+        camera(wb, box),
         opd_seeker(wb, box, 1e-3 * static_cast<double>(kCyclePeriod.count())),
         shutter("motor/shutter/2", wb.state.shutter),
         ndfilter("motor/ndfilter/1", wb.state.ndfilter),
@@ -54,12 +53,10 @@ class Core {
   }
 
   Whiteboard &whiteboard() { return wb; }
-  Blackboard &blackboard() { return bb; }
   CommandBox &commands() { return box; }
 
  private:
   Whiteboard wb;
-  Blackboard bb;
   CommandBox box;
 
   // core.time_s counts from this point.

@@ -2,12 +2,15 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "core/Clocks.hpp"
 #include "data/ExtremumSeeker.hpp"
+#include "data/Image.hpp"
 #include "data/PhotometryRegions.hpp"
 #include "data/PlcSample.hpp"
 #include "data/SPMCRingBuffer.hpp"
@@ -17,10 +20,30 @@
 #include "devices/TangoFlirCamInterface.hpp"
 
 // The whiteboard is the public data of the core. Every application writes its own part and reads any other part.
-// It has three kinds of data:
+// It has four kinds of data:
 //   Streams  the sample history. Any number of readers subscribe once and drain at their own pace.
 //   State    the latest values. The core publishes a snapshot of the state after each cycle.
+//   Latest   the newest value of data that is too large for the snapshot, such as the camera image.
 //   Clocks   the two clocks. Any thread asks for a time at any instant, not once per cycle.
+
+// Holds the newest value. One writer, any number of readers.
+template <typename T>
+class Latest {
+ public:
+  void store(T new_value) {
+    std::lock_guard<std::mutex> lock(mutex);
+    value = std::move(new_value);
+  }
+
+  T load() {
+    std::lock_guard<std::mutex> lock(mutex);
+    return value;
+  }
+
+ private:
+  T value;
+  std::mutex mutex;
+};
 
 // One timepoint of the 16 metrology ADC channels.
 struct AdcSample {
@@ -178,6 +201,9 @@ class Whiteboard {
   SPMCRingBuffer<Measurement<AdcSample>, 20000> adc;
   SPMCRingBuffer<Measurement<PlcSample>, 20000> plc;
   SPMCRingBuffer<Measurement<PhotSample>, 20000> phot;
+
+  // CameraApp writes the image, and a reader gets a pointer to it without a copy. Empty until the first image.
+  Latest<std::shared_ptr<const Measurement<Image<int>>>> camera_image;
 
   // ClockApp writes the offset, and any thread asks for a time.
   Clocks clocks;

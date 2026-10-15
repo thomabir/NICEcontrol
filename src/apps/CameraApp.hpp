@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 
-#include "core/Blackboard.hpp"
 #include "core/Commands.hpp"
 #include "core/Whiteboard.hpp"
 #include "devices/TangoFlirCamInterface.hpp"
@@ -13,8 +13,7 @@
 // short and keeps the photometry available even when no user interface runs.
 class CameraApp {
  public:
-  CameraApp(Whiteboard &whiteboard, Blackboard &blackboard, CommandBox &command_box)
-      : wb(whiteboard), bb(blackboard), box(command_box) {}
+  CameraApp(Whiteboard &whiteboard, CommandBox &command_box) : wb(whiteboard), box(command_box) {}
 
   void sense() {
     if (!camera.is_connected()) {
@@ -105,7 +104,6 @@ class CameraApp {
   static constexpr int kSettingsCount = 12;
 
   Whiteboard &wb;
-  Blackboard &bb;
   CommandBox &box;
   TangoFlirCamInterface camera;
 
@@ -234,11 +232,8 @@ class CameraApp {
   void take_image() {
     // The time comes before the transfer, because the frame is older than the read.
     const Timestamp time = wb.clocks.stamp_now();
-    if (sent.image_product == 1) {
-      bb.camera_image.store({time, camera.get_image_bg_sub()});
-    } else {
-      bb.camera_image.store({time, camera.get_image()});
-    }
+    Image<int> image = (sent.image_product == 1) ? camera.get_image_bg_sub() : camera.get_image();
+    wb.camera_image.store(std::make_shared<const Measurement<Image<int>>>(time, std::move(image)));
   }
 
   static bool same_regions(const std::vector<PhotRegion> &a, const std::vector<PhotRegion> &b) {

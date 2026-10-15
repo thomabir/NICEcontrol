@@ -6,6 +6,7 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <numeric>
 #include <string>
 #include <thread>
@@ -117,7 +118,7 @@ class NiceGui {
   bool camera_rects_from_device = false;
   bool camera_subtract_background = false;
   std::vector<PhotRegion> camera_sent_regions;
-  Image<int> camera_image;
+  std::shared_ptr<const Measurement<Image<int>>> camera_frame;
 
   // Tango device panel state.
   TangoEditBuffers tango_edit;
@@ -1075,7 +1076,7 @@ class NiceGui {
       Command([](Commands &c) { c.camera.image_product = image_product; });
     }
 
-    camera_image = core.blackboard().camera_image.load().value;
+    camera_frame = core.whiteboard().camera_image.load();
 
     static ImPlotColormap map = ImPlotColormap_Viridis;
     if (ImPlot::ColormapButton(ImPlot::GetColormapName(map), ImVec2(225, 0), map)) {
@@ -1088,15 +1089,16 @@ class NiceGui {
     static bool autoscale_colormap = true;
     ImGui::Checkbox("Autoscale", &autoscale_colormap);
 
-    if (camera_image.data.empty() || camera_image.width == 0 || camera_image.height == 0) {
+    if (!HasCameraImage()) {
       ImPlot::PopColormap();
       ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "No image. Is the camera streaming?");
       return;
     }
 
+    const Image<int> &camera_image = camera_frame->value;
     const unsigned int width = camera_image.width;
     const unsigned int height = camera_image.height;
-    int *values = camera_image.data.data();
+    const int *values = camera_image.data.data();
 
     const float aspect_ratio = float(width) / float(height);
     const float plot_width = ImGui::GetContentRegionAvail().x - 80 * io->FontGlobalScale;
@@ -1170,12 +1172,19 @@ class NiceGui {
     ImPlot::PopColormap();
   }
 
+  // The core has given an image, and that image has pixels.
+  bool HasCameraImage() const {
+    return camera_frame && !camera_frame->value.data.empty() && camera_frame->value.width != 0 &&
+           camera_frame->value.height != 0;
+  }
+
   // The regions follow the rectangles as they move.
   void PushFlirRegionsIfChanged() {
-    if (camera_image.width == 0 || camera_image.height == 0) {
+    if (!HasCameraImage()) {
       return;
     }
 
+    const Image<int> &camera_image = camera_frame->value;
     std::vector<PhotRegion> regions;
     regions.reserve(camera_region_count);
     for (int i = 0; i < camera_region_count && i < static_cast<int>(camera_rects.size()); i++) {
