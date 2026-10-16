@@ -23,6 +23,9 @@ Each directory in the source tree holds one kind of file.
 An include gives the path from `src/`, for example `#include "core/Whiteboard.hpp"`.
 A vendor header gives the path from the project root, for example `#include "lib/implot/implot.h"`.
 
+The core, the applications and the Tango interfaces have a `.cpp` file.
+Only these `.cpp` files include the device libraries (Tango, AdsLib, esd, nF), thus a change in `src/gui/` compiles only `src/NICEcontrol.cpp` again.
+
 `Core` runs on one thread at a fixed cycle period of 10 ms and is independent of the user interface.
 Each cycle runs three steps in order.
 In `sense`, every application reads its hardware and writes what it found on the whiteboard.

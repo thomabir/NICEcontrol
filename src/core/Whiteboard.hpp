@@ -11,13 +11,13 @@
 #include "core/Clocks.hpp"
 #include "data/ExtremumSeeker.hpp"
 #include "data/Image.hpp"
+#include "data/PhotSample.hpp"
 #include "data/PhotometryRegions.hpp"
 #include "data/PlcSample.hpp"
 #include "data/SPMCRingBuffer.hpp"
 #include "data/TangoAttribute.hpp"
 #include "data/Timestamp.hpp"
 #include "data/TipTilt.hpp"
-#include "devices/TangoFlirCamInterface.hpp"
 
 // The whiteboard is the public data of the core. Every application writes its own part and reads any other part.
 // It has four kinds of data:

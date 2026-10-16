@@ -22,8 +22,11 @@ TANGO_LIBS = -L/usr/local/tango/lib -ltango -lomniORB4 -lomniDynamic4 -lCOS4 -lo
 # The repository of the Tango device servers. The GUI runs its restart_servers.sh.
 TANGO_SERVERS_DIR ?= $(abspath ../TangoServers)
 
-# The project sources. Only the device drivers have a .cpp, and the rest of the tree is header only.
-SOURCES = $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/devices/*.cpp)
+# The project sources. The core, the applications and the device drivers have a .cpp, and the rest of the tree is
+# header only. Thus only these files include the device libraries, and a change of the user interface does not compile
+# them again.
+PROJECT_DIRS = $(SRC_DIR) $(SRC_DIR)/core $(SRC_DIR)/apps $(SRC_DIR)/devices
+SOURCES = $(foreach dir,$(PROJECT_DIRS),$(wildcard $(dir)/*.cpp))
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
 SOURCES += $(IMGUI_DIR)/backends/imgui_impl_glfw.cpp $(IMGUI_DIR)/backends/imgui_impl_opengl3.cpp
 SOURCES += $(IMPLOT_DIR)/implot.cpp $(IMPLOT_DIR)/implot_demo.cpp $(IMPLOT_DIR)/implot_items.cpp
@@ -53,6 +56,12 @@ LIBS += -lGL $(GLFW34_LIB) -lrt -ldl -lX11 -lXrandr -lXi -lXcursor -lXinerama
 # -MMD writes the header dependencies to .d files. -MP adds a phony target for each header, thus a deleted or renamed
 # header does not stop the build with "No rule to make target".
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(GLFW34_LIB)
+	$(CXX) $(CXXFLAGS) $(PROJECT_WARNINGS) -c -MMD -MP -o $@ $<
+
+$(BUILD_DIR)/%.o: $(SRC_DIR)/core/%.cpp | $(GLFW34_LIB)
+	$(CXX) $(CXXFLAGS) $(PROJECT_WARNINGS) -c -MMD -MP -o $@ $<
+
+$(BUILD_DIR)/%.o: $(SRC_DIR)/apps/%.cpp | $(GLFW34_LIB)
 	$(CXX) $(CXXFLAGS) $(PROJECT_WARNINGS) -c -MMD -MP -o $@ $<
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/devices/%.cpp | $(GLFW34_LIB)
@@ -148,9 +157,11 @@ CAMERA_EXES = $(addprefix $(BUILD_DIR)/,$(CAMERA_TESTS))
 test-camera: $(CAMERA_EXES)
 	@for t in $(CAMERA_EXES); do echo "--- $$t"; $$t || exit 1; done
 
-$(BUILD_DIR)/camera_%: test/camera_%.cpp $(SRC_DIR)/devices/TangoFlirCamInterface.hpp $(SRC_DIR)/data/PhotometryRegions.hpp
+TANGO_CAMERA_OBJS = $(addprefix $(BUILD_DIR)/,TangoFlirCamInterface.o TangoGenericInterface.o)
+
+$(BUILD_DIR)/camera_%: test/camera_%.cpp $(SRC_DIR)/devices/TangoFlirCamInterface.hpp $(SRC_DIR)/data/PhotometryRegions.hpp $(TANGO_CAMERA_OBJS)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) $(TANGO_INCLUDE) -Wall -Wextra -o $@ $< $(TANGO_LIBS)
+	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) $(TANGO_INCLUDE) -Wall -Wextra -o $@ $< $(TANGO_CAMERA_OBJS) $(TANGO_LIBS)
 
 # Check of the generic Tango device application against a ThorlabsChopper server on the simulated controller.
 # The script of the server adds a temporary device to the Tango database and gives its name to the test.
@@ -159,9 +170,11 @@ $(BUILD_DIR)/camera_%: test/camera_%.cpp $(SRC_DIR)/devices/TangoFlirCamInterfac
 test-chopper: $(BUILD_DIR)/chopper_app
 	$(TANGO_SERVERS_DIR)/ThorlabsChopper/test/run_test.sh $(TANGO_SERVERS_DIR)/DeviceServers/ThorlabsChopper $(BUILD_DIR)/chopper_app
 
-$(BUILD_DIR)/chopper_app: test/chopper_app.cpp $(SRC_DIR)/apps/TangoDeviceApp.hpp $(SRC_DIR)/devices/TangoGenericInterface.hpp $(SRC_DIR)/core/Whiteboard.hpp $(SRC_DIR)/core/Commands.hpp
+TANGO_DEVICE_OBJS = $(addprefix $(BUILD_DIR)/,TangoDeviceApp.o TangoGenericInterface.o)
+
+$(BUILD_DIR)/chopper_app: test/chopper_app.cpp $(SRC_DIR)/apps/TangoDeviceApp.hpp $(SRC_DIR)/core/Whiteboard.hpp $(SRC_DIR)/core/Commands.hpp $(TANGO_DEVICE_OBJS)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) $(TANGO_INCLUDE) -Wall -Wextra -o $@ $< $(TANGO_LIBS)
+	$(CXX) -std=c++20 -I. -I$(SRC_DIR) -I$(IMGUI_DIR) $(TANGO_INCLUDE) -Wall -Wextra -o $@ $< $(TANGO_DEVICE_OBJS) $(TANGO_LIBS)
 
 # Check against live nanoFaktur controllers on the LAN. The stages move between 2000 urad and 4000 urad.
 #   make test-nf NF_SERIALS="1000003878 1000003879"
