@@ -35,7 +35,7 @@ struct ScrollingBufferT {
   }
 
   // get last n points
-  ImVector<PlotPoint<T, U>> GetLastN(int n) {
+  ImVector<PlotPoint<T, U>> GetLastN(int n) const {
     ImVector<PlotPoint<T, U>> last_n;
     last_n.reserve(n);
     for (int i = 0; i < n; i++) {

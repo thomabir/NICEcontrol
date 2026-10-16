@@ -1,4 +1,4 @@
-// Checks src/gui/ScriptRunner.hpp with short shell programs.
+// Checks src/util/ScriptRunner.hpp with short shell programs.
 #include <unistd.h>
 
 #include <chrono>
@@ -7,7 +7,7 @@
 #include <string>
 #include <thread>
 
-#include "gui/ScriptRunner.hpp"
+#include "util/ScriptRunner.hpp"
 
 static int failures = 0;
 

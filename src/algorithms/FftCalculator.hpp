@@ -9,13 +9,14 @@ class FFT_calculator {
  public:
   int size;
   double sampling_rate;  // Hz
-  ScrollingBufferT<T, U> *measurement_buffer;
+  const ScrollingBufferT<T, U> *measurement_buffer;
   double *output_power;
   double *output_freq;
   fftw_complex *in, *out;
   fftw_plan fft_plan;
 
-  FFT_calculator(int n_points, double sampling_rate_hz, ScrollingBufferT<T, U> *buffer, double *power, double *freq)
+  FFT_calculator(int n_points, double sampling_rate_hz, const ScrollingBufferT<T, U> *buffer, double *power,
+                 double *freq)
       : size(n_points),
         sampling_rate(sampling_rate_hz),
         measurement_buffer(buffer),
